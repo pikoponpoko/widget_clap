@@ -1,0 +1,46 @@
+{
+  "name": "creator-support-widget",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build && wrangler dev --ip 127.0.0.1 --port 8787",
+    "build": "tsc --noEmit && vite build",
+    "preview": "wrangler dev --ip 127.0.0.1 --port 8787",
+    "db:local": "wrangler d1 migrations apply support --config wrangler.owner.jsonc --local",
+    "seed:local": "wrangler d1 execute support --config wrangler.owner.jsonc --local --file scripts/seed.sql",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "backup:local": "wrangler d1 export support --config wrangler.owner.jsonc --local --output .local-backup.sql",
+    "build:owner": "tsc --noEmit && vite build --mode owner",
+    "dev:owner": "npm run build:owner && wrangler dev --config wrangler.owner.jsonc --ip 127.0.0.1 --port 8787",
+    "preview:owner": "wrangler dev --config wrangler.owner.jsonc --ip 127.0.0.1 --port 8787",
+    "test:preview": "playwright test --config playwright.preview.config.ts"
+  },
+  "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
+    "hono": "^4.11.0",
+    "jose": "^6.1.0",
+    "lucide-react": "^0.468.0",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0",
+    "vitest": "^3.2.0",
+    "wrangler": "^4.45.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

@@ -1,0 +1,11 @@
+# Copy to .dev.vars ONLY for loopback local development. Never use in a deployed environment.
+ENVIRONMENT=local
+LOCAL_OWNER_ENABLED=true
+# Production: configure these in Cloudflare, not in browser code.
+# ACCESS_TEAM_DOMAIN=your-team.cloudflareaccess.com
+# ACCESS_AUDIENCE=your-application-aud
+# OWNER_EMAIL=owner@example.com
+# SPAM_SECRET=generate-a-random-32-byte-secret
+# TURNSTILE_SECRET_KEY=...
+# TURNSTILE_SITE_KEY=...
+# TIP_LINKS_ENABLED=false

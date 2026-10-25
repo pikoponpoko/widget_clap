@@ -1,3 +1,4 @@
+import { embedCode } from "./embed-code";
 import { previewMode } from "./mode";
 import { assetUrl } from "./asset-url";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -757,6 +758,9 @@ function InboxList({
                 <div className="message-meta">
                   <span className="project-tag">{m.project_title}</span>
                   {!m.read_at && <span className="unread-dot" />}
+                  {!!m.publication_consent && (
+                    <span className="consent-badge">公開許可あり</span>
+                  )}
                   <time>{dateTime(m.created_at)}</time>
                 </div>
                 <p>{m.body}</p>
@@ -1015,6 +1019,9 @@ const blankProject = {
   clap_enabled: true,
   message_enabled: true,
   favorite_enabled: true,
+  thanks_enabled: true,
+  reply_enabled: true,
+  tip_enabled: false,
   thanks_mode: "random" as "random" | "fixed",
   tip_url: "",
   tip_legal_checked: false,
@@ -1044,6 +1051,11 @@ function ProjectModal({
           clap_enabled: !!project.clap_enabled,
           message_enabled: !!project.message_enabled,
           favorite_enabled: !!project.favorite_enabled,
+          thanks_enabled:
+            project.thanks_enabled !== false && project.thanks_enabled !== 0,
+          reply_enabled:
+            project.reply_enabled !== false && project.reply_enabled !== 0,
+          tip_enabled: !!project.tip_enabled,
           thanks_mode: project.thanks_mode,
           tip_url: project.tip_url || "",
           tip_legal_checked: !!project.tip_legal_checked,
@@ -1109,7 +1121,10 @@ function ProjectModal({
     location.origin +
     "/widget/" +
     (project === "new" ? form.slug : project.slug);
-  const embed = `<iframe src="${widgetUrl}" title="作者への応援" width="100%" height="780" loading="lazy" referrerpolicy="no-referrer" style="border:0;max-width:440px"></iframe>`;
+  const embed = embedCode(
+    location.origin,
+    project === "new" ? form.slug : project.slug,
+  );
   return (
     <Modal
       title={
@@ -1191,10 +1206,42 @@ function ProjectModal({
             </label>
             <div className="setting-section">
               <h3>ウィジェットの機能</h3>
+              <div className="widget-presets">
+                {[
+                  ["clap", "拍手のみ"],
+                  ["message", "拍手＋感想"],
+                  ["clap-tip", "拍手＋投げ銭"],
+                  ["tip", "投げ銭のみ"],
+                ].map(([key, label]) => (
+                  <button
+                    type="button"
+                    className="btn"
+                    key={key}
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        clap_enabled: key !== "tip",
+                        message_enabled: key === "message",
+                        favorite_enabled: key === "message",
+                        reply_enabled: key === "message",
+                        thanks_enabled: key !== "tip",
+                        tip_enabled: key === "clap-tip" || key === "tip",
+                      }))
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="small-text muted">
+                投げ銭は接続・確認が完了するまで公開されません。
+              </p>
               {[
                 ["clap_enabled", "拍手を受け付ける"],
                 ["message_enabled", "非公開の感想を受け付ける"],
                 ["favorite_enabled", "ブラウザのお気に入りを表示"],
+                ["thanks_enabled", "お礼イラストを表示"],
+                ["reply_enabled", "非公開の返信確認を有効にする"],
               ].map(([key, label]) => (
                 <label className="toggle-row" key={key}>
                   <span>{label}</span>
@@ -1226,6 +1273,14 @@ function ProjectModal({
                 {tipEnabled ? "有効化可能" : "非表示"}
                 。PayPayへの対応は未確認です。
               </p>
+              <label className="check-label">
+                <input
+                  type="checkbox"
+                  checked={form.tip_enabled}
+                  onChange={(e) => set("tip_enabled", e.target.checked)}
+                />
+                確認済みの外部支援リンクを表示する（初期OFF）
+              </label>
               <label>
                 確認済み外部決済ページ
                 <input
@@ -1335,7 +1390,7 @@ function ProjectModal({
           <div className="embed-settings">
             <h3>あなたのサイトに、応援の入口を。</h3>
             <p className="muted">
-              基本設定で設置先のオリジンを許可し、下のコードをページに貼り付けてください。
+              基本設定で設置先のオリジンを許可し、ボタンを置きたい位置に下のコードを貼り付けてください。
             </p>
             <textarea
               aria-label="埋め込みコード"
@@ -1370,7 +1425,7 @@ function ProjectModal({
               </a>
             </div>
             <p className="small-text muted">
-              スマートフォンでは横幅が自動で縮みます。高さはページに合わせて調整できます。
+              設置先には128×52pxの小さな画像ボタンだけを表示します。クリック後のお礼画面はダイアログで開き、本文の高さや配置を変えません。
             </p>
           </div>
         )}

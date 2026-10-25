@@ -86,6 +86,9 @@ const project = z
     clap_enabled: flag,
     message_enabled: flag,
     favorite_enabled: flag,
+    thanks_enabled: flag.default(1),
+    reply_enabled: flag.default(1),
+    tip_enabled: flag.default(0),
     thanks_mode: z.enum(["random", "fixed"]),
     tip_url: z.string(),
     tip_legal_checked: flag,
@@ -257,6 +260,9 @@ function validProject(p: z.infer<typeof project>) {
       tip_legal_checked: !!p.tip_legal_checked,
       tip_terms_checked: !!p.tip_terms_checked,
       tip_privacy_checked: !!p.tip_privacy_checked,
+      thanks_enabled: !!p.thanks_enabled,
+      reply_enabled: !!p.reply_enabled,
+      tip_enabled: !!p.tip_enabled,
     }).success;
   } catch {
     return false;

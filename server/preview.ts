@@ -21,9 +21,10 @@ export default {
       );
     const response = await env.ASSETS.fetch(request);
     const out = new Response(response.body, response);
-    const frames = url.pathname.startsWith("/widget/")
-      ? "'self' https://kazukisekiguchi.com"
-      : "'none'";
+    const frames =
+      url.pathname.startsWith("/widget/") || url.pathname.startsWith("/button/")
+        ? "'self' https: http:"
+        : "'none'";
     out.headers.set(
       "Content-Security-Policy",
       `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; font-src 'self'; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors ${frames}`,

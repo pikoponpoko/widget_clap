@@ -1,3 +1,4 @@
+import { ClapControl } from "./ClapButton";
 import { previewMode } from "./mode";
 import { assetUrl } from "./asset-url";
 import { useEffect, useRef, useState } from "react";
@@ -84,12 +85,17 @@ export function Widget({
     error,
     loading,
   } = useApi<Project>("/public/projects/" + encodeURIComponent(slug));
+  const initial = new URLSearchParams(location.search).get("after");
+  const [stage, setStage] = useState<
+    "button" | "clap" | "message" | "favorite"
+  >(
+    ["clap", "message", "favorite"].includes(initial || "")
+      ? (initial as "clap" | "message" | "favorite")
+      : "button",
+  );
   const [body, setBody] = useState(""),
     [consent, setConsent] = useState(false),
     [favorite, setFavorite] = useState(false),
-    [claps, setClaps] = useState(0),
-    [clapBusy, setClapBusy] = useState(false),
-    [clapNote, setClapNote] = useState(""),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
     [sent, setSent] = useState(false),
@@ -97,29 +103,31 @@ export function Widget({
     [copied, setCopied] = useState(false),
     [captcha, setCaptcha] = useState(""),
     [captchaReset, setCaptchaReset] = useState(0),
-    [storageWarning, setStorageWarning] = useState(""),
-    [website, setWebsite] = useState("");
+    [website, setWebsite] = useState(""),
+    [thanksIndex, setThanksIndex] = useState(() => Math.random()),
+    [clapBusy, setClapBusy] = useState(false);
   const started = useRef(Date.now()),
     requestId = useRef(crypto.randomUUID()),
     lastBody = useRef("");
-  const [thanksIndex] = useState(() => Math.random());
   useEffect(() => {
     try {
       setFavorite(localStorage.getItem("support-favorite:" + slug) === "true");
     } catch {
-      setStorageWarning("このブラウザではお気に入りを保存できません。");
+      setNotice("このブラウザではお気に入りを保存できません。");
     }
   }, [slug]);
-  async function clap() {
-    setClaps((n) => n + 1);
+  function open(reason: "clap" | "message" | "favorite") {
+    setStage(reason);
+    setThanksIndex(Math.random());
+  }
+  async function anotherClap() {
     if (clapBusy) return;
     setClapBusy(true);
     setNotice("");
     try {
       await send("/public/projects/" + encodeURIComponent(slug) + "/claps", {});
-      setClapNote(
-        previewMode ? "体験用の拍手を保存しました。" : "拍手を届けました。",
-      );
+      setThanksIndex(Math.random());
+      setStage("clap");
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
@@ -131,7 +139,7 @@ export function Widget({
       localStorage.setItem("support-favorite:" + slug, String(!favorite));
       setFavorite(!favorite);
     } catch {
-      setStorageWarning(
+      setNotice(
         "お気に入りを保存できません。ブラウザの保存設定をご確認ください。",
       );
     }
@@ -173,50 +181,91 @@ export function Widget({
   }
   if (loading)
     return (
-      <div className="widget-wrap">
-        <p className="muted">読み込んでいます…</p>
+      <div className="widget-loading" role="status">
+        読み込んでいます…
       </div>
     );
   if (error || !p)
     return (
-      <div className="widget-wrap">
+      <div className="widget-error">
         <p role="alert">{error || "表示できません。"}</p>
         <button className="btn" onClick={() => location.reload()}>
           再読み込み
         </button>
       </div>
     );
-  const assets = p.assets || [],
-    button = assets.find((a) => a.kind === "button"),
-    thanks = assets.filter((a) => a.kind === "thanks"),
-    image = thanks.length
-      ? thanks[
-          p.thanks_mode === "fixed"
-            ? 0
-            : Math.floor(thanksIndex * thanks.length)
-        ]
-      : null;
+  if (stage === "button")
+    return (
+      <div className="widget-button-only">
+        <ClapControl project={p} onOpen={open} />
+      </div>
+    );
+  const thanks = (p.assets || []).filter((a) => a.kind === "thanks");
+  const image = thanks.length
+    ? thanks[
+        p.thanks_mode === "fixed" ? 0 : Math.floor(thanksIndex * thanks.length)
+      ]
+    : null;
+  const thanksEnabled = p.thanks_enabled !== false && p.thanks_enabled !== 0;
   return (
-    <div className={"widget-wrap " + (embedded ? "embedded" : "")}>
+    <div className={"widget-wrap thank-stage " + (embedded ? "embedded" : "")}>
       <section className="support-widget">
         <div className="widget-wordmark">
-          <span className="tiny-dot" /> 応援の便り
+          <span className="tiny-dot" />
+          {p.title}
+        </div>
+        {thanksEnabled && (stage === "clap" || sent) && (
+          <div className="thank-art">
+            <img
+              src={image ? assetUrl(image.id) : "/thanks.svg"}
+              alt="作者からのお礼イラスト"
+            />
+          </div>
+        )}
+        <h1>
+          {sent
+            ? "感想を、ありがとう。"
+            : stage === "clap"
+              ? "拍手を、ありがとう。"
+              : "ひとこと、どうぞ。"}
+        </h1>
+        <p className="widget-description" role="status">
+          {sent
+            ? previewMode
+              ? "このブラウザに、体験用の便りを保存しました。"
+              : "あなたの便りを作者に届けました。"
+            : stage === "clap"
+              ? previewMode
+                ? "体験用の拍手を保存しました。感想は任意です。"
+                : "拍手を届けました。感想は書かなくても大丈夫です。"
+              : p.description}
+        </p>
+        {previewMode && (
+          <p className="preview-widget-note">
+            体験版：このブラウザ内の保存です。作者への送信はありません。
+          </p>
+        )}
+        <div className="thank-actions">
+          {!!p.clap_enabled && (
+            <button className="btn" disabled={clapBusy} onClick={anotherClap}>
+              <ThumbsUp size={16} />
+              {clapBusy ? "送信中…" : "もう一度、拍手"}
+            </button>
+          )}
+          {!!p.favorite_enabled && (
+            <button
+              className="btn"
+              aria-label="お気に入り"
+              aria-pressed={favorite}
+              onClick={toggleFavorite}
+            >
+              <Heart size={16} fill={favorite ? "currentColor" : "none"} />
+              {favorite ? "お気に入り済み" : "お気に入り"}
+            </button>
+          )}
         </div>
         {sent ? (
-          <div className="thank-you">
-            <div className="thank-art">
-              {image ? (
-                <img src={assetUrl(image.id)} alt="作者からのお礼イラスト" />
-              ) : (
-                <Heart size={48} strokeWidth={1} />
-              )}
-            </div>
-            <h1>言葉を、ありがとう。</h1>
-            <p>
-              {previewMode
-                ? "このブラウザに、体験用の便りを保存しました。"
-                : "あなたの便りを作者に届けました。"}
-            </p>
+          <>
             {replyUrl && (
               <div className="reply-link-box">
                 <b>返信はこちらから</b>
@@ -264,134 +313,90 @@ export function Widget({
                 setCaptchaReset((n) => n + 1);
               }}
             >
-              ウィジェットに戻る
+              もうひとこと書く
             </button>
-          </div>
-        ) : (
-          <>
-            <h1>
-              {p.title}へ、
-              <br />
-              小さな応援を。
-            </h1>
-            <p className="widget-description">
-              {p.description ||
-                "ひとつの拍手も、ひとことも。制作の励みになります。"}
-            </p>
-            <div className="widget-actions">
-              {!!p.clap_enabled && (
-                <button
-                  className={"clap-button " + (claps ? "clapped" : "")}
-                  onClick={clap}
-                  aria-label="拍手を送る"
-                >
-                  {button ? (
-                    <img src={assetUrl(button.id)} alt="" />
-                  ) : (
-                    <ThumbsUp size={24} strokeWidth={1.5} />
-                  )}
-                  <span>{claps ? "もう一度、拍手" : "拍手を送る"}</span>
-                  {claps > 0 && <span className="clap-number">+{claps}</span>}
-                </button>
-              )}
-              {!!p.favorite_enabled && (
-                <button
-                  className={"favorite-button " + (favorite ? "active" : "")}
-                  onClick={toggleFavorite}
-                  aria-pressed={favorite}
-                  aria-label="お気に入り"
-                >
-                  <Heart size={21} fill={favorite ? "currentColor" : "none"} />
-                </button>
-              )}
-            </div>
-            <p className="widget-feedback" aria-live="polite">
-              {clapNote || storageWarning || " "}
-            </p>
-            {!!p.message_enabled && (
-              <form onSubmit={submit}>
-                <label className="field-label" htmlFor="message">
-                  <MessageCircle size={15} /> ひとこと、添える
-                </label>
-                <textarea
-                  id="message"
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  maxLength={2000}
-                  required
-                  placeholder="使ってみたこと、好きだったところ。お気軽に。"
-                  rows={4}
-                />
-                <div className="character-count">{body.length} / 2,000</div>
-                <div className="honeypot" aria-hidden="true">
-                  <label>
-                    Website
-                    <input
-                      tabIndex={-1}
-                      autoComplete="off"
-                      value={website}
-                      onChange={(e) => setWebsite(e.target.value)}
-                    />
-                  </label>
-                </div>
-                <p className="privacy-note">
-                  {previewMode
-                    ? "体験版の感想はこのブラウザ内に保存し、作者には送信しません。"
-                    : "作者だけに届きます。作者が個人的に保存・印刷することがあります。"}
-                </p>
-                <label className="check-label">
-                  <input
-                    type="checkbox"
-                    checked={consent}
-                    onChange={(e) => setConsent(e.target.checked)}
-                  />
-                  <span>この感想の第三者公開を許可する（任意）</span>
-                </label>
-                {p.turnstile_site_key && (
-                  <Turnstile
-                    siteKey={p.turnstile_site_key}
-                    onToken={setCaptcha}
-                    reset={captchaReset}
-                  />
-                )}
-                <button
-                  className="btn primary send-button"
-                  disabled={
-                    busy || !body.trim() || (!!p.turnstile_site_key && !captcha)
-                  }
-                >
-                  <Send size={15} />
-                  {busy
-                    ? "保存しています…"
-                    : previewMode
-                      ? "感想を保存して試す"
-                      : "感想を届ける"}
-                </button>
-              </form>
-            )}
-            {p.tip_url && (
-              <a
-                className="tip-link"
-                href={p.tip_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                任意の支援をする <ArrowUpRight size={14} />
-                <small>支援なしでも無料で利用できます</small>
-              </a>
-            )}
           </>
+        ) : (
+          !!p.message_enabled && (
+            <form className="optional-message" onSubmit={submit}>
+              <label className="field-label" htmlFor="message">
+                <MessageCircle size={15} />
+                ひとこと、添える（任意）
+              </label>
+              <textarea
+                id="message"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                maxLength={2000}
+                required
+                placeholder="使ってみたこと、好きだったところ。お気軽に。"
+                rows={4}
+              />
+              <div className="character-count">{body.length} / 2,000</div>
+              <div className="honeypot" aria-hidden="true">
+                <label>
+                  Website
+                  <input
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                  />
+                </label>
+              </div>
+              <p className="privacy-note">
+                {previewMode
+                  ? "体験版の感想はこのブラウザ内に保存し、作者には送信しません。"
+                  : "作者だけに届きます。作者が個人的に保存・印刷することがあります。"}
+              </p>
+              <label className="check-label">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                />
+                <span>この感想の第三者公開を許可する（任意）</span>
+              </label>
+              {p.turnstile_site_key && (
+                <Turnstile
+                  siteKey={p.turnstile_site_key}
+                  onToken={setCaptcha}
+                  reset={captchaReset}
+                />
+              )}
+              <button
+                className="btn primary send-button"
+                disabled={
+                  busy || !body.trim() || (!!p.turnstile_site_key && !captcha)
+                }
+              >
+                <Send size={15} />
+                {busy
+                  ? "保存しています…"
+                  : previewMode
+                    ? "感想を保存して試す"
+                    : "感想を届ける"}
+              </button>
+            </form>
+          )
+        )}
+        {p.tip_url && (
+          <a
+            className="tip-link"
+            href={p.tip_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            任意の支援をする <ArrowUpRight size={14} />
+            <small>支援なしでも無料で利用できます</small>
+          </a>
         )}
         {notice && (
           <p className="error" role="alert">
             {notice}
           </p>
         )}
-        <div className="widget-footer">
-          {favorite
-            ? "このブラウザにお気に入りを保存しました"
-            : "あなたのペースで、応援を。"}
-        </div>
+        <div className="widget-footer">あなたのペースで、応援を。</div>
       </section>
     </div>
   );

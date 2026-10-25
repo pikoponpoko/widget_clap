@@ -23,6 +23,9 @@ const tables = {
     "clap_enabled",
     "message_enabled",
     "favorite_enabled",
+    "thanks_enabled",
+    "reply_enabled",
+    "tip_enabled",
     "thanks_mode",
     "tip_url",
     "tip_legal_checked",
@@ -56,6 +59,13 @@ const tables = {
 };
 if ((await stat(input)).size > 50 * 1024 * 1024) fail("Backup exceeds 50MB");
 const data = JSON.parse(await readFile(input, "utf8"));
+if (Array.isArray(data.projects))
+  data.projects = data.projects.map((p) => ({
+    ...p,
+    thanks_enabled: p.thanks_enabled ?? 1,
+    reply_enabled: p.reply_enabled ?? 1,
+    tip_enabled: p.tip_enabled ?? 0,
+  }));
 if (data.version !== 1) fail("Unsupported backup version");
 for (const [table, keys] of Object.entries(tables)) {
   if (!Array.isArray(data[table])) fail(`Missing table: ${table}`);

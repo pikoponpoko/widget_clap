@@ -9,6 +9,9 @@ export interface Project {
   clap_enabled: number;
   message_enabled: number;
   favorite_enabled: number;
+  thanks_enabled: number;
+  reply_enabled: number;
+  tip_enabled: number;
   thanks_mode: "fixed" | "random";
   tip_url: string;
   tip_legal_checked: number;

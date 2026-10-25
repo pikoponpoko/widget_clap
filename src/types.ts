@@ -17,6 +17,9 @@ export interface Project {
   clap_enabled: boolean | number;
   message_enabled: boolean | number;
   favorite_enabled: boolean | number;
+  thanks_enabled: boolean | number;
+  reply_enabled: boolean | number;
+  tip_enabled: boolean | number;
   thanks_mode: "fixed" | "random";
   tip_url: string | null;
   tip_legal_checked: boolean | number;

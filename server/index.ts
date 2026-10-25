@@ -66,6 +66,9 @@ function safeProject(p: Project, env: Env, assets: unknown[]) {
     clap_enabled: !!p.clap_enabled,
     message_enabled: !!p.message_enabled,
     favorite_enabled: !!p.favorite_enabled,
+    thanks_enabled: !!p.thanks_enabled,
+    reply_enabled: !!p.reply_enabled,
+    tip_enabled: !!p.tip_enabled,
     thanks_mode: p.thanks_mode,
     tip_url: tipVisible(p as unknown as Record<string, unknown>, env)
       ? p.tip_url
@@ -180,7 +183,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
       data.body,
       now(),
       data.publication_consent ? 1 : 0,
-      await hash(replyToken),
+      p.reply_enabled ? await hash(replyToken) : null,
       dedupe,
       new TextEncoder().encode(data.body).length,
     )
@@ -197,7 +200,10 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
         "受付容量に達しています。作者の整理後にお試しください。",
       );
   }
-  return c.json({ ok: true, reply_token: replyToken }, 201);
+  return c.json(
+    { ok: true, reply_token: p.reply_enabled ? replyToken : null },
+    201,
+  );
 });
 app.post("/api/public/reply", async (c) => {
   assertSameOrigin(c.req.raw);
@@ -207,7 +213,7 @@ app.post("/api/public/reply", async (c) => {
   );
   await limit(c.env, `reply:${await privateKey(c.req.raw, c.env)}`, 120, 3600);
   const m = await c.env.DB.prepare(
-    "SELECT m.body,m.created_at,r.body AS reply_body,r.created_at AS replied_at,p.title FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE m.reply_token_hash=? AND m.blocked=0",
+    "SELECT m.body,m.created_at,r.body AS reply_body,r.created_at AS replied_at,p.title FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE m.reply_token_hash=? AND m.blocked=0 AND p.reply_enabled=1",
   )
     .bind(await hash(data.token))
     .first();
@@ -615,8 +621,8 @@ app.post("/api/owner/purge", async (c) => {
 function pageCsp(ancestors: string) {
   return `default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; font-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors ${ancestors}`;
 }
-app.get("/widget/:slug", async (c) => {
-  const p = await projectBy(c.env, c.req.param("slug"));
+async function embedPage(c: import("hono").Context<{ Bindings: Env }>) {
+  const p = await projectBy(c.env, c.req.param("slug") || "");
   const origins = JSON.parse(p.allowed_origins) as string[];
   const response = await c.env.ASSETS.fetch(
     new Request(new URL("/", c.req.url), c.req.raw),
@@ -629,7 +635,9 @@ app.get("/widget/:slug", async (c) => {
   out.headers.delete("X-Frame-Options");
   out.headers.set("Cache-Control", "no-store");
   return out;
-});
+}
+app.get("/widget/:slug", embedPage);
+app.get("/button/:slug", embedPage);
 app.all("/api/*", (c) => c.json({ error: "APIが見つかりません。" }, 404));
 app.get("*", async (c) => {
   const res = await c.env.ASSETS.fetch(c.req.raw);

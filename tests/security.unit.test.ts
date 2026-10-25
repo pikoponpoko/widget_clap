@@ -173,6 +173,7 @@ describe("untrusted content", () => {
   });
   it("requires server flag and all payment reviews", () => {
     const p = {
+      tip_enabled: 1,
       tip_url: "https://example.com",
       tip_legal_checked: 1,
       tip_terms_checked: 1,
@@ -279,5 +280,26 @@ describe("print geometry and text", () => {
           ).length,
       ),
     ).toEqual(["か\u3099", "か\u3099"]);
+  });
+});
+
+describe("integrated widget feature policy", () => {
+  it("defaults tips off even when the server and provider checks are ready", () => {
+    const p = {
+      tip_enabled: 0,
+      tip_url: "https://example.com",
+      tip_legal_checked: 1,
+      tip_terms_checked: 1,
+      tip_privacy_checked: 1,
+    };
+    expect(tipVisible(p, { ...env, TIP_LINKS_ENABLED: "true" })).toBe(false);
+  });
+  it("keeps thank-you and private reply available while leaving payments opt-in", () => {
+    const p = projectSchema.parse({ title: "作品", slug: "work" });
+    expect([p.thanks_enabled, p.reply_enabled, p.tip_enabled]).toEqual([
+      true,
+      true,
+      false,
+    ]);
   });
 });

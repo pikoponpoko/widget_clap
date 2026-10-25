@@ -1,6 +1,6 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
-const origin = "http://127.0.0.1:8787";
+const origin = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:8787";
 const slug = "verify-" + Date.now();
 let projectId = "";
 let replyToken = "";
@@ -189,6 +189,35 @@ test.describe.serial("Phase 1 integrated flow", () => {
       (await request.post(url + "button", { headers, data: png })).status(),
     ).toBe(400);
   });
+  test("honors per-placement reply and tip switches", async ({ request }) => {
+    const response = await request.post("/api/owner/projects", {
+      headers,
+      data: {
+        title: "返信なし設定の検証",
+        slug: slug + "-no-reply",
+        reply_enabled: false,
+        thanks_enabled: false,
+        tip_enabled: true,
+        tip_url: "https://example.com",
+        tip_legal_checked: true,
+        tip_terms_checked: true,
+        tip_privacy_checked: true,
+      },
+    });
+    expect(response.status()).toBe(201);
+    const config = await (
+      await request.get("/api/public/projects/" + slug + "-no-reply")
+    ).json();
+    expect(config.reply_enabled).toBe(false);
+    expect(config.thanks_enabled).toBe(false);
+    expect(config.tip_url).toBeNull();
+    const message = await request.post(
+      "/api/public/projects/" + slug + "-no-reply/messages",
+      { headers, data: body() },
+    );
+    expect(message.status()).toBe(201);
+    expect((await message.json()).reply_token).toBeNull();
+  });
   test("exports data and restores a full backup with image data and hashed tokens", async ({
     request,
   }) => {
@@ -268,21 +297,23 @@ test.describe.serial("Phase 1 integrated flow", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/widget/" + slug);
     await expect(
-      page.getByRole("heading", { name: /検証用ツールへ/ }),
+      page.getByRole("button", { name: "拍手を送る", exact: true }),
     ).toBeVisible();
+    await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
     await page.getByRole("button", { name: "お気に入り", exact: true }).click();
     await page.reload();
+    await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "お気に入り", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("checkbox")).not.toBeChecked();
     await page
-      .getByRole("textbox", { name: "ひとこと、添える" })
+      .getByRole("textbox", { name: "ひとこと、添える（任意）" })
       .fill("スマートフォンからの便りです。");
     await page.waitForTimeout(1600);
     await page.getByRole("button", { name: "感想を届ける" }).click();
     await expect(
-      page.getByRole("heading", { name: "言葉を、ありがとう。" }),
+      page.getByRole("heading", { name: "感想を、ありがとう。" }),
     ).toBeVisible();
     const url = await page.getByLabel("返信確認URL").inputValue();
     expect(url).toContain("/reply#");
@@ -335,7 +366,9 @@ test.describe.serial("Phase 1 integrated flow", () => {
       page.getByRole("heading", { name: "ダッシュボード", exact: true }),
     ).toBeVisible();
     await expect(
-      page.frameLocator("iframe").getByRole("heading"),
+      page
+        .frameLocator("iframe")
+        .getByRole("button", { name: "拍手を送る", exact: true }),
     ).toBeVisible();
     await page.screenshot({
       path: "test-results/dashboard-desktop.png",

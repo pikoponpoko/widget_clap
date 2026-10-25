@@ -167,6 +167,9 @@ export const projectSchema = z
     clap_enabled: z.boolean().default(true),
     message_enabled: z.boolean().default(true),
     favorite_enabled: z.boolean().default(true),
+    thanks_enabled: z.boolean().default(true),
+    reply_enabled: z.boolean().default(true),
+    tip_enabled: z.boolean().default(false),
     thanks_mode: z.enum(["fixed", "random"]).default("random"),
     tip_url: z.union([https, z.literal("")]).default(""),
     tip_legal_checked: z.boolean().default(false),
@@ -335,6 +338,7 @@ export function csvCell(value: unknown) {
 export function tipVisible(p: Record<string, unknown>, env: Env) {
   return (
     env.TIP_LINKS_ENABLED === "true" &&
+    !!p.tip_enabled &&
     !!p.tip_url &&
     !!p.tip_legal_checked &&
     !!p.tip_terms_checked &&

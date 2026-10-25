@@ -1,6 +1,8 @@
 # Creator Support Widget — 応援の便り
 
-React + TypeScriptで作る応援ウィジェットです。[開発計画書](docs/creator_support_widget_plan_v2.md) に基づき、まずCloudflare Workersで開けるブラウザ体験版を用意しました。
+任意のWebページに小さな画像ボタンを置ける、React + TypeScript製のWeb拍手ウィジェットです。[統合仕様との照合・実装計画](docs/spec-reconciliation.md) と [当初の開発計画書](docs/creator_support_widget_plan_v2.md) を参照してください。
+
+**[埋め込みデモを開く](https://widget-clap.pikoponpoko.workers.dev/demo)** · [管理画面](https://widget-clap.pikoponpoko.workers.dev/admin#projects) · [サービス紹介](https://widget-clap.pikoponpoko.workers.dev/about)
 
 ## Cloudflare Workersへのデプロイ
 
@@ -24,8 +26,10 @@ Cloudflareのビルド欄に `npm run build` が既に入っている場合も�
 
 ## 今回のブラウザ体験版
 
-- 拍手、匿名感想の入力、送信完了とお礼イラスト、お気に入り。
-- プリプロ名人・尺取名人・おはなし名人・作品ページの表示切り替え。
+- 小さな画像ボタンを押す → 拍手が保存される → お礼イラスト → 任意の匿名感想。感想なしで閉じても拍手は残ります。
+- ボタン以外のUIはクリック後にダイアログで開き、埋め込み先の本文や配置を動かしません。
+- `/demo` で無料ツール・作品・ブログ末尾への実際の埋め込みを体験できます。設置先ごとに別slugを発行可能です。
+- 拍手・感想・お気に入り・お礼・返信・投げ銭を設置先ごとに設定。未接続の投げ銭は公開しません。
 - PC・スマートフォンに対応。作品別の `/widget/prepro` なども直接開けます。
 - `/admin#inbox` から、このブラウザの便りを読み、返信の流れを試せます。
 - 入力内容は**このブラウザのlocalStorageだけ**に保存。作者やサーバーには送信しません。実データや秘密情報は入力しないでください。
@@ -34,6 +38,18 @@ Cloudflareのビルド欄に `npm run build` が既に入っている場合も�
 
 データベースや決済が未設定でもデプロイできることを優先しています。サーバーAPIへ直接投稿しても503となり、感想の受信・保存は行いません。
 
+## 小さなボタンの設置
+
+自分のページの、ボタンを置きたい位置に貼り付けます。
+
+```html
+<script src="https://widget-clap.pikoponpoko.workers.dev/embed.js" data-project="prepro" defer></script>
+```
+
+標準サイズは128×52px、ボタン画像は120×44pxの範囲に縦横比を維持して表示します。設置先のCSSを変更せず、Shadow DOMとiframeで隔離します。`postMessage` の送信元オリジン・ウィンドウ・インスタンス・作品を検証してから、自分のボタンのお礼画面だけを開きます。ホストのCSPがある場合は、この配信元を `script-src` と `frame-src` へ許可してください。
+
+公開体験版の埋め込みはHTTP/HTTPSのサイトに許可します。Owner版では管理画面に登録したオリジンだけを許可します。体験版の保存領域はブラウザと埋め込み元によって分離・制限される場合があります。作者が実際に受信する本番利用は、D1/R2/Access/Turnstile接続後です。
+
 ## ローカルで試す
 
 ```sh
@@ -41,7 +57,8 @@ npm ci
 npm run dev
 ```
 
-- ブラウザ体験版: http://127.0.0.1:8787/
+- 埋め込みデモ: http://127.0.0.1:8787/demo
+- 小型ボタン単体: http://127.0.0.1:8787/button/prepro
 - 埋め込み画面: http://127.0.0.1:8787/widget/prepro
 - このブラウザの受信箱: http://127.0.0.1:8787/admin#inbox
 
@@ -64,7 +81,7 @@ Playwrightは標準のChromiumを使います。システムのブラウザを�
 
 先行実装したD1/R2・Cloudflare Access対応コードは `server/index.ts` と `wrangler.owner.jsonc` に分離しました。通常の `npx wrangler deploy` では使用されず、本番DBも作成しません。実装済みの返信・画像管理・CSV/JSON・PDF・バックアップ処理は、後続の接続・検証用です。[運用手順](docs/operations.md) と [API仕様](docs/api.md) を参照してください。
 
-Owner版をローカルD1/R2エミュレーターで試す場合のみ：
+Owner版のビルド出力は `dist-owner` に分け、公開体験版の `dist` を上書きしません。ローカルD1/R2エミュレーターで試す場合のみ：
 
 ```sh
 cp .dev.vars.example .dev.vars

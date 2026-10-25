@@ -6,7 +6,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60000,
   use: {
-    baseURL: "http://127.0.0.1:8787",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:8787",
     headless: true,
     launchOptions: {
       ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH

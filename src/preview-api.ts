@@ -31,6 +31,9 @@ function initial(): Store {
       clap_enabled: true,
       message_enabled: true,
       favorite_enabled: true,
+      thanks_enabled: true,
+      reply_enabled: true,
+      tip_enabled: false,
       thanks_mode: "random",
       tip_url: "",
       tip_legal_checked: false,
@@ -65,6 +68,12 @@ function read(): Store {
       !Array.isArray(data.claps)
     )
       throw new Error();
+    data.projects = data.projects.map((p: Project) => ({
+      ...p,
+      thanks_enabled: p.thanks_enabled ?? true,
+      reply_enabled: p.reply_enabled ?? true,
+      tip_enabled: p.tip_enabled ?? false,
+    }));
     return data;
   } catch {
     throw new Error(
@@ -187,16 +196,28 @@ export async function previewRequest(
       reply_body: null,
       replied_at: null,
       reply_link_active: 1,
-      reply_token_hash: h,
+      reply_token_hash:
+        pr.reply_enabled === false || pr.reply_enabled === 0 ? null : h,
       dedupe_key: dedupe,
     });
     save(s);
-    return { ok: true, reply_token: raw };
+    return {
+      ok: true,
+      reply_token:
+        pr.reply_enabled === false || pr.reply_enabled === 0 ? null : raw,
+    };
   }
   if (p === "/public/reply") {
     const h = await digest(data.token || "");
     const row =
-      s.messages.find((x) => x.reply_token_hash === h && !x.blocked) ||
+      s.messages.find(
+        (x) =>
+          x.reply_token_hash === h &&
+          !x.blocked &&
+          s.projects.find((p) => p.id === x.project_id)?.reply_enabled !==
+            false &&
+          s.projects.find((p) => p.id === x.project_id)?.reply_enabled !== 0,
+      ) ||
       fail(
         "このブラウザに返信が見つかりません。体験版のURLは、送信したブラウザだけで確認できます。",
       );

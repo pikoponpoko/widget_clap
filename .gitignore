@@ -6,3 +6,5 @@ dist/
 .local-backup.sql
 test-results/
 playwright-report/
+
+dist-owner/

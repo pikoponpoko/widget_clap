@@ -1,6 +1,6 @@
 import { ClapControl } from "./ClapButton";
 import { previewMode } from "./mode";
-import { pageContext, tipRequested } from "./page-context";
+import { pageContext, tipLabel, tipRequested } from "./page-context";
 import { assetUrl } from "./asset-url";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -388,13 +388,13 @@ export function Widget({
             target="_blank"
             rel="noopener noreferrer"
           >
-            任意の支援をする <ArrowUpRight size={14} />
+            {tipLabel} <ArrowUpRight size={14} />
             <small>支援なしでも無料で利用できます</small>
           </a>
         )}
         {previewMode && tipRequested && !p.tip_url && (
           <span className="tip-link tip-preview" aria-disabled="true">
-            任意の支援をする
+            {tipLabel}
             <small>体験版：決済リンク未設定のため押せません</small>
           </span>
         )}

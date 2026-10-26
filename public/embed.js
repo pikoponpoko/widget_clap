@@ -8,6 +8,13 @@
   var origin = new URL(script.src, document.baseURI).origin;
   // One code for every page: the clapped page is recorded from where the code is pasted.
   var tip = script.getAttribute("data-tip") === "on";
+  var tipLabel = Array.from(
+    (script.getAttribute("data-tip-label") || "")
+      .replace(/[\u0000-\u001F\u007F<>]/g, "")
+      .trim(),
+  )
+    .slice(0, 30)
+    .join("");
   function pageUrl() {
     var canonical = document.querySelector('link[rel="canonical"]');
     var candidates = [
@@ -44,6 +51,7 @@
     url.searchParams.set("page", pageUrl());
     url.searchParams.set("page_title", pageTitle());
     if (tip) url.searchParams.set("tip", "1");
+    if (tip && tipLabel) url.searchParams.set("tip_label", tipLabel);
     return url;
   }
   var instance = crypto.randomUUID();

@@ -1,5 +1,5 @@
 import { previewMode } from "./mode";
-import { pageContext, tipRequested } from "./page-context";
+import { pageContext, tipLabel, tipRequested } from "./page-context";
 import { useEffect, useRef, useState } from "react";
 import { assetUrl } from "./asset-url";
 import { send, useApi } from "./api";
@@ -164,11 +164,11 @@ export function EmbeddedButton({ slug }: { slug: string }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            任意の支援をする
+            {tipLabel}
           </a>
         ) : previewMode ? (
           <span className="mini-tip tip-preview" aria-disabled="true">
-            任意の支援をする（体験版：決済リンク未設定）
+            {tipLabel}（体験版：決済リンク未設定）
           </span>
         ) : null)}
       {fallback && (

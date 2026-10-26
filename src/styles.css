@@ -2358,9 +2358,6 @@ small {
   height: auto;
   object-fit: contain;
 }
-.mini-clap:hover {
-  filter: brightness(0.96);
-}
 .mini-clap:active {
   transform: translateY(1px);
 }
@@ -2716,4 +2713,11 @@ html.embed-document {
 }
 .widget-description:empty {
   display: none;
+}
+.tip-label-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+  font-size: 12px;
 }

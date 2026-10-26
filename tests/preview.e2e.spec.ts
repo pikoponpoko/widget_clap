@@ -378,7 +378,21 @@ test("the tip-enabled page shows the tip link next to the button before any clic
 }) => {
   await page.goto("/demo");
   const frames = page.frameLocator('iframe[title="拍手ボタン"]');
-  await expect(frames.nth(3).getByText("任意の支援をする")).toBeVisible();
-  await expect(frames.nth(0).getByText("任意の支援をする")).toHaveCount(0);
+  await expect(frames.nth(3).getByText("コーヒーをおごる")).toBeVisible();
+  await expect(frames.nth(0).getByText("コーヒーをおごる")).toHaveCount(0);
   await expect(page.getByRole("dialog")).not.toBeVisible();
+});
+test("the demo code generator adds an escaped custom tip label", async ({
+  page,
+}) => {
+  await page.goto("/demo");
+  await page
+    .getByRole("checkbox", { name: "このページで投げ銭を表示" })
+    .check();
+  await page
+    .getByRole("textbox", { name: "投げ銭の文言" })
+    .fill('コーヒー"<b>');
+  await expect(
+    page.getByRole("textbox", { name: "小型ボタンの埋め込みコード" }),
+  ).toHaveValue(/data-tip="on" data-tip-label="コーヒー&quot;b" defer/);
 });

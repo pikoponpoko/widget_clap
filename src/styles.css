@@ -751,7 +751,7 @@ small {
 }
 .paper-note {
   margin-top: 20px;
-  padding: 27px 24px;
+  padding: 14px 18px;
   border: 1px solid #ebebeb;
   background: #f2f2f2;
   border-radius: 8px;
@@ -783,7 +783,7 @@ small {
   line-height: 2;
 }
 .paper-note .text-button {
-  margin-top: 18px;
+  margin-top: 0;
   font-size: 10px;
 }
 .page-footer {
@@ -2674,4 +2674,7 @@ small {
 }
 html.embed-document {
   background: transparent;
+}
+.widget-description:empty {
+  display: none;
 }

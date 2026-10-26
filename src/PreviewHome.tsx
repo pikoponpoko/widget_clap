@@ -17,7 +17,7 @@ export default function PreviewHome() {
           <span className="brand-mark">
             <Heart size={22} />
           </span>
-          <span>応援の便り</span>
+          <span>Web拍手</span>
         </a>
         <a className="btn" href="/admin#inbox">
           <Inbox size={15} />
@@ -27,18 +27,7 @@ export default function PreviewHome() {
       <main>
         <section className="preview-intro">
           <span className="preview-pill">ブラウザ体験版</span>
-          <h1>
-            つくる人へ、
-            <br />
-            小さな応援を。
-          </h1>
-          <p>
-            ひとつの拍手も、ひとことも。
-            <br />
-            好きだった気持ちを、そっと残すための
-            <br />
-            小さなウィジェットです。
-          </p>
+          <h1>Web拍手 体験版</h1>
           <div
             className="preview-project-picker"
             role="group"
@@ -87,7 +76,7 @@ export default function PreviewHome() {
           <Widget key={slug} slug={slug} embedded={false} />
         </div>
       </main>
-      <footer>応援の便り · ブラウザ体験版</footer>
+      <footer>Web拍手 · ブラウザ体験版</footer>
     </div>
   );
 }

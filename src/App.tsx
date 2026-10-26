@@ -45,14 +45,14 @@ const titles: Record<Section, string> = {
   overview: "ダッシュボード",
   inbox: "届いた感想",
   projects: "作品・ツール",
-  print: "手帳に残す",
+  print: "シール印刷",
   data: "データ管理",
 };
 const navs: [Section, typeof Inbox, string][] = [
   ["overview", LayoutDashboard, "ダッシュボード"],
   ["inbox", Inbox, "届いた感想"],
   ["projects", FolderHeart, "作品・ツール"],
-  ["print", Printer, "手帳に残す"],
+  ["print", Printer, "シール印刷"],
 ];
 function ErrorText({ children }: { children: ReactNode }) {
   return children ? (
@@ -125,7 +125,7 @@ function StatCard({
   label: string;
   value: number | string;
   icon: typeof Heart;
-  note: string;
+  note?: string;
 }) {
   return (
     <div className="stat-card">
@@ -137,7 +137,7 @@ function StatCard({
         {typeof value === "number" ? value.toLocaleString() : value}
         <small>件</small>
       </div>
-      <span className="stat-note">{note}</span>
+      {note && <span className="stat-note">{note}</span>}
     </div>
   );
 }
@@ -258,14 +258,14 @@ export default function App() {
         <span className="brand-mark">
           <Heart size={24} />
         </span>
-        <p>応援の便りを開いています…</p>
+        <p>読み込み中…</p>
       </div>
     );
   if (session.error)
     return (
       <div className="auth-page">
         <LockKeyhole size={32} />
-        <h1>Ownerのための場所です。</h1>
+        <h1>Owner専用</h1>
         <p>{session.error}</p>
         <button className="btn primary" onClick={() => location.reload()}>
           ログイン状態を確認する
@@ -279,7 +279,7 @@ export default function App() {
           <span className="brand-mark">
             <Heart size={22} strokeWidth={1.5} />
           </span>
-          <span>応援の便り</span>
+          <span>Web拍手</span>
         </a>
         <div className="workspace">
           <span className="avatar">K</span>
@@ -312,12 +312,6 @@ export default function App() {
             <Database size={18} strokeWidth={1.6} />
             データ管理
           </button>
-          <div className="private-note">
-            <ShieldCheck size={17} />
-            <span>
-              あなたと、送り主だけの場所。<small>感想は公開されません。</small>
-            </span>
-          </div>
           <div className="owner-profile">
             <span className="avatar small">K</span>
             <div>
@@ -353,17 +347,6 @@ export default function App() {
           <div className="page-heading">
             <div>
               <h1>{titles[section]}</h1>
-              <p>
-                {section === "overview"
-                  ? "届いた応援を、今日の制作の力に。"
-                  : section === "inbox"
-                    ? "ひとつひとつの言葉を、ゆっくりと。"
-                    : section === "projects"
-                      ? "それぞれの場所に、小さな応援の入口を。"
-                      : section === "print"
-                        ? "大切な言葉を、手にとれるかたちに。"
-                        : "受け取った便りを、大切に保管する。"}
-              </p>
             </div>
             {section === "projects" ? (
               <button className="btn primary" onClick={() => setEdit("new")}>
@@ -427,26 +410,25 @@ export default function App() {
                   label="受け取った拍手"
                   value={countClaps}
                   icon={ThumbsUp}
-                  note="これまでに届いた応援"
+                  note="累計"
                 />
                 <StatCard
                   label="届いた感想"
                   value={total?.total || 0}
                   icon={MessageCircle}
-                  note={`${total?.unread || 0} 件の未読の便り`}
+                  note={`${total?.unread || 0} 件 未読`}
                 />
                 <StatCard
-                  label="返信を待つ便り"
+                  label="未返信"
                   value={total?.unreplied || 0}
                   icon={Reply}
-                  note="あなたのペースで大丈夫です"
                 />
               </div>
               <div className="dashboard-columns">
                 <div className="dashboard-main">
                   <section className="panel activity-panel">
                     <div className="panel-heading">
-                      <h2>応援のあしあと</h2>
+                      <h2>日別の拍手</h2>
                       <span className="muted small-text">日別集計 · UTC</span>
                     </div>
                     <div className="chart-legend">
@@ -483,19 +465,11 @@ export default function App() {
                       onSelect={setSelected}
                     />
                   </section>
-                  <div className="quiet-note">
-                    <LockKeyhole size={15} />
-                    <p>
-                      届いた言葉は、あなただけのもの。
-                      <br />
-                      <span>個人的な保存や印刷で、いつでも読み返せます。</span>
-                    </p>
-                  </div>
                 </div>
                 <div className="dashboard-side">
                   <section className="panel widget-preview-panel">
                     <div className="panel-heading">
-                      <h2>応援の入口</h2>
+                      <h2>ウィジェット</h2>
                       <span className="status-dot">プレビュー</span>
                     </div>
                     {list.length ? (
@@ -540,7 +514,7 @@ export default function App() {
                         </div>
                       </>
                     ) : (
-                      <Empty title="最初の入口をつくる">
+                      <Empty title="作品・ツールを追加">
                         <button className="btn" onClick={() => setEdit("new")}>
                           作品を追加
                         </button>
@@ -548,22 +522,11 @@ export default function App() {
                     )}
                   </section>
                   <section className="paper-note">
-                    <Heart size={26} strokeWidth={1} />
-                    <h3>
-                      うれしい言葉を、
-                      <br />
-                      手帳の片すみに。
-                    </h3>
-                    <p>
-                      届いた感想をカードにして、
-                      <br />
-                      制作のお守りにしませんか。
-                    </p>
                     <button
                       className="text-button"
                       onClick={() => navigate("print")}
                     >
-                      手帳に残す <ArrowRight size={14} />
+                      シール印刷 <ArrowRight size={14} />
                     </button>
                   </section>
                 </div>
@@ -637,7 +600,7 @@ export default function App() {
             <DataPanel notify={notify} refresh={refresh} />
           )}
           <footer className="page-footer">
-            <span>応援の便り</span>
+            <span>Web拍手</span>
             <span>
               Owner · 非公開{session.data?.local ? " · ローカル開発環境" : ""}
             </span>
@@ -785,13 +748,10 @@ function InboxList({
             search
               ? "該当する感想がありません"
               : status === "all"
-                ? "最初の便りを、待っています。"
-                : "該当する便りはありません。"
+                ? "メッセージはまだありません"
+                : "該当するメッセージはありません"
           }
         >
-          {status === "all" && !search
-            ? "作品にウィジェットを置くと、ここに感想が届きます。"
-            : undefined}
         </Empty>
       )}
       {!compact && !!data?.total && (
@@ -932,7 +892,7 @@ function MessageModal({
             aria-label="返信内容"
             rows={5}
             maxLength={4000}
-            placeholder="便りへのお返事を。"
+            placeholder="返信内容"
             value={reply}
             onChange={(e) => setReply(e.target.value)}
           />
@@ -1388,7 +1348,7 @@ function ProjectModal({
         )}
         {tab === "embed" && (
           <div className="embed-settings">
-            <h3>あなたのサイトに、応援の入口を。</h3>
+            <h3>埋め込みコード</h3>
             <p className="muted">
               基本設定で設置先のオリジンを許可し、ボタンを置きたい位置に下のコードを貼り付けてください。
             </p>
@@ -1515,9 +1475,7 @@ function PrintPanel({
             </div>
           </>
         ) : (
-          <Empty title="残したい便りが届いたら。" icon={Printer}>
-            感想を選んで、カードやシール用PDFにできます。
-          </Empty>
+          <Empty title="メッセージはまだありません" icon={Printer} />
         )}
       </section>
       <div className="print-controls">
@@ -1585,7 +1543,7 @@ function PrintPanel({
             </label>
             <div className="print-card-preview">
               <small>{preview?.project_title || "作品・ツール名"}</small>
-              <p>{preview?.body || "大切な言葉が、ここに。"}</p>
+              <p>{preview?.body || "メッセージ本文"}</p>
               <span>
                 {preview ? date(preview.created_at) : "91 × 55 mm"} · 私的保存用
               </span>
@@ -1702,7 +1660,7 @@ function DataPanel({
       <ErrorText>{error}</ErrorText>
       <section className="panel">
         <div className="panel-heading">
-          <h2>便りを書き出す</h2>
+          <h2>メッセージの書き出し</h2>
           <ArrowDownToLine size={18} />
         </div>
         <div className="data-section">
@@ -1772,7 +1730,7 @@ function DataPanel({
                 action(async () => {
                   await downloadEndpoint(
                     "/owner/backup",
-                    "応援の便り_バックアップ.json",
+                    "webclap_backup.json",
                   );
                   notify("完全バックアップを書き出しました");
                 })
@@ -1872,7 +1830,7 @@ function DataPanel({
               disabled={busy}
               onClick={() => {
                 const input = prompt(
-                  "「バックアップを含む全データを削除」と入力すると、作品・画像・便り・バックアップをすべて削除します。元に戻せません。",
+                  "「バックアップを含む全データを削除」と入力すると、作品・画像・メッセージ・バックアップをすべて削除します。元に戻せません。",
                 );
                 if (input === "バックアップを含む全データを削除")
                   action(async () => {

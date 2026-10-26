@@ -20,7 +20,7 @@
   var frame = document.createElement("iframe");
   frame.width = "128";
   frame.height = "52";
-  frame.title = "作者への小さな応援ボタン";
+  frame.title = "拍手ボタン";
   frame.loading = "lazy";
   frame.referrerPolicy = "no-referrer";
   frame.style.maxWidth = "100%";
@@ -32,7 +32,7 @@
   dialog.setAttribute("aria-label", "拍手のお礼と任意の感想");
   var header = document.createElement("header");
   var title = document.createElement("span");
-  title.textContent = "応援の便り";
+  title.textContent = "Web拍手";
   var close = document.createElement("button");
   close.type = "button";
   close.textContent = "×";

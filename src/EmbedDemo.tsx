@@ -26,7 +26,7 @@ export default function EmbedDemo() {
           <span className="brand-mark">
             <Heart size={22} />
           </span>
-          <span>応援の便り</span>
+          <span>Web拍手</span>
         </a>
         <nav>
           <a href="/admin#projects">
@@ -40,7 +40,7 @@ export default function EmbedDemo() {
       </header>
       <main>
         <div className="demo-heading">
-          <h1>小さな拍手ボタンを、好きな場所に。</h1>
+          <h1>埋め込みデモ</h1>
           <p>
             下のページ例は、発行した埋め込みコードでボタンを置いています。押すと拍手が保存され、お礼イラストと任意の感想欄が開きます。
           </p>
@@ -49,16 +49,10 @@ export default function EmbedDemo() {
           <article className="demo-example demo-tool">
             <span className="demo-example-type">無料ツールの配布ページ</span>
             <h2>プリプロ名人</h2>
-            <p>
-              制作の準備を、少し軽やかに。
-              <br />
-              企画を整理する無料ツールです。
-            </p>
             <span className="demo-download-label">
               ツールはいつでも無料で利用できます
             </span>
             <div className="demo-inline-embed">
-              <span>使ってみてよかったら。</span>
               <EmbedExample slug="prepro" />
             </div>
           </article>
@@ -75,17 +69,13 @@ export default function EmbedDemo() {
               </svg>
             </div>
             <h2>ある日の風景</h2>
-            <p>作品を見てくださって、ありがとうございます。</p>
             <div className="demo-inline-embed">
               <EmbedExample slug="works" />
             </div>
           </article>
           <article className="demo-example demo-blog">
             <span className="demo-example-type">ブログ・記事の末尾</span>
-            <h2>つくる日々の、小さな記録。</h2>
-            <p>
-              物語のきっかけを集めて、今日はひとつだけ形にしました。読んでくださって、ありがとうございます。
-            </p>
+            <h2>ブログ記事</h2>
             <div className="demo-blog-footer">
               <span>この記事への拍手</span>
               <EmbedExample slug="ohanashi" />

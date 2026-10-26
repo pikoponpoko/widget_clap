@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 const storeKey = "creator-support-browser-preview-v1";
 const buttonFrame = (page: import("@playwright/test").Page) =>
-  page.frameLocator('iframe[title="作者への小さな応援ボタン"]').first();
+  page.frameLocator('iframe[title="拍手ボタン"]').first();
 const thanksFrame = (page: import("@playwright/test").Page) =>
   page.frameLocator("dialog[open] iframe");
 test("only the tiny button is embedded; click saves applause before optional feedback, without shifting content", async ({
@@ -15,7 +15,7 @@ test("only the tiny button is embedded; click saves applause before optional fee
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/demo");
   await expect(
-    page.getByRole("heading", { name: "小さな拍手ボタンを、好きな場所に。" }),
+    page.getByRole("heading", { name: "埋め込みデモ" }),
   ).toBeVisible();
   const frame = buttonFrame(page);
   await expect(
@@ -23,7 +23,7 @@ test("only the tiny button is embedded; click saves applause before optional fee
   ).toBeVisible();
   await expect(frame.getByRole("textbox")).toHaveCount(0);
   const bounds = await page
-    .locator('iframe[title="作者への小さな応援ボタン"]')
+    .locator('iframe[title="拍手ボタン"]')
     .first()
     .boundingBox();
   expect(bounds?.width).toBe(128);
@@ -38,7 +38,7 @@ test("only the tiny button is embedded; click saves applause before optional fee
   await frame.getByRole("button", { name: "拍手を送る", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(
-    thanksFrame(page).getByRole("heading", { name: "拍手を、ありがとう。" }),
+    thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
   ).toBeVisible();
   await expect(
     thanksFrame(page).getByAltText("作者からのお礼イラスト"),
@@ -82,7 +82,7 @@ test("mobile demo retains layout and allows closing the thank-you without a mess
     .getByRole("button", { name: "拍手を送る", exact: true })
     .click();
   await expect(
-    thanksFrame(page).getByRole("heading", { name: "拍手を、ありがとう。" }),
+    thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/embed-mobile-thanks.png",
@@ -114,12 +114,12 @@ test("optional message and reply remain browser-local, favorites persist, and an
   await page.getByRole("button", { name: "お気に入り", exact: true }).click();
   await expect(page.getByRole("checkbox")).not.toBeChecked();
   await page
-    .getByRole("textbox", { name: "ひとこと、添える（任意）" })
+    .getByRole("textbox", { name: "メッセージ（任意）" })
     .fill("体験用の感想です。使いやすい道具をありがとう。");
   await page.waitForTimeout(1600);
   await page.getByRole("button", { name: "感想を保存して試す" }).click();
   await expect(
-    page.getByRole("heading", { name: "感想を、ありがとう。" }),
+    page.getByRole("heading", { name: "送信しました" }),
   ).toBeVisible();
   const url = await page.getByLabel("返信確認URL").inputValue();
   await page.goto("/widget/prepro");
@@ -169,7 +169,7 @@ test("cross-origin embedding works and ignores forged host messages", async ({
     expect(
       (
         await page
-          .locator('iframe[title="作者への小さな応援ボタン"]')
+          .locator('iframe[title="拍手ボタン"]')
           .boundingBox()
       )?.height,
     ).toBe(52);
@@ -196,7 +196,7 @@ test("cross-origin embedding works and ignores forged host messages", async ({
       .getByRole("button", { name: "拍手を送る", exact: true })
       .click();
     await expect(
-      thanksFrame(page).getByRole("heading", { name: "拍手を、ありがとう。" }),
+      thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
     ).toBeVisible();
     expect((await page.locator("#after").boundingBox())?.y).toBe(before?.y);
     await page.getByRole("button", { name: "お礼画面を閉じる" }).click();
@@ -249,12 +249,12 @@ test("per-placement switches suppress disabled features, and unconnected tips ne
   await expect(page.getByAltText("作者からのお礼イラスト")).toHaveCount(0);
   await expect(page.getByRole("link", { name: /任意の支援/ })).toHaveCount(0);
   await page
-    .getByRole("textbox", { name: "ひとこと、添える（任意）" })
+    .getByRole("textbox", { name: "メッセージ（任意）" })
     .fill("返信なしの感想");
   await page.waitForTimeout(1600);
   await page.getByRole("button", { name: "感想を保存して試す" }).click();
   await expect(
-    page.getByRole("heading", { name: "感想を、ありがとう。" }),
+    page.getByRole("heading", { name: "送信しました" }),
   ).toBeVisible();
   await expect(page.getByLabel("返信確認URL")).toHaveCount(0);
 });
@@ -278,4 +278,32 @@ test("does not open the thank-you modal or claim success if applause cannot be s
   await frame.getByRole("button", { name: "拍手を送る", exact: true }).click();
   await expect(frame.getByRole("alert")).toContainText("保存容量");
   await expect(page.getByRole("dialog")).not.toBeVisible();
+});
+test("the embedded button uses the current button image and a click on it records applause", async ({
+  page,
+}) => {
+  await page.goto("/demo");
+  const frame = buttonFrame(page);
+  const button = frame.getByRole("button", { name: "拍手を送る", exact: true });
+  const image = button.locator("img");
+  await expect(image).toHaveAttribute("src", "/clap-button.svg");
+  await expect
+    .poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBe(120);
+  expect(
+    await image.evaluate((img: HTMLImageElement) => img.naturalHeight),
+  ).toBe(44);
+  const box = await image.boundingBox();
+  expect(box!.width).toBeLessThanOrEqual(120);
+  expect(box!.height).toBeLessThanOrEqual(44);
+  await image.click();
+  await expect(
+    thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      (k) => JSON.parse(localStorage.getItem(k)!).claps.length,
+      storeKey,
+    ),
+  ).toBe(1);
 });

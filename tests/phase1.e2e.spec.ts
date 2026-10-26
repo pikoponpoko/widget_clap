@@ -308,12 +308,12 @@ test.describe.serial("Phase 1 integrated flow", () => {
     ).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("checkbox")).not.toBeChecked();
     await page
-      .getByRole("textbox", { name: "ひとこと、添える（任意）" })
+      .getByRole("textbox", { name: "メッセージ（任意）" })
       .fill("スマートフォンからの便りです。");
     await page.waitForTimeout(1600);
     await page.getByRole("button", { name: "感想を届ける" }).click();
     await expect(
-      page.getByRole("heading", { name: "感想を、ありがとう。" }),
+      page.getByRole("heading", { name: "送信しました" }),
     ).toBeVisible();
     const url = await page.getByLabel("返信確認URL").inputValue();
     expect(url).toContain("/reply#");
@@ -326,7 +326,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
     await expect(
       page.getByText("スマートフォンからの便りです。"),
     ).toBeVisible();
-    await expect(page.getByText(/まだ返信は届いていません/)).toBeVisible();
+    await expect(page.getByText(/返信はまだありません/)).toBeVisible();
   });
   test("generates Japanese PDF with A4 geometry and a 91×55mm card", async ({
     page,

@@ -66,7 +66,7 @@ export async function makePdf(
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit); // Full embedding avoids missing Japanese glyphs in fontkit subset output.
   const font = await doc.embedFont(await res.arrayBuffer(), { subset: false });
-  doc.setTitle("応援の便り — 私的保存用");
+  doc.setTitle("Web拍手 — 私的保存用");
   doc.setCreator("Creator Support Widget");
   const charset = new Set(font.getCharacterSet());
   const printable = (s: string) =>
@@ -172,6 +172,6 @@ export async function savePdf(messages: Message[], options: PrintOptions) {
   const bytes = await makePdf(messages, options);
   download(
     new Blob([bytes as BlobPart], { type: "application/pdf" }),
-    options.layout === "a4" ? "応援の便り_A4.pdf" : "応援の便り_91x55mm.pdf",
+    options.layout === "a4" ? "webclap_A4.pdf" : "webclap_91x55mm.pdf",
   );
 }

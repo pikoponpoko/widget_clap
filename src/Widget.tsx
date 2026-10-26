@@ -224,21 +224,13 @@ export function Widget({
         )}
         <h1>
           {sent
-            ? "感想を、ありがとう。"
+            ? "送信しました"
             : stage === "clap"
-              ? "拍手を、ありがとう。"
-              : "ひとこと、どうぞ。"}
+              ? "拍手しました"
+              : "メッセージ"}
         </h1>
         <p className="widget-description" role="status">
-          {sent
-            ? previewMode
-              ? "このブラウザに、体験用の便りを保存しました。"
-              : "あなたの便りを作者に届けました。"
-            : stage === "clap"
-              ? previewMode
-                ? "体験用の拍手を保存しました。感想は任意です。"
-                : "拍手を届けました。感想は書かなくても大丈夫です。"
-              : p.description}
+          {sent || stage === "clap" ? null : p.description}
         </p>
         {previewMode && (
           <p className="preview-widget-note">
@@ -313,7 +305,7 @@ export function Widget({
                 setCaptchaReset((n) => n + 1);
               }}
             >
-              もうひとこと書く
+              メッセージを追加
             </button>
           </>
         ) : (
@@ -321,7 +313,7 @@ export function Widget({
             <form className="optional-message" onSubmit={submit}>
               <label className="field-label" htmlFor="message">
                 <MessageCircle size={15} />
-                ひとこと、添える（任意）
+                メッセージ（任意）
               </label>
               <textarea
                 id="message"
@@ -329,7 +321,6 @@ export function Widget({
                 onChange={(e) => setBody(e.target.value)}
                 maxLength={2000}
                 required
-                placeholder="使ってみたこと、好きだったところ。お気軽に。"
                 rows={4}
               />
               <div className="character-count">{body.length} / 2,000</div>
@@ -396,7 +387,6 @@ export function Widget({
             {notice}
           </p>
         )}
-        <div className="widget-footer">あなたのペースで、応援を。</div>
       </section>
     </div>
   );
@@ -427,11 +417,11 @@ export function ReplyPage() {
     <main className="reply-page">
       <div className="widget-wordmark">
         <span className="tiny-dot" />
-        応援の便り
+        Web拍手
       </div>
-      <h1>あなたへの返信</h1>
+      <h1>返信</h1>
       <p className="muted">
-        このURLを知っている人だけが確認できます。大切に保管してください。
+        このURLを知っている人は誰でも閲覧できます。
       </p>
       {error ? (
         <p className="error" role="alert">
@@ -441,7 +431,7 @@ export function ReplyPage() {
         <>
           <span className="eyebrow">{data.title}</span>
           <div className="reply-original">
-            <small>あなたの感想</small>
+            <small>送信したメッセージ</small>
             <p>{data.body}</p>
           </div>
           <div className="reply-letter">
@@ -449,7 +439,7 @@ export function ReplyPage() {
             <h2>作者から</h2>
             <p>
               {data.reply_body ||
-                "まだ返信は届いていません。また、のぞいてみてください。"}
+                "返信はまだありません"}
             </p>
           </div>
           <button className="btn" onClick={() => location.reload()}>

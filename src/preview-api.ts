@@ -12,6 +12,7 @@ interface Store {
     project_id: string;
     created_at: string;
     key: string;
+    visitor?: string;
     page_url?: string;
     page_title?: string;
   }[];
@@ -40,6 +41,7 @@ function initial(): Store {
       tip_legal_checked: false,
       tip_terms_checked: false,
       tip_privacy_checked: false,
+      ng_words: [],
       claps: 0,
       messages: 0,
     })),
@@ -85,6 +87,7 @@ function read(): Store {
       thanks_enabled: p.thanks_enabled ?? true,
       reply_enabled: p.reply_enabled ?? true,
       tip_enabled: p.tip_enabled ?? false,
+      ng_words: p.ng_words ?? [],
     }));
     return data;
   } catch {
@@ -143,6 +146,21 @@ function previewPage(data: { page_url?: unknown; page_title?: unknown }) {
       .slice(0, 200),
   };
 }
+const jst = (iso: string) =>
+  new Date(Date.parse(iso) + 9 * 3600000).toISOString();
+const normalizeWord = (s: string) => s.normalize("NFKC").toLowerCase();
+function visitorId() {
+  try {
+    let v = localStorage.getItem("hakushu-browser-visitor");
+    if (!v) {
+      v = crypto.randomUUID();
+      localStorage.setItem("hakushu-browser-visitor", v);
+    }
+    return v;
+  } catch {
+    return "browser";
+  }
+}
 const fail = (s: string): never => {
   throw new Error(s);
 };
@@ -187,10 +205,14 @@ export async function previewRequest(
       const k = pr.id + page.page_url + new Date().toISOString().slice(0, 13);
       const counted = !s.claps.some((c) => c.key === k);
       if (counted) {
+        const created_at = new Date().toISOString();
         s.claps.push({
           project_id: pr.id,
-          created_at: new Date().toISOString(),
+          created_at,
           key: k,
+          visitor: (
+            await digest(visitorId() + jst(created_at).slice(0, 10))
+          ).slice(0, 32),
           ...page,
         });
         save(s);
@@ -225,7 +247,11 @@ export async function previewRequest(
       created_at: new Date().toISOString(),
       read_at: null,
       publication_consent: data.publication_consent === true ? 1 : 0,
-      blocked: 0,
+      blocked: (pr.ng_words || []).some(
+        (w) => w && normalizeWord(data.body).includes(normalizeWord(w)),
+      )
+        ? 1
+        : 0,
       reply_body: null,
       replied_at: null,
       reply_link_active: 1,
@@ -306,9 +332,19 @@ export async function previewRequest(
     if (status === "unread") rows = rows.filter((x) => !x.read_at);
     if (status === "unreplied") rows = rows.filter((x) => !x.reply_body);
     if (status === "replied") rows = rows.filter((x) => !!x.reply_body);
+    const months = Array.from(
+      rows.reduce((map, x) => {
+        const month = jst(x.created_at).slice(0, 7);
+        return map.set(month, (map.get(month) || 0) + 1);
+      }, new Map<string, number>()),
+      ([month, count]) => ({ month, count }),
+    ).sort((a, b) => b.month.localeCompare(a.month));
+    const month = u.searchParams.get("month");
+    if (month) rows = rows.filter((x) => jst(x.created_at).startsWith(month));
     rows = rows.sort((a, b) => b.created_at.localeCompare(a.created_at));
     return {
       total: rows.length,
+      months,
       page,
       items: rows
         .slice(page * 50, (page + 1) * 50)
@@ -317,6 +353,22 @@ export async function previewRequest(
           reply_link_active: !!reply_token_hash,
         })),
     };
+  }
+  if (p === "/owner/messages/bulk") {
+    const ids = new Set<string>(Array.isArray(data.ids) ? data.ids : []);
+    if (!ids.size) fail("感想を選んでください。");
+    const rows = s.messages.filter((x) => ids.has(x.id));
+    if (data.action === "delete")
+      s.messages = s.messages.filter((x) => !ids.has(x.id));
+    else
+      for (const row of rows) {
+        if (data.action === "read") row.read_at ||= new Date().toISOString();
+        if (data.action === "unread") row.read_at = null;
+        if (data.action === "block") row.blocked = 1;
+        if (data.action === "unblock") row.blocked = 0;
+      }
+    save(s);
+    return { ok: true, changed: rows.length };
   }
   m = p.match(/^\/owner\/messages\/([^/]+)(?:\/(reply|reply-token))?$/);
   if (m) {
@@ -355,34 +407,47 @@ export async function previewRequest(
       to = u.searchParams.get("to") || new Date().toISOString().slice(0, 10);
     if (from > to || (Date.parse(to) - Date.parse(from)) / 86400000 > 365)
       fail("日付の範囲は366日以内にしてください。");
+    const pageUrl = u.searchParams.get("page") || "";
     const rows = s.messages.filter(
       (m) => !m.blocked && (!projectId || m.project_id === projectId),
     );
-    const daily = (items: { created_at: string }[]) => {
-      const counts = new Map<string, number>();
+    const onPage = (x: { page_url?: string }) =>
+      !pageUrl || (x.page_url || "") === pageUrl;
+    const daily = (
+      items: { created_at: string; visitor?: string }[],
+      distinct = false,
+    ) => {
+      const counts = new Map<string, Set<string> | number>();
       for (const x of items) {
-        const day = x.created_at.slice(0, 10);
-        if (day >= from && day <= to)
-          counts.set(day, (counts.get(day) || 0) + 1);
+        const day = jst(x.created_at).slice(0, 10);
+        if (day < from || day > to) continue;
+        if (distinct) {
+          if (!x.visitor) continue;
+          const set = (counts.get(day) as Set<string>) || new Set<string>();
+          counts.set(day, set.add(x.visitor));
+        } else counts.set(day, ((counts.get(day) as number) || 0) + 1);
       }
-      return Array.from(counts, ([day, count]) => ({ day, count })).sort(
-        (a, b) => a.day.localeCompare(b.day),
-      );
+      return Array.from(counts, ([day, v]) => ({
+        day,
+        count: typeof v === "number" ? v : v.size,
+      })).sort((a, b) => a.day.localeCompare(b.day));
     };
+    const scopedClaps = s.claps.filter(
+      (c) => (!projectId || c.project_id === projectId) && onPage(c),
+    );
     return {
       from,
       to,
-      claps: daily(
-        s.claps.filter((c) => !projectId || c.project_id === projectId),
-      ),
-      messages: daily(rows),
+      claps: daily(scopedClaps),
+      visitors: daily(scopedClaps, true),
+      messages: daily(rows.filter(onPage)),
       pages: Array.from(
         s.claps
           .filter(
             (c) =>
               (!projectId || c.project_id === projectId) &&
-              c.created_at.slice(0, 10) >= from &&
-              c.created_at.slice(0, 10) <= to,
+              jst(c.created_at).slice(0, 10) >= from &&
+              jst(c.created_at).slice(0, 10) <= to,
           )
           .reduce((map, c) => {
             const row = map.get(c.page_url || "") || {
@@ -403,6 +468,36 @@ export async function previewRequest(
         unread: rows.filter((m) => !m.read_at).length,
         unreplied: rows.filter((m) => !m.reply_body).length,
       },
+    };
+  }
+  if (p === "/owner/stats/hours") {
+    const projectId = u.searchParams.get("project"),
+      pageUrl = u.searchParams.get("page") || "",
+      day =
+        u.searchParams.get("day") || jst(new Date().toISOString()).slice(0, 10);
+    const match = (x: {
+      project_id: string;
+      created_at: string;
+      page_url?: string;
+    }) =>
+      (!projectId || x.project_id === projectId) &&
+      (!pageUrl || (x.page_url || "") === pageUrl) &&
+      jst(x.created_at).startsWith(day);
+    const hourOf = (iso: string) => Number(jst(iso).slice(11, 13));
+    const claps = s.claps.filter(match),
+      messages = s.messages.filter((x) => !x.blocked && match(x));
+    return {
+      day,
+      hours: Array.from({ length: 24 }, (_, hour) => {
+        const inHour = claps.filter((c) => hourOf(c.created_at) === hour);
+        return {
+          hour,
+          claps: inHour.length,
+          visitors: new Set(inHour.map((c) => c.visitor).filter(Boolean)).size,
+          messages: messages.filter((x) => hourOf(x.created_at) === hour)
+            .length,
+        };
+      }),
     };
   }
   m = p.match(/^\/owner\/projects\/([^/]+)\/assets$/);

@@ -373,3 +373,79 @@ test("the tip-enabled demo page shows the unconnected tip placeholder only there
   ).toBeVisible();
   await expect(thanksFrame(page).getByText("決済リンク未設定")).toHaveCount(0);
 });
+test("analytics by hour and page, NG keywords, month filter and bulk actions", async ({
+  page,
+}) => {
+  await page.goto("/admin#projects");
+  await page.getByRole("button", { name: "設定・埋め込み" }).first().click();
+  await page.getByRole("textbox", { name: "NGキーワード" }).fill("スパム");
+  await page.getByRole("button", { name: "設定を保存" }).click();
+  await page.goto("/demo");
+  const frames = page.frameLocator('iframe[title="拍手ボタン"]');
+  for (const [n, body] of [
+    [0, "よかったです"],
+    [2, "ｽﾊﾟﾑです"],
+  ] as const) {
+    await frames
+      .nth(n)
+      .getByRole("button", { name: "拍手を送る", exact: true })
+      .click();
+    await thanksFrame(page)
+      .getByRole("textbox", { name: "メッセージ（任意）" })
+      .fill(body);
+    await page.waitForTimeout(1600);
+    await thanksFrame(page)
+      .getByRole("button", { name: "感想を保存して試す" })
+      .click();
+    await expect(
+      thanksFrame(page).getByRole("heading", { name: "送信しました" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "お礼画面を閉じる" }).click();
+  }
+  await page.goto("/admin");
+  const total = page.locator(".hour-total");
+  await expect(total).toContainText("人数 1");
+  await expect(total).toContainText("拍手 2");
+  // Only the clean message counts; the NG one was hidden on arrival.
+  await expect(total).toContainText("感想 1");
+  await page
+    .getByRole("combobox", { name: "ページで絞り込む" })
+    .selectOption({ label: "ブログ記事" });
+  await expect(total).toContainText("拍手 1");
+  await expect(total).toContainText("感想 0");
+
+  await page.goto("/admin#inbox");
+  await expect(page.locator(".message-row")).toHaveCount(1);
+  const month = await page.evaluate(() =>
+    new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 7),
+  );
+  await page
+    .getByRole("combobox", { name: "月で絞り込む" })
+    .selectOption(month);
+  await expect(page.locator(".message-row")).toHaveCount(1);
+  await page
+    .getByRole("checkbox", { name: "表示中の感想をすべて選択" })
+    .check();
+  await page.getByRole("button", { name: "既読にする" }).click();
+  await expect(page.locator(".message-row.unread")).toHaveCount(0);
+  await page
+    .getByRole("checkbox", { name: "表示中の感想をすべて選択" })
+    .check();
+  await page
+    .locator(".bulk-actions")
+    .getByRole("button", { name: "非表示" })
+    .click();
+  await expect(page.locator(".message-row")).toHaveCount(0);
+  await page
+    .locator(".inbox-tabs")
+    .getByRole("button", { name: "非表示" })
+    .click();
+  await expect(page.locator(".message-row")).toHaveCount(2);
+  await expect(
+    page.locator(".message-row", { hasText: "ｽﾊﾟﾑです" }),
+  ).toBeVisible();
+  await page.getByRole("checkbox", { name: "この感想を選択" }).first().check();
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "削除" }).click();
+  await expect(page.locator(".message-row")).toHaveCount(1);
+});

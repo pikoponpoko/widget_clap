@@ -208,8 +208,20 @@ export const projectSchema = z
     tip_legal_checked: z.boolean().default(false),
     tip_terms_checked: z.boolean().default(false),
     tip_privacy_checked: z.boolean().default(false),
+    ng_words: z
+      .array(z.string().trim().min(1).max(50))
+      .max(100)
+      .default([]),
   })
   .strict();
+export const normalizeWord = (s: string) => s.normalize("NFKC").toLowerCase();
+export function hasNgWord(body: string, words: string[]) {
+  const text = normalizeWord(body);
+  return words.some((w) => w && text.includes(normalizeWord(w)));
+}
+// Analytics days follow Japan time.
+export const jstDay = (iso = new Date().toISOString()) =>
+  new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 10);
 export async function jsonBody<T>(
   request: Request,
   schema: z.ZodType<T>,

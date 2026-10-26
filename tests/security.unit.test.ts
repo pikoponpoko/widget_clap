@@ -254,6 +254,35 @@ describe("print geometry and text", () => {
         ),
     ).toBe(true);
   });
+  it("prints one message per L-size (89×127mm) sheet", async () => {
+    const font = await readFile("public/fonts/NotoSansJP-Regular.ttf");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(font)),
+    );
+    const message = {
+      id: "l",
+      project_id: "work",
+      project_title: "作品",
+      body: "L判の感想です。",
+      created_at: new Date().toISOString(),
+      read_at: null,
+      publication_consent: 0,
+      blocked: 0,
+      reply_body: null,
+      replied_at: null,
+    };
+    const pdf = await PDFDocument.load(
+      await makePdf([message, { ...message, id: "l2" }], {
+        ...defaultPrint,
+        layout: "l",
+      }),
+    );
+    expect(pdf.getPageCount()).toBe(2);
+    const { width, height } = pdf.getPage(0).getSize();
+    expect(Math.round((width / 72) * 25.4)).toBe(89);
+    expect(Math.round((height / 72) * 25.4)).toBe(127);
+  });
   it("fits the default ten cards on A4", () =>
     expect(() => validatePrint(defaultPrint)).not.toThrow());
   it("rejects layouts outside the paper bounds", () => {

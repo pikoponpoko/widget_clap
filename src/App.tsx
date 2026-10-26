@@ -1538,6 +1538,7 @@ function PrintPanel({
               >
                 <option value="a4">A4・10面（2列×5段）</option>
                 <option value="card">カード単体・91×55mm</option>
+                <option value="l">L判・89×127mm</option>
               </select>
             </label>
             {options.layout === "a4" && (

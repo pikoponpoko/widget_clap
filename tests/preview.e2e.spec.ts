@@ -210,9 +210,8 @@ test("cross-origin embedding works and ignores forged host messages", async ({
 test("per-placement switches suppress disabled features, and unconnected tips never render", async ({
   page,
 }) => {
+  // With one site, the widget page shows its settings directly.
   await page.goto("/admin#projects");
-  // Persist the initial preview settings through the existing management form.
-  await page.getByRole("button", { name: "設定・埋め込み" }).first().click();
   await page.getByRole("button", { name: "拍手のみ", exact: true }).click();
   await page.getByRole("button", { name: "設定を保存", exact: true }).click();
   // The first management card can vary by title; choose the stored preset directly by its flag.
@@ -377,7 +376,6 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
   page,
 }) => {
   await page.goto("/admin#projects");
-  await page.getByRole("button", { name: "設定・埋め込み" }).first().click();
   await page.getByRole("textbox", { name: "NGキーワード" }).fill("スパム");
   await page.getByRole("button", { name: "設定を保存" }).click();
   await page.goto("/demo");
@@ -409,8 +407,9 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
   // Only the clean message counts; the NG one was hidden on arrival.
   await expect(total).toContainText("感想 1");
   await page
-    .getByRole("combobox", { name: "ページで絞り込む" })
-    .selectOption({ label: "ブログ記事" });
+    .locator(".page-stats")
+    .getByRole("button", { name: "ブログ記事" })
+    .click();
   await expect(total).toContainText("拍手 1");
   await expect(total).toContainText("感想 0");
 

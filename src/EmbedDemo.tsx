@@ -44,7 +44,7 @@ export default function EmbedDemo() {
           <span>Hakushu</span>
         </a>
         <nav>
-          <a href="/admin#projects">
+          <a href="/admin">
             <Inbox size={14} />
             管理画面
           </a>

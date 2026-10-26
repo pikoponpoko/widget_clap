@@ -2308,6 +2308,10 @@ small {
   min-height: 0;
   overflow: hidden;
 }
+.mini-clap-frame {
+  display: inline-block;
+  line-height: 0;
+}
 .mini-clap-wrap {
   display: inline-flex;
   align-items: flex-start;
@@ -2325,15 +2329,13 @@ small {
   margin: 0;
   padding: 4px;
   line-height: 0;
-  width: 128px;
-  height: 52px;
   max-width: 100%;
   cursor: pointer;
 }
 .mini-clap img {
   display: block;
-  max-width: 120px;
-  max-height: 44px;
+  max-width: 320px;
+  max-height: 240px;
   width: auto;
   height: auto;
   object-fit: contain;
@@ -2674,6 +2676,25 @@ small {
 }
 html.embed-document {
   background: transparent;
+}
+.page-stats {
+  list-style: none;
+  margin: 0;
+  padding: 0 22px 12px;
+}
+.page-stats li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.page-stats a {
+  color: inherit;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .widget-description:empty {
   display: none;

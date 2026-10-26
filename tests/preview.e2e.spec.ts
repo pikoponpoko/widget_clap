@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-const storeKey = "creator-support-browser-preview-v1";
+const storeKey = "hakushu-browser-preview-v2";
 const buttonFrame = (page: import("@playwright/test").Page) =>
   page.frameLocator('iframe[title="拍手ボタン"]').first();
 const thanksFrame = (page: import("@playwright/test").Page) =>
@@ -22,12 +22,12 @@ test("only the tiny button is embedded; click saves applause before optional fee
     frame.getByRole("button", { name: "拍手を送る", exact: true }),
   ).toBeVisible();
   await expect(frame.getByRole("textbox")).toHaveCount(0);
-  const bounds = await page
-    .locator('iframe[title="拍手ボタン"]')
-    .first()
-    .boundingBox();
-  expect(bounds?.width).toBe(128);
-  expect(bounds?.height).toBe(52);
+  // The frame follows the 180×170 GIF button plus 4px padding.
+  const buttonIframe = page.locator('iframe[title="拍手ボタン"]').first();
+  await expect
+    .poll(async () => (await buttonIframe.boundingBox())?.width)
+    .toBe(188);
+  expect((await buttonIframe.boundingBox())?.height).toBe(178);
   expect(
     await page.evaluate(
       (k) => JSON.parse(localStorage.getItem(k) || '{"claps":[]}').claps.length,
@@ -66,7 +66,7 @@ test("only the tiny button is embedded; click saves applause before optional fee
   });
   expect(
     (
-      await request.post("/api/public/projects/prepro/messages", {
+      await request.post("/api/public/projects/kazuki/messages", {
         data: { body: "no server storage" },
       })
     ).status(),
@@ -108,7 +108,7 @@ test("optional message and reply remain browser-local, favorites persist, and an
     if (new URL(r.url()).pathname.startsWith("/api/"))
       apiRequests.push(r.url());
   });
-  await page.goto("/widget/prepro");
+  await page.goto("/widget/kazuki");
   await expect(page.getByRole("textbox")).toHaveCount(0);
   await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
   await page.getByRole("button", { name: "お気に入り", exact: true }).click();
@@ -122,7 +122,7 @@ test("optional message and reply remain browser-local, favorites persist, and an
     page.getByRole("heading", { name: "送信しました" }),
   ).toBeVisible();
   const url = await page.getByLabel("返信確認URL").inputValue();
-  await page.goto("/widget/prepro");
+  await page.goto("/widget/kazuki");
   await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "お気に入り", exact: true }),
@@ -154,7 +154,7 @@ test("cross-origin embedding works and ignores forged host messages", async ({
   const server = createServer((_request, response) => {
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     response.end(
-      `<!doctype html><html><head><meta charset="utf-8"><style>iframe{height:700px!important}button{font-size:90px!important}</style></head><body><p id="before">ホストサイト</p><script src="${service}/embed.js" data-project="prepro"></script><p id="after">続きの文章</p></body></html>`,
+      `<!doctype html><html><head><meta charset="utf-8"><style>iframe{height:700px!important}button{font-size:90px!important}</style></head><body><p id="before">ホストサイト</p><script src="${service}/embed.js" data-project="kazuki"></script><p id="after">続きの文章</p></body></html>`,
     );
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -166,13 +166,13 @@ test("cross-origin embedding works and ignores forged host messages", async ({
     await expect(
       frame.getByRole("button", { name: "拍手を送る", exact: true }),
     ).toBeVisible();
-    expect(
-      (
-        await page
-          .locator('iframe[title="拍手ボタン"]')
-          .boundingBox()
-      )?.height,
-    ).toBe(52);
+    await expect
+      .poll(
+        async () =>
+          (await page.locator('iframe[title="拍手ボタン"]').boundingBox())
+            ?.height,
+      )
+      .toBe(178);
     await page.evaluate((origin) => {
       const frame = document
         .querySelector("[data-creator-support]")!
@@ -182,7 +182,7 @@ test("cross-origin embedding works and ignores forged host messages", async ({
           origin,
           data: {
             type: "creator-support:open",
-            project: "prepro",
+            project: "kazuki",
             instance: "forged",
             reason: "clap",
           },
@@ -244,7 +244,7 @@ test("per-placement switches suppress disabled features, and unconnected tips ne
     p.tip_privacy_checked = true;
     localStorage.setItem(k, JSON.stringify(s));
   }, storeKey);
-  await page.goto("/widget/prepro");
+  await page.goto("/widget/kazuki");
   await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
   await expect(page.getByAltText("作者からのお礼イラスト")).toHaveCount(0);
   await expect(page.getByRole("link", { name: /任意の支援/ })).toHaveCount(0);
@@ -269,7 +269,7 @@ test("does not open the thank-you modal or claim success if applause cannot be s
   ).toBeVisible();
   const serviceFrame = page
     .frames()
-    .find((f) => f.url().includes("/button/prepro"))!;
+    .find((f) => f.url().includes("/button/kazuki"))!;
   await serviceFrame.evaluate(() => {
     Storage.prototype.setItem = () => {
       throw new DOMException("full", "QuotaExceededError");
@@ -279,31 +279,73 @@ test("does not open the thank-you modal or claim success if applause cannot be s
   await expect(frame.getByRole("alert")).toContainText("保存容量");
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
-test("the embedded button uses the current button image and a click on it records applause", async ({
+test("the embedded button shows the GIF button image at its own size and records the clicked page", async ({
   page,
 }) => {
   await page.goto("/demo");
   const frame = buttonFrame(page);
   const button = frame.getByRole("button", { name: "拍手を送る", exact: true });
   const image = button.locator("img");
-  await expect(image).toHaveAttribute("src", "/clap-button.svg");
+  await expect(image).toHaveAttribute("src", "/buttons/push-me.gif");
   await expect
     .poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth))
-    .toBe(120);
+    .toBe(180);
   expect(
     await image.evaluate((img: HTMLImageElement) => img.naturalHeight),
-  ).toBe(44);
+  ).toBe(170);
   const box = await image.boundingBox();
-  expect(box!.width).toBeLessThanOrEqual(120);
-  expect(box!.height).toBeLessThanOrEqual(44);
+  expect(box!.width).toBe(180);
+  expect(box!.height).toBe(170);
   await image.click();
   await expect(
     thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
   ).toBeVisible();
   expect(
     await page.evaluate(
-      (k) => JSON.parse(localStorage.getItem(k)!).claps.length,
+      (k) =>
+        JSON.parse(localStorage.getItem(k)!).claps.map(
+          (c: { page_url: string; page_title: string }) => [
+            new URL(c.page_url).pathname,
+            c.page_title,
+          ],
+        ),
       storeKey,
     ),
-  ).toBe(1);
+  ).toEqual([["/tools/prepro", "プリプロ名人"]]);
+});
+test("one code serves many pages: claps and messages are listed per page in the dashboard", async ({
+  page,
+}) => {
+  await page.goto("/demo");
+  const frames = page.frameLocator('iframe[title="拍手ボタン"]');
+  for (const n of [0, 2]) {
+    await frames
+      .nth(n)
+      .getByRole("button", { name: "拍手を送る", exact: true })
+      .click();
+    await expect(
+      thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
+    ).toBeVisible();
+    if (n === 2) {
+      await thanksFrame(page)
+        .getByRole("textbox", { name: "メッセージ（任意）" })
+        .fill("ブログへの感想です。");
+      await page.waitForTimeout(1600);
+      await thanksFrame(page)
+        .getByRole("button", { name: "感想を保存して試す" })
+        .click();
+      await expect(
+        thanksFrame(page).getByRole("heading", { name: "送信しました" }),
+      ).toBeVisible();
+    }
+    await page.getByRole("button", { name: "お礼画面を閉じる" }).click();
+  }
+  await page.goto("/admin");
+  const pages = page.locator(".page-stats");
+  await expect(pages.getByRole("link", { name: "プリプロ名人" })).toBeVisible();
+  await expect(pages.getByRole("link", { name: "ブログ記事" })).toBeVisible();
+  await expect(
+    page.locator(".project-tag", { hasText: "ブログ記事" }).first(),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Hakushu" })).toBeVisible();
 });

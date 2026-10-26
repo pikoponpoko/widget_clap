@@ -66,7 +66,7 @@ export async function makePdf(
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit); // Full embedding avoids missing Japanese glyphs in fontkit subset output.
   const font = await doc.embedFont(await res.arrayBuffer(), { subset: false });
-  doc.setTitle("Web拍手 — 私的保存用");
+  doc.setTitle("Hakushu — 私的保存用");
   doc.setCreator("Creator Support Widget");
   const charset = new Set(font.getCharacterSet());
   const printable = (s: string) =>
@@ -119,13 +119,16 @@ export async function makePdf(
           height;
     if (options.cropMarks && options.layout === "a4")
       drawMarks(page!, x, y, width, height);
-    page!.drawText(fit(card.m.project_title, width - 2 * pad, 8), {
-      x: x + pad,
-      y: y + height - 20,
-      size: 8,
-      font,
-      color: rgb(0.38, 0.38, 0.38),
-    });
+    page!.drawText(
+      fit(card.m.page_title || card.m.project_title, width - 2 * pad, 8),
+      {
+        x: x + pad,
+        y: y + height - 20,
+        size: 8,
+        font,
+        color: rgb(0.38, 0.38, 0.38),
+      },
+    );
     page!.drawLine({
       start: { x: x + pad, y: y + height - 27 },
       end: { x: x + width - pad, y: y + height - 27 },
@@ -172,6 +175,6 @@ export async function savePdf(messages: Message[], options: PrintOptions) {
   const bytes = await makePdf(messages, options);
   download(
     new Blob([bytes as BlobPart], { type: "application/pdf" }),
-    options.layout === "a4" ? "webclap_A4.pdf" : "webclap_91x55mm.pdf",
+    options.layout === "a4" ? "hakushu_A4.pdf" : "hakushu_91x55mm.pdf",
   );
 }

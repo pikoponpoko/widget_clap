@@ -8,17 +8,18 @@ interface Store {
   version: 1;
   projects: Project[];
   messages: PreviewMessage[];
-  claps: { project_id: string; created_at: string; key: string }[];
+  claps: {
+    project_id: string;
+    created_at: string;
+    key: string;
+    page_url?: string;
+    page_title?: string;
+  }[];
   assets: PreviewAsset[];
 }
-const key = "creator-support-browser-preview-v1";
+const key = "hakushu-browser-preview-v2";
 function initial(): Store {
-  const rows = [
-    ["prepro", "プリプロ名人", "つくる前の、頼れる相棒。"],
-    ["shakutori", "尺取名人", "時間をはかって、制作を軽やかに。"],
-    ["ohanashi", "おはなし名人", "物語を組み立てる、小さな道具。"],
-    ["works", "作品ページ", "絵や物語への、小さな便り。"],
-  ];
+  const rows = [["kazuki", "kazukisekiguchi.com", ""]];
   return {
     version: 1,
     projects: rows.map(([id, title, description]) => ({
@@ -44,15 +45,26 @@ function initial(): Store {
     })),
     messages: [],
     claps: [],
-    assets: rows.map(([id]) => ({
-      id: "builtin-" + id,
-      project_id: id,
-      kind: "thanks",
-      mime: "image/svg+xml",
-      size: 0,
-      name: "お礼イラスト",
-      created_at: new Date().toISOString(),
-    })),
+    assets: rows.flatMap(([id]) => [
+      {
+        id: "builtin-" + id,
+        project_id: id,
+        kind: "thanks" as const,
+        mime: "image/svg+xml",
+        size: 0,
+        name: "お礼イラスト",
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: "builtin-button-" + id,
+        project_id: id,
+        kind: "button" as const,
+        mime: "image/gif",
+        size: 0,
+        name: "ボタン画像",
+        created_at: new Date().toISOString(),
+      },
+    ]),
   };
 }
 function read(): Store {
@@ -100,6 +112,7 @@ async function digest(s: string) {
 }
 const urls = new Map<string, string>();
 export function previewAssetUrl(id: string) {
+  if (id.startsWith("builtin-button-")) return "/buttons/push-me.gif";
   if (id.startsWith("builtin-")) return "/thanks.svg";
   if (urls.has(id)) return urls.get(id)!;
   try {
@@ -112,6 +125,23 @@ export function previewAssetUrl(id: string) {
   } catch {
     return "";
   }
+}
+function previewPage(data: { page_url?: unknown; page_title?: unknown }) {
+  let page_url = "";
+  try {
+    const u = new URL(String(data.page_url || ""));
+    if (["http:", "https:"].includes(u.protocol) && !u.username) {
+      u.hash = "";
+      if (u.href.length <= 500) page_url = u.href;
+    }
+  } catch {}
+  return {
+    page_url,
+    page_title: String(data.page_title || "")
+      .replace(/[\u0000-\u001F\u007F]/g, " ")
+      .trim()
+      .slice(0, 200),
+  };
 }
 const fail = (s: string): never => {
   throw new Error(s);
@@ -153,13 +183,15 @@ export async function previewRequest(
       };
     if (m[2] === "claps") {
       if (!pr.clap_enabled) fail("拍手はお休み中です。");
-      const k = pr.id + new Date().toISOString().slice(0, 13);
+      const page = previewPage(data);
+      const k = pr.id + page.page_url + new Date().toISOString().slice(0, 13);
       const counted = !s.claps.some((c) => c.key === k);
       if (counted) {
         s.claps.push({
           project_id: pr.id,
           created_at: new Date().toISOString(),
           key: k,
+          ...page,
         });
         save(s);
       }
@@ -188,6 +220,7 @@ export async function previewRequest(
       id: crypto.randomUUID(),
       project_id: pr.id,
       project_title: pr.title,
+      ...previewPage(data),
       body: data.body.trim(),
       created_at: new Date().toISOString(),
       read_at: null,
@@ -343,6 +376,28 @@ export async function previewRequest(
         s.claps.filter((c) => !projectId || c.project_id === projectId),
       ),
       messages: daily(rows),
+      pages: Array.from(
+        s.claps
+          .filter(
+            (c) =>
+              (!projectId || c.project_id === projectId) &&
+              c.created_at.slice(0, 10) >= from &&
+              c.created_at.slice(0, 10) <= to,
+          )
+          .reduce((map, c) => {
+            const row = map.get(c.page_url || "") || {
+              page_url: c.page_url || "",
+              page_title: c.page_title || "",
+              count: 0,
+            };
+            row.count++;
+            row.page_title ||= c.page_title || "";
+            return map.set(row.page_url, row);
+          }, new Map<string, { page_url: string; page_title: string; count: number }>())
+          .values(),
+      )
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 100),
       totals: {
         total: rows.length,
         unread: rows.filter((m) => !m.read_at).length,
@@ -425,6 +480,8 @@ export async function previewDownload(path: string): Promise<Blob> {
     const rows = data.messages as Record<string, unknown>[],
       keys = [
         "project_title",
+        "page_title",
+        "page_url",
         "body",
         "created_at",
         "publication_consent",

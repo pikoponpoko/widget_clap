@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
+import { readFileSync } from "node:fs";
 const origin = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:8787";
 const slug = "verify-" + Date.now();
 let projectId = "";
@@ -189,6 +190,80 @@ test.describe.serial("Phase 1 integrated flow", () => {
       (await request.post(url + "button", { headers, data: png })).status(),
     ).toBe(400);
   });
+  test("one code records the clicked page and shows the GIF button at its own size", async ({
+    request,
+    page,
+  }) => {
+    const pagesSlug = slug + "-pages";
+    const created = await request.post("/api/owner/projects", {
+      headers,
+      data: {
+        title: "ページ記録の検証",
+        slug: pagesSlug,
+        allowed_origins: ["https://kazukisekiguchi.com"],
+      },
+    });
+    expect(created.status()).toBe(201);
+    const pid = (await created.json()).id;
+    const gif = readFileSync("tests/fixtures/push-me.gif");
+    expect(
+      (
+        await request.post(
+          "/api/owner/projects/" + pid + "/assets?kind=button",
+          { headers, data: gif },
+        )
+      ).status(),
+    ).toBe(201);
+    const url = "/api/public/projects/" + pagesSlug;
+    for (const [page_url, page_title] of [
+      ["https://kazukisekiguchi.com/blog/a#comments", "記事A"],
+      ["https://kazukisekiguchi.com/blog/b", "記事B"],
+      ["https://evil.example/blog/c", "外部"],
+    ])
+      expect(
+        (
+          await request.post(url + "/claps", {
+            headers,
+            data: { page_url, page_title },
+          })
+        ).status(),
+      ).toBe(200);
+    expect(
+      (
+        await request.post(url + "/messages", {
+          headers,
+          data: {
+            ...body(),
+            page_url: "https://kazukisekiguchi.com/blog/b",
+            page_title: "記事B",
+          },
+        })
+      ).status(),
+    ).toBe(201);
+    const stats = await (
+      await request.get("/api/owner/stats?project=" + pid, { headers })
+    ).json();
+    expect(
+      stats.pages.map((p: { page_url: string }) => p.page_url).sort(),
+    ).toEqual([
+      "",
+      "https://kazukisekiguchi.com/blog/a",
+      "https://kazukisekiguchi.com/blog/b",
+    ]);
+    const messages = await (
+      await request.get("/api/owner/messages?project=" + pid, { headers })
+    ).json();
+    expect(messages.items[0].page_title).toBe("記事B");
+    await page.goto("/button/" + pagesSlug);
+    const image = page
+      .getByRole("button", { name: "拍手を送る", exact: true })
+      .locator("img");
+    await expect
+      .poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth))
+      .toBe(180);
+    const box = await image.boundingBox();
+    expect([box!.width, box!.height]).toEqual([180, 170]);
+  });
   test("honors per-placement reply and tip switches", async ({ request }) => {
     const response = await request.post("/api/owner/projects", {
       headers,
@@ -311,7 +386,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
       .getByRole("textbox", { name: "メッセージ（任意）" })
       .fill("スマートフォンからの便りです。");
     await page.waitForTimeout(1600);
-    await page.getByRole("button", { name: "感想を届ける" }).click();
+    await page.getByRole("button", { name: "送信" }).click();
     await expect(
       page.getByRole("heading", { name: "送信しました" }),
     ).toBeVisible();

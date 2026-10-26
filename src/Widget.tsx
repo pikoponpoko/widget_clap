@@ -1,5 +1,6 @@
 import { ClapControl } from "./ClapButton";
 import { previewMode } from "./mode";
+import { pageContext, tipRequested } from "./page-context";
 import { assetUrl } from "./asset-url";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -106,12 +107,17 @@ export function Widget({
     [website, setWebsite] = useState(""),
     [thanksIndex, setThanksIndex] = useState(() => Math.random()),
     [clapBusy, setClapBusy] = useState(false);
+  // Favorites are per page when embedded, so one code can serve many works.
+  const favoriteKey =
+    "support-favorite:" +
+    slug +
+    (pageContext.page_url ? ":" + pageContext.page_url : "");
   const started = useRef(Date.now()),
     requestId = useRef(crypto.randomUUID()),
     lastBody = useRef("");
   useEffect(() => {
     try {
-      setFavorite(localStorage.getItem("support-favorite:" + slug) === "true");
+      setFavorite(localStorage.getItem(favoriteKey) === "true");
     } catch {
       setNotice("このブラウザではお気に入りを保存できません。");
     }
@@ -125,7 +131,10 @@ export function Widget({
     setClapBusy(true);
     setNotice("");
     try {
-      await send("/public/projects/" + encodeURIComponent(slug) + "/claps", {});
+      await send(
+        "/public/projects/" + encodeURIComponent(slug) + "/claps",
+        pageContext,
+      );
       setThanksIndex(Math.random());
       setStage("clap");
     } catch (e) {
@@ -136,7 +145,7 @@ export function Widget({
   }
   function toggleFavorite() {
     try {
-      localStorage.setItem("support-favorite:" + slug, String(!favorite));
+      localStorage.setItem(favoriteKey, String(!favorite));
       setFavorite(!favorite);
     } catch {
       setNotice(
@@ -162,6 +171,7 @@ export function Widget({
           website,
           started_at: started.current,
           turnstile: captcha || undefined,
+          ...pageContext,
         },
       );
       setReplyUrl(
@@ -241,7 +251,7 @@ export function Widget({
           {!!p.clap_enabled && (
             <button className="btn" disabled={clapBusy} onClick={anotherClap}>
               <ThumbsUp size={16} />
-              {clapBusy ? "送信中…" : "もう一度、拍手"}
+              {clapBusy ? "送信中…" : "もう一度"}
             </button>
           )}
           {!!p.favorite_enabled && (
@@ -263,7 +273,7 @@ export function Widget({
                 <b>返信はこちらから</b>
                 <p>
                   {previewMode
-                    ? "体験版のURLは、このブラウザだけで確認できます。"
+                    ? "体験版のURLはこのブラウザでのみ確認できます。"
                     : "このURLを保存してください。共有した相手も閲覧できます。再表示はできません。"}
                 </p>
                 <a href={replyUrl} target="_blank" rel="noreferrer">
@@ -366,12 +376,12 @@ export function Widget({
                   ? "保存しています…"
                   : previewMode
                     ? "感想を保存して試す"
-                    : "感想を届ける"}
+                    : "送信"}
               </button>
             </form>
           )
         )}
-        {p.tip_url && (
+        {p.tip_url && tipRequested && (
           <a
             className="tip-link"
             href={p.tip_url}
@@ -417,12 +427,10 @@ export function ReplyPage() {
     <main className="reply-page">
       <div className="widget-wordmark">
         <span className="tiny-dot" />
-        Web拍手
+        Hakushu
       </div>
       <h1>返信</h1>
-      <p className="muted">
-        このURLを知っている人は誰でも閲覧できます。
-      </p>
+      <p className="muted">このURLを知っている人は誰でも閲覧できます。</p>
       {error ? (
         <p className="error" role="alert">
           {error}
@@ -437,10 +445,7 @@ export function ReplyPage() {
           <div className="reply-letter">
             <Heart size={24} strokeWidth={1.2} />
             <h2>作者から</h2>
-            <p>
-              {data.reply_body ||
-                "返信はまだありません"}
-            </p>
+            <p>{data.reply_body || "返信はまだありません"}</p>
           </div>
           <button className="btn" onClick={() => location.reload()}>
             最新の返信を確認

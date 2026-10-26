@@ -6,6 +6,46 @@
   var slug = script.getAttribute("data-project");
   if (!slug || !/^[a-z0-9][a-z0-9-]{0,59}$/.test(slug)) return;
   var origin = new URL(script.src, document.baseURI).origin;
+  // One code for every page: the clapped page is recorded from where the code is pasted.
+  var tip = script.getAttribute("data-tip") === "on";
+  function pageUrl() {
+    var canonical = document.querySelector('link[rel="canonical"]');
+    var candidates = [
+      script.getAttribute("data-page-url"),
+      canonical && canonical.getAttribute("href"),
+      location.href,
+    ];
+    for (var i = 0; i < candidates.length; i++) {
+      if (!candidates[i]) continue;
+      try {
+        var u = new URL(candidates[i], document.baseURI);
+        if (u.origin !== location.origin) continue;
+        u.hash = "";
+        Array.from(u.searchParams.keys()).forEach(function (k) {
+          if (/^(utm_|fbclid$|gclid$)/.test(k)) u.searchParams.delete(k);
+        });
+        return u.href;
+      } catch (e) {}
+    }
+    return "";
+  }
+  function pageTitle() {
+    var og = document.querySelector('meta[property="og:title"]');
+    return (
+      script.getAttribute("data-page-title") ||
+      (og && og.getAttribute("content")) ||
+      document.title ||
+      ""
+    )
+      .trim()
+      .slice(0, 200);
+  }
+  function withPage(url) {
+    url.searchParams.set("page", pageUrl());
+    url.searchParams.set("page_title", pageTitle());
+    if (tip) url.searchParams.set("tip", "1");
+    return url;
+  }
   var instance = crypto.randomUUID();
   var host = document.createElement("span");
   host.setAttribute("data-creator-support", slug);
@@ -27,12 +67,12 @@
   var buttonUrl = new URL("/button/" + encodeURIComponent(slug), origin);
   buttonUrl.searchParams.set("instance", instance);
   buttonUrl.searchParams.set("parent_origin", location.origin);
-  frame.src = buttonUrl.href;
+  frame.src = withPage(buttonUrl).href;
   var dialog = document.createElement("dialog");
   dialog.setAttribute("aria-label", "拍手のお礼と任意の感想");
   var header = document.createElement("header");
   var title = document.createElement("span");
-  title.textContent = "Web拍手";
+  title.textContent = "Hakushu";
   var close = document.createElement("button");
   close.type = "button";
   close.textContent = "×";
@@ -76,6 +116,20 @@
       return;
     var data = event.data;
     if (
+      data &&
+      data.type === "creator-support:size" &&
+      data.instance === instance &&
+      data.project === slug
+    ) {
+      frame.width = String(
+        Math.max(24, Math.min(328, Number(data.width) || 128)),
+      );
+      frame.height = String(
+        Math.max(24, Math.min(248, Number(data.height) || 52)),
+      );
+      return;
+    }
+    if (
       !data ||
       data.type !== "creator-support:open" ||
       data.instance !== instance ||
@@ -85,6 +139,7 @@
       return;
     var url = new URL("/widget/" + encodeURIComponent(slug), origin);
     url.searchParams.set("after", data.reason);
+    withPage(url);
     if (typeof dialog.showModal !== "function") {
       var link = document.createElement("a");
       link.href = url.href;

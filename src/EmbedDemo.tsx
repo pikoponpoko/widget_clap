@@ -1,32 +1,33 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Check, Copy, Heart, Inbox } from "lucide-react";
+import { ArrowUpRight, Check, Copy, Inbox } from "lucide-react";
 import { embedCode } from "./embed-code";
-function EmbedExample({ slug }: { slug: string }) {
+const slug = "kazuki";
+// The demo shows three pages on one screen, so each copy names its page explicitly.
+function EmbedExample({ path, title }: { path: string; title: string }) {
   const host = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const node = host.current!;
     const script = document.createElement("script");
     script.src = "/embed.js";
     script.dataset.project = slug;
+    script.dataset.pageUrl = new URL(path, location.origin).href;
+    script.dataset.pageTitle = title;
     node.appendChild(script);
     return () => {
       node.replaceChildren();
     };
-  }, [slug]);
+  }, [path, title]);
   return <span className="demo-button-mount" ref={host} />;
 }
 export default function EmbedDemo() {
-  const [slug, setSlug] = useState("prepro"),
+  const [tip, setTip] = useState(false),
     [copied, setCopied] = useState(false);
-  const code = embedCode(location.origin, slug);
+  const code = embedCode(location.origin, slug, tip);
   return (
     <div className="embed-demo">
       <header>
         <a className="brand" href="/demo">
-          <span className="brand-mark">
-            <Heart size={22} />
-          </span>
-          <span>Web拍手</span>
+          <span>Hakushu</span>
         </a>
         <nav>
           <a href="/admin#projects">
@@ -41,9 +42,7 @@ export default function EmbedDemo() {
       <main>
         <div className="demo-heading">
           <h1>埋め込みデモ</h1>
-          <p>
-            下のページ例は、発行した埋め込みコードでボタンを置いています。押すと拍手が保存され、お礼イラストと任意の感想欄が開きます。
-          </p>
+          <p>3つのページに同じコードを貼っています。</p>
         </div>
         <div className="demo-examples">
           <article className="demo-example demo-tool">
@@ -53,7 +52,7 @@ export default function EmbedDemo() {
               ツールはいつでも無料で利用できます
             </span>
             <div className="demo-inline-embed">
-              <EmbedExample slug="prepro" />
+              <EmbedExample path="/tools/prepro" title="プリプロ名人" />
             </div>
           </article>
           <article className="demo-example demo-work">
@@ -70,7 +69,7 @@ export default function EmbedDemo() {
             </div>
             <h2>ある日の風景</h2>
             <div className="demo-inline-embed">
-              <EmbedExample slug="works" />
+              <EmbedExample path="/works/landscape" title="ある日の風景" />
             </div>
           </article>
           <article className="demo-example demo-blog">
@@ -78,35 +77,28 @@ export default function EmbedDemo() {
             <h2>ブログ記事</h2>
             <div className="demo-blog-footer">
               <span>この記事への拍手</span>
-              <EmbedExample slug="ohanashi" />
+              <EmbedExample path="/blog/2026-10-26" title="ブログ記事" />
             </div>
-            <p className="demo-following-content">
-              ボタンの後の文章も、いつもの位置に表示されます。
-            </p>
+            <p className="demo-following-content">記事の本文が続きます。</p>
           </article>
         </div>
         <section className="demo-embed-code">
           <div>
             <h2>自分のページに貼るコード</h2>
             <p>
-              設置したい位置に1行貼り付けます。実運用では管理画面で設置先のオリジンを許可します。
+              どのページにも同じコードを貼ります。押されたページのURLとタイトルが記録されます。
             </p>
           </div>
           <label>
-            設置先
-            <select
-              aria-label="コードを発行する作品"
-              value={slug}
+            <input
+              type="checkbox"
+              checked={tip}
               onChange={(e) => {
-                setSlug(e.target.value);
+                setTip(e.target.checked);
                 setCopied(false);
               }}
-            >
-              <option value="prepro">プリプロ名人</option>
-              <option value="shakutori">尺取名人</option>
-              <option value="ohanashi">おはなし名人</option>
-              <option value="works">作品ページ</option>
-            </select>
+            />
+            このページで投げ銭を表示
           </label>
           <textarea
             aria-label="小型ボタンの埋め込みコード"
@@ -130,7 +122,7 @@ export default function EmbedDemo() {
             {copied ? "コピーしました" : "埋め込みコードをコピー"}
           </button>
           <p className="demo-preview-caveat">
-            現在は体験版です。拍手・感想はブラウザ内に保存され、作者には届きません。別サイトではブラウザの保存制限・保存領域の分離が適用される場合があります。本番サイトへの導入はサーバー接続後に行います。
+            体験版：拍手と感想はこのブラウザ内に保存され、作者には届きません。
           </p>
         </section>
       </main>

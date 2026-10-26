@@ -135,8 +135,41 @@ export const messageSchema = z
     website: z.string().max(200).default(""),
     started_at: z.number(),
     turnstile: z.string().max(4096).optional(),
+    page_url: z.string().max(2000).default(""),
+    page_title: z.string().max(500).default(""),
   })
   .strict();
+export const clapSchema = z
+  .object({
+    page_url: z.string().max(2000).default(""),
+    page_title: z.string().max(500).default(""),
+  })
+  .strict();
+// The embedding page is reported by the host script. Keep only an http(s) URL from an allowed origin.
+export function normalizePage(
+  input: { page_url?: string; page_title?: string },
+  allowedOrigins: string,
+) {
+  let page_url = "";
+  try {
+    const allowed = JSON.parse(allowedOrigins || "[]") as string[];
+    const u = new URL(input.page_url || "");
+    if (
+      ["http:", "https:"].includes(u.protocol) &&
+      !u.username &&
+      !u.password &&
+      (!allowed.length || allowed.includes(u.origin))
+    ) {
+      u.hash = "";
+      if (u.href.length <= 500) page_url = u.href;
+    }
+  } catch {}
+  const page_title = (input.page_title || "")
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .trim()
+    .slice(0, 200);
+  return { page_url, page_title };
+}
 export const replySchema = z.object({ body: text(4000) }).strict();
 const https = z.url().refine((s) => {
   try {

@@ -29,6 +29,8 @@ export interface Message {
   reply_token_hash: string | null;
   dedupe_key: string;
   blocked: number;
+  page_url: string;
+  page_title: string;
 }
 export interface Asset {
   id: string;

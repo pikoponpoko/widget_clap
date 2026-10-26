@@ -33,7 +33,14 @@ const tables = {
     "tip_privacy_checked",
     "created_at",
   ],
-  claps: ["id", "project_id", "created_at", "dedupe_key"],
+  claps: [
+    "id",
+    "project_id",
+    "created_at",
+    "dedupe_key",
+    "page_url",
+    "page_title",
+  ],
   messages: [
     "id",
     "project_id",
@@ -44,6 +51,8 @@ const tables = {
     "reply_token_hash",
     "dedupe_key",
     "blocked",
+    "page_url",
+    "page_title",
   ],
   replies: ["id", "message_id", "body", "created_at"],
   assets: [
@@ -66,6 +75,13 @@ if (Array.isArray(data.projects))
     reply_enabled: p.reply_enabled ?? 1,
     tip_enabled: p.tip_enabled ?? 0,
   }));
+for (const table of ["claps", "messages"])
+  if (Array.isArray(data[table]))
+    data[table] = data[table].map((x) => ({
+      ...x,
+      page_url: x.page_url ?? "",
+      page_title: x.page_title ?? "",
+    }));
 if (data.version !== 1) fail("Unsupported backup version");
 for (const [table, keys] of Object.entries(tables)) {
   if (!Array.isArray(data[table])) fail(`Missing table: ${table}`);

@@ -34,6 +34,8 @@ export interface Message {
   id: string;
   project_id: string;
   project_title: string;
+  page_url?: string;
+  page_title?: string;
   body: string;
   created_at: string;
   read_at: string | null;
@@ -47,6 +49,7 @@ export interface Stats {
   claps: { day: string; count: number }[];
   messages: { day: string; count: number }[];
   totals: { total: number; unread: number; unreplied: number };
+  pages?: { page_url: string; page_title: string; count: number }[];
   from: string;
   to: string;
 }

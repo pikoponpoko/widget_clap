@@ -1,5 +1,6 @@
 import { previewMode } from "./mode";
-import { useState } from "react";
+import { pageContext } from "./page-context";
+import { useEffect, useRef, useState } from "react";
 import { assetUrl } from "./asset-url";
 import { send, useApi } from "./api";
 import type { Project } from "./types";
@@ -29,7 +30,7 @@ export function ClapControl({
       if (p.clap_enabled)
         await send(
           "/public/projects/" + encodeURIComponent(p.slug) + "/claps",
-          {},
+          pageContext,
         );
       onOpen(
         p.clap_enabled ? "clap" : p.message_enabled ? "message" : "favorite",
@@ -95,25 +96,46 @@ export function EmbeddedButton({ slug }: { slug: string }) {
     "/public/projects/" + encodeURIComponent(slug),
   );
   const [fallback, setFallback] = useState("");
-  function open(reason: EntryReason) {
+  const frame = useRef<HTMLSpanElement>(null);
+  function postToHost(message: Record<string, unknown>) {
     const q = new URLSearchParams(location.search),
       instance = q.get("instance"),
       host = q.get("parent_origin");
-    if (instance && host && window.parent !== window) {
-      try {
-        const origin = new URL(host).origin;
-        if (
-          origin === host &&
-          ["https:", "http:"].includes(new URL(host).protocol)
-        ) {
-          window.parent.postMessage(
-            { type: "creator-support:open", project: slug, instance, reason },
-            origin,
-          );
-          return;
-        }
-      } catch {}
+    if (!instance || !host || window.parent === window) return false;
+    try {
+      const origin = new URL(host).origin;
+      if (
+        origin !== host ||
+        !["https:", "http:"].includes(new URL(host).protocol)
+      )
+        return false;
+      window.parent.postMessage(
+        { ...message, project: slug, instance },
+        origin,
+      );
+      return true;
+    } catch {
+      return false;
     }
+  }
+  // The host iframe follows the button image's own size (GIF buttons included).
+  useEffect(() => {
+    const el = frame.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      if (r.width && r.height)
+        postToHost({
+          type: "creator-support:size",
+          width: Math.ceil(r.width),
+          height: Math.ceil(r.height),
+        });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  });
+  function open(reason: EntryReason) {
+    if (postToHost({ type: "creator-support:open", reason })) return;
     // A plain iframe can use the same small button without access to the host DOM.
     setFallback("/widget/" + encodeURIComponent(slug) + "?after=" + reason);
   }
@@ -130,7 +152,7 @@ export function EmbeddedButton({ slug }: { slug: string }) {
       </button>
     );
   return (
-    <>
+    <span ref={frame} className="mini-clap-frame">
       <ClapControl project={p} onOpen={open} />
       {fallback && (
         <a
@@ -142,6 +164,6 @@ export function EmbeddedButton({ slug }: { slug: string }) {
           お礼を開く
         </a>
       )}
-    </>
+    </span>
   );
 }

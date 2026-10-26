@@ -44,15 +44,15 @@ type Section = "overview" | "inbox" | "projects" | "print" | "data";
 const titles: Record<Section, string> = {
   overview: "ダッシュボード",
   inbox: "届いた感想",
-  projects: "作品・ツール",
-  print: "シール印刷",
+  projects: "サイト",
+  print: "感想を印刷",
   data: "データ管理",
 };
 const navs: [Section, typeof Inbox, string][] = [
   ["overview", LayoutDashboard, "ダッシュボード"],
   ["inbox", Inbox, "届いた感想"],
-  ["projects", FolderHeart, "作品・ツール"],
-  ["print", Printer, "シール印刷"],
+  ["projects", FolderHeart, "サイト"],
+  ["print", Printer, "感想を印刷"],
 ];
 function ErrorText({ children }: { children: ReactNode }) {
   return children ? (
@@ -139,6 +139,28 @@ function StatCard({
       </div>
       {note && <span className="stat-note">{note}</span>}
     </div>
+  );
+}
+function PageStats({ stats }: { stats: Stats | null }) {
+  if (!stats) return null;
+  const pages = stats.pages || [];
+  if (!pages.length)
+    return <Empty title="拍手はまだありません" icon={ThumbsUp} />;
+  return (
+    <ol className="page-stats">
+      {pages.map((p) => (
+        <li key={p.page_url}>
+          {p.page_url ? (
+            <a href={p.page_url} target="_blank" rel="noopener noreferrer">
+              {p.page_title || p.page_url}
+            </a>
+          ) : (
+            <span className="muted">ページ不明</span>
+          )}
+          <b>{p.count.toLocaleString()}</b>
+        </li>
+      ))}
+    </ol>
   );
 }
 function Chart({ stats }: { stats: Stats | null }) {
@@ -255,9 +277,6 @@ export default function App() {
   if (session.loading)
     return (
       <div className="auth-page">
-        <span className="brand-mark">
-          <Heart size={24} />
-        </span>
         <p>読み込み中…</p>
       </div>
     );
@@ -276,10 +295,7 @@ export default function App() {
     <div className="app-shell">
       <aside className={"sidebar " + (mobileNav ? "is-open" : "")}>
         <a className="brand" href="/admin">
-          <span className="brand-mark">
-            <Heart size={22} strokeWidth={1.5} />
-          </span>
-          <span>Web拍手</span>
+          <span>Hakushu</span>
         </a>
         <div className="workspace">
           <span className="avatar">K</span>
@@ -364,14 +380,14 @@ export default function App() {
             section === "inbox" ||
             section === "print") && (
             <div className="scope-bar">
-              <span className="scope-label">作品・ツール</span>
+              <span className="scope-label">サイト</span>
               <div className="select-wrap">
                 <select
                   aria-label="作品で絞り込む"
                   value={project}
                   onChange={(e) => setProject(e.target.value)}
                 >
-                  <option value="">すべての作品・ツール</option>
+                  <option value="">すべてのサイト</option>
                   {list.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.title}
@@ -443,6 +459,12 @@ export default function App() {
                     </div>
                     <Chart stats={stats.data} />
                   </section>
+                  <section className="panel activity-panel">
+                    <div className="panel-heading">
+                      <h2>ページ別の拍手</h2>
+                    </div>
+                    <PageStats stats={stats.data} />
+                  </section>
                   <section className="panel">
                     <div className="panel-heading">
                       <h2>
@@ -483,7 +505,6 @@ export default function App() {
                               (list.find((p) => p.id === project) || list[0])
                                 .title
                             }
-                            <small>訪問者に表示されるウィジェット</small>
                           </span>
                         </div>
                         <iframe
@@ -514,9 +535,9 @@ export default function App() {
                         </div>
                       </>
                     ) : (
-                      <Empty title="作品・ツールを追加">
+                      <Empty title="サイトを追加">
                         <button className="btn" onClick={() => setEdit("new")}>
-                          作品を追加
+                          サイトを追加
                         </button>
                       </Empty>
                     )}
@@ -526,7 +547,7 @@ export default function App() {
                       className="text-button"
                       onClick={() => navigate("print")}
                     >
-                      シール印刷 <ArrowRight size={14} />
+                      感想を印刷 <ArrowRight size={14} />
                     </button>
                   </section>
                 </div>
@@ -589,7 +610,7 @@ export default function App() {
               ))}
               <button className="add-project" onClick={() => setEdit("new")}>
                 <Plus size={24} />
-                <span>新しい作品・ツールを追加</span>
+                <span>サイトを追加</span>
               </button>
             </div>
           )}
@@ -600,7 +621,7 @@ export default function App() {
             <DataPanel notify={notify} refresh={refresh} />
           )}
           <footer className="page-footer">
-            <span>Web拍手</span>
+            <span>Hakushu</span>
             <span>
               Owner · 非公開{session.data?.local ? " · ローカル開発環境" : ""}
             </span>
@@ -667,7 +688,9 @@ function InboxList({
   );
   const items = (data?.items || []).filter(
     (m) =>
-      !search || m.body.includes(search) || m.project_title.includes(search),
+      !search ||
+      m.body.includes(search) ||
+      (m.page_title || m.project_title).includes(search),
   );
   return (
     <>
@@ -719,7 +742,9 @@ function InboxList({
               </span>
               <div className="message-summary">
                 <div className="message-meta">
-                  <span className="project-tag">{m.project_title}</span>
+                  <span className="project-tag">
+                    {m.page_title || m.project_title}
+                  </span>
                   {!m.read_at && <span className="unread-dot" />}
                   {!!m.publication_consent && (
                     <span className="consent-badge">公開許可あり</span>
@@ -751,8 +776,7 @@ function InboxList({
                 ? "メッセージはまだありません"
                 : "該当するメッセージはありません"
           }
-        >
-        </Empty>
+        ></Empty>
       )}
       {!compact && !!data?.total && (
         <div className="pagination">
@@ -817,7 +841,18 @@ function MessageModal({
     <Modal title="届いた感想" onClose={onClose}>
       <div className="modal-body">
         <div className="message-detail-meta">
-          <span className="project-tag">{m.project_title}</span>
+          {m.page_url ? (
+            <a
+              className="project-tag"
+              href={m.page_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {m.page_title || m.page_url}
+            </a>
+          ) : (
+            <span className="project-tag">{m.project_title}</span>
+          )}
           <time>
             {date(m.created_at)} · {dateTime(m.created_at)}
           </time>
@@ -1026,7 +1061,8 @@ function ProjectModal({
     [origins, setOrigins] = useState(initial.allowed_origins.join("\n")),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [tab, setTab] = useState("settings");
+    [tab, setTab] = useState("settings"),
+    [embedTip, setEmbedTip] = useState(false);
   const assets = useApi<Asset[]>(
     project === "new"
       ? "/owner/projects/new/assets"
@@ -1084,12 +1120,11 @@ function ProjectModal({
   const embed = embedCode(
     location.origin,
     project === "new" ? form.slug : project.slug,
+    embedTip,
   );
   return (
     <Modal
-      title={
-        project === "new" ? "作品・ツールを追加" : project.title + "の設定"
-      }
+      title={project === "new" ? "サイトを追加" : project.title + "の設定"}
       onClose={onClose}
       wide
     >
@@ -1116,7 +1151,7 @@ function ProjectModal({
           <form onSubmit={save} className="settings-form">
             <div className="form-grid">
               <label>
-                作品・ツール名
+                サイト名
                 <input
                   required
                   maxLength={80}
@@ -1350,8 +1385,16 @@ function ProjectModal({
           <div className="embed-settings">
             <h3>埋め込みコード</h3>
             <p className="muted">
-              基本設定で設置先のオリジンを許可し、ボタンを置きたい位置に下のコードを貼り付けてください。
+              どのページにも同じコードを貼ります。押されたページのURLとタイトルが記録されます。設置先のオリジンは基本設定で許可してください。
             </p>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={embedTip}
+                onChange={(e) => setEmbedTip(e.target.checked)}
+              />
+              このページで投げ銭を表示（data-tip="on"）
+            </label>
             <textarea
               aria-label="埋め込みコード"
               readOnly
@@ -1384,9 +1427,6 @@ function ProjectModal({
                 ウィジェットを開く <ExternalLink size={14} />
               </a>
             </div>
-            <p className="small-text muted">
-              設置先には128×52pxの小さな画像ボタンだけを表示します。クリック後のお礼画面はダイアログで開き、本文の高さや配置を変えません。
-            </p>
           </div>
         )}
       </div>
@@ -1466,7 +1506,7 @@ function PrintPanel({
                   />
                   <span>
                     <small>
-                      {m.project_title} · {date(m.created_at)}
+                      {m.page_title || m.project_title} · {date(m.created_at)}
                     </small>
                     <p>{m.body}</p>
                   </span>
@@ -1542,7 +1582,9 @@ function PrintPanel({
               裁断線を付ける
             </label>
             <div className="print-card-preview">
-              <small>{preview?.project_title || "作品・ツール名"}</small>
+              <small>
+                {preview?.page_title || preview?.project_title || "ページ名"}
+              </small>
               <p>{preview?.body || "メッセージ本文"}</p>
               <span>
                 {preview ? date(preview.created_at) : "91 × 55 mm"} · 私的保存用
@@ -1664,7 +1706,6 @@ function DataPanel({
           <ArrowDownToLine size={18} />
         </div>
         <div className="data-section">
-          <p>すべての感想・返信・公開同意を、手元に保存できます。</p>
           <div className="button-row">
             <button
               className="btn"
@@ -1730,7 +1771,7 @@ function DataPanel({
                 action(async () => {
                   await downloadEndpoint(
                     "/owner/backup",
-                    "webclap_backup.json",
+                    "hakushu_backup.json",
                   );
                   notify("完全バックアップを書き出しました");
                 })

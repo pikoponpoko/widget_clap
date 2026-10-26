@@ -373,3 +373,12 @@ test("the tip-enabled demo page shows the unconnected tip placeholder only there
   ).toBeVisible();
   await expect(thanksFrame(page).getByText("決済リンク未設定")).toHaveCount(0);
 });
+test("the tip-enabled page shows the tip link next to the button before any click", async ({
+  page,
+}) => {
+  await page.goto("/demo");
+  const frames = page.frameLocator('iframe[title="拍手ボタン"]');
+  await expect(frames.nth(3).getByText("任意の支援をする")).toBeVisible();
+  await expect(frames.nth(0).getByText("任意の支援をする")).toHaveCount(0);
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+});

@@ -441,14 +441,22 @@ test.describe.serial("Phase 1 integrated flow", () => {
       page.getByRole("heading", { name: "ダッシュボード", exact: true }),
     ).toBeVisible();
     await expect(
-      page
-        .frameLocator("iframe")
-        .getByRole("button", { name: "拍手を送る", exact: true }),
-    ).toBeVisible();
+      page.getByRole("combobox", { name: "作品で絞り込む" }),
+    ).toHaveCount(0);
     await page.screenshot({
       path: "test-results/dashboard-desktop.png",
       fullPage: true,
     });
+    // Widget settings live on their own page, with the preview beside them.
+    await page.getByRole("button", { name: "ウィジェット" }).click();
+    await page.getByRole("button", { name: "設定・埋め込み" }).first().click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(
+      page
+        .frameLocator('iframe[title="ウィジェットのプレビュー"]')
+        .getByRole("button", { name: "拍手を送る", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "サイト一覧" }).click();
     await page.getByRole("button", { name: /届いた感想/ }).click();
     await page
       .getByRole("combobox", { name: "作品で絞り込む" })

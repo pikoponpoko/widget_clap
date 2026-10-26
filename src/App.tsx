@@ -49,14 +49,14 @@ type Section = "overview" | "inbox" | "projects" | "print" | "data";
 const titles: Record<Section, string> = {
   overview: "ダッシュボード",
   inbox: "届いた感想",
-  projects: "サイト",
+  projects: "ウィジェット",
   print: "感想を印刷",
   data: "データ管理",
 };
 const navs: [Section, typeof Inbox, string][] = [
   ["overview", LayoutDashboard, "ダッシュボード"],
   ["inbox", Inbox, "届いた感想"],
-  ["projects", FolderHeart, "サイト"],
+  ["projects", FolderHeart, "ウィジェット"],
   ["print", Printer, "感想を印刷"],
 ];
 function ErrorText({ children }: { children: ReactNode }) {
@@ -146,7 +146,16 @@ function StatCard({
     </div>
   );
 }
-function PageStats({ stats }: { stats: Stats | null }) {
+// Clicking a page narrows the dashboard to it; clicking it again shows all pages.
+function PageStats({
+  stats,
+  selected,
+  onSelect,
+}: {
+  stats: Stats | null;
+  selected: string;
+  onSelect: (page: string) => void;
+}) {
   if (!stats) return null;
   const pages = stats.pages || [];
   if (!pages.length)
@@ -154,11 +163,31 @@ function PageStats({ stats }: { stats: Stats | null }) {
   return (
     <ol className="page-stats">
       {pages.map((p) => (
-        <li key={p.page_url}>
+        <li
+          key={p.page_url}
+          className={selected && p.page_url === selected ? "active" : ""}
+        >
           {p.page_url ? (
-            <a href={p.page_url} target="_blank" rel="noopener noreferrer">
-              {p.page_title || p.page_url}
-            </a>
+            <>
+              <button
+                type="button"
+                className="page-filter"
+                aria-pressed={p.page_url === selected}
+                onClick={() =>
+                  onSelect(p.page_url === selected ? "" : p.page_url)
+                }
+              >
+                {p.page_title || p.page_url}
+              </button>
+              <a
+                href={p.page_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={(p.page_title || p.page_url) + "を開く"}
+              >
+                <ExternalLink size={13} />
+              </a>
+            </>
           ) : (
             <span className="muted">ページ不明</span>
           )}
@@ -197,12 +226,14 @@ function Chart({
     });
     start = new Date(start.getTime() + 86400000);
   }
-  const max = Math.max(1, ...days.map((d) => d.claps + d.messages));
+  // An even maximum keeps the middle grid label distinct from the top one.
+  let max = Math.max(2, ...days.map((d) => d.claps + d.messages));
+  if (max % 2) max++;
   return (
     <div className="activity-chart">
       <div className="chart-grid">
         <span>{max}</span>
-        <span>{Math.ceil(max / 2)}</span>
+        <span>{max / 2}</span>
         <span>0</span>
       </div>
       <div className="chart-bars">
@@ -315,7 +346,6 @@ export default function App() {
     stats = useApi<Stats>(
       "/owner/stats?" +
         new URLSearchParams({
-          ...(project ? { project } : {}),
           ...(pageUrl ? { page: pageUrl } : {}),
           v: String(version),
           from,
@@ -325,7 +355,6 @@ export default function App() {
     hours = useApi<HourStats>(
       "/owner/stats/hours?" +
         new URLSearchParams({
-          ...(project ? { project } : {}),
           ...(pageUrl ? { page: pageUrl } : {}),
           v: String(version),
           day,
@@ -333,8 +362,12 @@ export default function App() {
     );
   const [selected, setSelected] = useState<Message | null>(null),
     [edit, setEdit] = useState<Project | "new" | null>(null);
+  const list = projects.data || [];
+  // One site is the usual case, so its widget page opens directly.
+  const widgetTarget = edit || (list.length === 1 ? list[0] : null);
   function navigate(next: Section) {
     setSection(next);
+    setEdit(null);
     location.hash = next;
     setMobileNav(false);
   }
@@ -357,9 +390,7 @@ export default function App() {
     window.addEventListener("hashchange", handler);
     return () => window.removeEventListener("hashchange", handler);
   }, []);
-  const list = projects.data || [];
-  const filtered = list.filter((p) => !project || p.id === project),
-    countClaps = filtered.reduce((a, p) => a + p.claps, 0),
+  const countClaps = list.reduce((a, p) => a + p.claps, 0),
     total = stats.data?.totals;
   if (session.loading)
     return (
@@ -451,31 +482,28 @@ export default function App() {
             <div>
               <h1>{titles[section]}</h1>
             </div>
-            {section === "projects" ? (
+            {section === "projects" &&
+            edit &&
+            (list.length > 1 || edit === "new") ? (
+              <button className="btn" onClick={() => setEdit(null)}>
+                <ChevronLeft size={15} />
+                サイト一覧
+              </button>
+            ) : section === "projects" && !widgetTarget ? (
               <button className="btn primary" onClick={() => setEdit("new")}>
                 <Plus size={16} />
-                作品を追加
-              </button>
-            ) : section === "overview" ? (
-              <button className="btn" onClick={() => navigate("projects")}>
-                <Settings2 size={15} />
-                ウィジェットを設定
+                サイトを追加
               </button>
             ) : null}
           </div>
-          {(section === "overview" ||
-            section === "inbox" ||
-            section === "print") && (
+          {(section === "inbox" || section === "print") && list.length > 1 && (
             <div className="scope-bar">
               <span className="scope-label">サイト</span>
               <div className="select-wrap">
                 <select
                   aria-label="作品で絞り込む"
                   value={project}
-                  onChange={(e) => {
-                    setProject(e.target.value);
-                    setPageUrl("");
-                  }}
+                  onChange={(e) => setProject(e.target.value)}
                 >
                   <option value="">すべてのサイト</option>
                   {list.map((p) => (
@@ -486,47 +514,32 @@ export default function App() {
                 </select>
                 <ChevronDown size={14} />
               </div>
-              {section === "overview" && (
-                <>
-                  <div className="select-wrap">
-                    <select
-                      aria-label="ページで絞り込む"
-                      value={pageUrl}
-                      onChange={(e) => setPageUrl(e.target.value)}
-                    >
-                      <option value="">すべてのページ</option>
-                      {pageUrl &&
-                        !stats.data?.pages?.some(
-                          (p) => p.page_url === pageUrl,
-                        ) && <option value={pageUrl}>{pageUrl}</option>}
-                      {(stats.data?.pages || [])
-                        .filter((p) => p.page_url)
-                        .map((p) => (
-                          <option key={p.page_url} value={p.page_url}>
-                            {p.page_title || p.page_url}
-                          </option>
-                        ))}
-                    </select>
-                    <ChevronDown size={14} />
-                  </div>
-                  <div className="date-range">
-                    <input
-                      type="date"
-                      aria-label="集計の開始日"
-                      value={from}
-                      onChange={(e) => setFrom(e.target.value)}
-                    />
-                    <span>–</span>
-                    <input
-                      type="date"
-                      aria-label="集計の終了日"
-                      value={to}
-                      onChange={(e) => setTo(e.target.value)}
-                    />
-                  </div>
-                  <span className="scope-meta">{list.length} 件の設置先</span>
-                </>
-              )}
+            </div>
+          )}
+          {section === "overview" && (
+            <div className="scope-bar date-bar">
+              <div className="date-range">
+                <input
+                  type="date"
+                  aria-label="集計の開始日"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+                <span>–</span>
+                <input
+                  type="date"
+                  aria-label="集計の終了日"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                />
+              </div>
+              <button
+                className="icon-button"
+                onClick={refresh}
+                aria-label="集計を更新"
+              >
+                <RefreshCw size={15} />
+              </button>
             </div>
           )}
           <ErrorText>{projects.error || stats.error}</ErrorText>
@@ -551,7 +564,7 @@ export default function App() {
                   icon={Reply}
                 />
               </div>
-              <div className="dashboard-columns">
+              <div className="dashboard-single">
                 <div className="dashboard-main">
                   <section className="panel activity-panel">
                     <div className="panel-heading">
@@ -594,7 +607,11 @@ export default function App() {
                     <div className="panel-heading">
                       <h2>ページ別の拍手</h2>
                     </div>
-                    <PageStats stats={stats.data} />
+                    <PageStats
+                      stats={stats.data}
+                      selected={pageUrl}
+                      onSelect={setPageUrl}
+                    />
                   </section>
                   <section className="panel">
                     <div className="panel-heading">
@@ -612,74 +629,11 @@ export default function App() {
                       </button>
                     </div>
                     <InboxList
-                      project={project}
+                      project=""
                       version={version}
                       compact
                       onSelect={setSelected}
                     />
-                  </section>
-                </div>
-                <div className="dashboard-side">
-                  <section className="panel widget-preview-panel">
-                    <div className="panel-heading">
-                      <h2>ウィジェット</h2>
-                      <span className="status-dot">プレビュー</span>
-                    </div>
-                    {list.length ? (
-                      <>
-                        <div className="mini-site">
-                          <span className="mini-site-icon">
-                            <FolderHeart size={18} />
-                          </span>
-                          <span>
-                            {
-                              (list.find((p) => p.id === project) || list[0])
-                                .title
-                            }
-                          </span>
-                        </div>
-                        <iframe
-                          title="ウィジェットのプレビュー"
-                          className="preview-frame"
-                          src={
-                            "/widget/" +
-                            (list.find((p) => p.id === project) || list[0]).slug
-                          }
-                        />
-                        <div className="preview-actions">
-                          <a
-                            href={
-                              "/widget/" +
-                              (list.find((p) => p.id === project) || list[0])
-                                .slug
-                            }
-                            className="text-button"
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            別のタブで試す <ExternalLink size={13} />
-                          </a>
-                          <button className="text-button" onClick={refresh}>
-                            <RefreshCw size={13} />
-                            集計を更新
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <Empty title="サイトを追加">
-                        <button className="btn" onClick={() => setEdit("new")}>
-                          サイトを追加
-                        </button>
-                      </Empty>
-                    )}
-                  </section>
-                  <section className="paper-note">
-                    <button
-                      className="text-button"
-                      onClick={() => navigate("print")}
-                    >
-                      感想を印刷 <ArrowRight size={14} />
-                    </button>
                   </section>
                 </div>
               </div>
@@ -698,7 +652,49 @@ export default function App() {
               />
             </section>
           )}
-          {section === "projects" && (
+          {section === "projects" && widgetTarget && (
+            <div className="dashboard-columns">
+              <div className="dashboard-main">
+                <ProjectModal
+                  key={widgetTarget === "new" ? "new" : widgetTarget.id}
+                  inline
+                  project={widgetTarget}
+                  tipEnabled={!!session.data?.tip_links_enabled}
+                  onClose={() => {
+                    if (widgetTarget === "new") setEdit(null);
+                    refresh();
+                  }}
+                  notify={notify}
+                />
+              </div>
+              {widgetTarget !== "new" && (
+                <div className="dashboard-side">
+                  <section className="panel widget-preview-panel">
+                    <div className="panel-heading">
+                      <h2>プレビュー</h2>
+                    </div>
+                    <iframe
+                      key={version}
+                      title="ウィジェットのプレビュー"
+                      className="preview-frame"
+                      src={"/widget/" + widgetTarget.slug}
+                    />
+                    <div className="preview-actions">
+                      <a
+                        href={"/widget/" + widgetTarget.slug}
+                        className="text-button"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        別のタブで試す <ExternalLink size={13} />
+                      </a>
+                    </div>
+                  </section>
+                </div>
+              )}
+            </div>
+          )}
+          {section === "projects" && !widgetTarget && (
             <div className="project-grid">
               {list.map((p, i) => (
                 <article className="panel project-card" key={p.id}>
@@ -774,17 +770,6 @@ export default function App() {
           message={selected}
           onClose={() => {
             setSelected(null);
-            refresh();
-          }}
-          notify={notify}
-        />
-      )}
-      {edit && (
-        <ProjectModal
-          project={edit}
-          tipEnabled={!!session.data?.tip_links_enabled}
-          onClose={() => {
-            setEdit(null);
             refresh();
           }}
           notify={notify}
@@ -1297,11 +1282,13 @@ function ProjectModal({
   tipEnabled,
   onClose,
   notify,
+  inline = false,
 }: {
   project: Project | "new";
   tipEnabled: boolean;
   onClose: () => void;
   notify: (s: string) => void;
+  inline?: boolean;
 }) {
   const initial =
     project === "new"
@@ -1403,12 +1390,23 @@ function ProjectModal({
     embedTip,
     cleanTipLabel(embedTipLabel),
   );
-  return (
-    <Modal
-      title={project === "new" ? "サイトを追加" : project.title + "の設定"}
-      onClose={onClose}
-      wide
-    >
+  const title = project === "new" ? "サイトを追加" : project.title;
+  // A plain function (not a component) so the form keeps its state and focus across renders.
+  const frame = (children: ReactNode) =>
+    inline ? (
+      <section className="panel widget-settings">
+        <div className="panel-heading">
+          <h2>{title}</h2>
+        </div>
+        {children}
+      </section>
+    ) : (
+      <Modal title={title + "の設定"} onClose={onClose} wide>
+        {children}
+      </Modal>
+    );
+  return frame(
+    <>
       <div className="modal-tabs">
         {[
           ["settings", "基本設定"],
@@ -1598,9 +1596,11 @@ function ProjectModal({
               ))}
             </details>
             <div className="modal-form-footer">
-              <button type="button" className="btn" onClick={onClose}>
-                閉じる
-              </button>
+              {!inline && (
+                <button type="button" className="btn" onClick={onClose}>
+                  閉じる
+                </button>
+              )}
               <button className="btn primary" disabled={busy}>
                 {busy ? "保存中…" : "設定を保存"}
               </button>
@@ -1731,7 +1731,7 @@ function ProjectModal({
           </div>
         )}
       </div>
-    </Modal>
+    </>,
   );
 }
 function PrintPanel({

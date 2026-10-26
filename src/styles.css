@@ -2850,3 +2850,42 @@ html.embed-document {
   margin: 10px 0;
   font-size: 12px;
 }
+.dashboard-single {
+  display: grid;
+  gap: 24px;
+}
+.page-stats li {
+  align-items: center;
+}
+.page-stats li > a {
+  display: inline-flex;
+  margin-right: auto;
+  color: var(--muted);
+}
+.page-filter {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: inherit;
+}
+.page-stats li.active .page-filter {
+  font-weight: 600;
+  text-decoration: underline;
+}
+.widget-settings .modal-tabs {
+  padding: 0 22px;
+}
+.widget-settings .modal-body {
+  padding: 22px;
+}
+.date-bar {
+  flex-wrap: nowrap;
+}
+.date-bar .date-range {
+  order: 0;
+  width: auto;
+  margin-left: 0;
+}

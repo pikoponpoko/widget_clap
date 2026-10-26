@@ -3,6 +3,8 @@
   "name": "creator-support-widget",
   "main": "server/index.ts",
   "compatibility_date": "2026-10-24",
+  "workers_dev": false,
+  "routes": [{ "pattern": "hakushu.kazukisekiguchi.com", "custom_domain": true }],
   "assets": {
     "directory": "./dist-owner",
     "binding": "ASSETS",

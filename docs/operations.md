@@ -14,12 +14,12 @@ Cron（18:00 UTC）→ 完全JSON → 非公開バックアップ専用R2
 
 ## 作成済みWorkerに合わせる設定
 
-1. Worker名を `name` に設定。現行Workerのソース・ルート・環境変数・バインディングを先に確認し、既存機能がある場合は別Workerまたは検証環境を使います。
+1. 配信ドメインは `hakushu.kazukisekiguchi.com`（`routes` の Custom Domain）。`workers_dev` は無効。Worker名を `name` に設定。現行Workerのソース・ルート・環境変数・バインディングを先に確認し、既存機能がある場合は別Workerまたは検証環境を使います。
 2. D1 `DB` バインディングに実データベース名とIDを設定。
 3. R2 `IMAGES` と `BACKUPS` を別バケットへ接続。両方ともR2直接公開をOFFにし、画像だけWorkerの検証済み公開APIから配信します。バックアップバケットにパブリックドメインを付けません。
-4. Cloudflare AccessのSelf-hostedアプリで、管理画面 `/admin*` と `/api/owner/*` を保護。Ownerの1メールアドレスだけを許可します。公開ウィジェット・画像API・投稿API・返信確認APIはAccessの対象から外します。
-5. Worker環境変数：`ENVIRONMENT=production`、`ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com`、`ACCESS_AUDIENCE=<AccessアプリのAUD>`、`OWNER_EMAIL=<Ownerメール>`。`LOCAL_OWNER_ENABLED` は本番で設定しません。コードはJWTのRS256署名・issuer・audience・期限・email・subを検証します。
-6. Secrets：ランダムな32バイト以上の `SPAM_SECRET` と `TURNSTILE_SECRET_KEY`。環境変数 `TURNSTILE_SITE_KEY`。Turnstileの許可ホストに実際のウィジェット配信ホストを登録し、`message` actionを利用します。未設定の本番投稿は503で閉じます。
+4. Cloudflare AccessのSelf-hostedアプリで、`hakushu.kazukisekiguchi.com` のパス `admin` と `api/owner` を保護（Workerの「Protect this Worker behind Access」は公開ウィジェットも塞ぐため使いません）。Ownerの1メールアドレスだけを許可します。公開ウィジェット・画像API・投稿API・返信確認APIはAccessの対象から外します。
+5. `ENVIRONMENT=production` は設定ファイルに記載。`ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com`、`ACCESS_AUDIENCE=<AccessアプリのAUD>`、`OWNER_EMAIL=<Ownerメール>` はリポジトリに残さないよう `wrangler secret put` で登録します。`LOCAL_OWNER_ENABLED` は本番で設定しません。コードはJWTのRS256署名・issuer・audience・期限・email・subを検証します。
+6. Secrets：ランダムな32バイト以上の `SPAM_SECRET` と `TURNSTILE_SECRET_KEY`。環境変数 `TURNSTILE_SITE_KEY`。Turnstileの許可ホストにウィジェット配信ホスト `hakushu.kazukisekiguchi.com`（設置先サイトではない）を登録し、`message` actionを利用します。未設定の本番投稿は503で閉じます。
 7. `TIP_LINKS_ENABLED=false` を維持。適法性、決済事業者の許可、法定表示、明細・領収書等の個人情報を実フローで確認し、ユーザー承認後のみ設定を変更します。本サービスは決済情報・本人確認情報を保存しません。PayPay個人間送金は使いません。
 8. 実際の設置元オリジンを作品設定に登録（例 `https://kazukisekiguchi.com`）。`frame-ancestors` で許可先を制限します。`www` 等は別オリジンとして追加します。
 
@@ -27,6 +27,7 @@ Cron（18:00 UTC）→ 完全JSON → 非公開バックアップ専用R2
 
 ```sh
 npx wrangler d1 migrations apply support --config wrangler.owner.jsonc --remote
+# scripts/seed.sql は本番に適用しません。ページは管理画面で作成します。
 npm run build:owner
 npx wrangler deploy --config wrangler.owner.jsonc
 ```

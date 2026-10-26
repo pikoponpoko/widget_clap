@@ -1620,7 +1620,7 @@ function PrintPanel({
           </div>
         </section>
         <p className="small-text muted print-disclaimer">
-          画面のカードはイメージです。シール用紙の規格と印刷位置は、普通紙で試してから調整してください。
+          画面のカードはイメージです。
         </p>
       </div>
     </div>

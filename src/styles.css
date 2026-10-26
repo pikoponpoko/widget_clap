@@ -1685,23 +1685,36 @@ small {
 }
 .tip-link {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
   gap: 6px;
   margin-top: 22px;
-  font-size: 11px;
-  text-decoration: underline;
 }
 .tip-link small {
-  width: 100%;
-  text-align: center;
   font-size: 8px;
+  color: var(--muted);
+}
+/* The tip is its own button, separate from the clap button; no hover change. */
+.tip-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 7px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
   text-decoration: none;
-  color: #767676;
+  white-space: nowrap;
 }
 .tip-preview {
-  text-decoration: none;
+  border-color: var(--line);
+  background: var(--soft);
   color: var(--muted);
   cursor: not-allowed;
 }
@@ -2320,14 +2333,14 @@ small {
   line-height: 0;
 }
 .mini-tip {
-  display: block;
-  padding: 2px 4px 4px;
+  margin: 6px 4px 4px;
+  min-height: 28px;
+  padding: 3px 12px;
   font-size: 11px;
-  line-height: 1.5;
-  color: var(--ink);
-  white-space: nowrap;
 }
 .mini-tip.tip-preview {
+  border-color: var(--line);
+  background: var(--soft);
   color: var(--muted);
 }
 .mini-clap-wrap {

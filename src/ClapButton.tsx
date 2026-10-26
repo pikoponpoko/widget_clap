@@ -159,7 +159,7 @@ export function EmbeddedButton({ slug }: { slug: string }) {
         (p.clap_enabled || p.message_enabled || p.favorite_enabled) &&
         (p.tip_url ? (
           <a
-            className="mini-tip"
+            className="tip-button mini-tip"
             href={p.tip_url}
             target="_blank"
             rel="noopener noreferrer"
@@ -167,7 +167,7 @@ export function EmbeddedButton({ slug }: { slug: string }) {
             {tipLabel}
           </a>
         ) : previewMode ? (
-          <span className="mini-tip tip-preview" aria-disabled="true">
+          <span className="tip-button mini-tip tip-preview" aria-disabled="true">
             {tipLabel}（体験版：決済リンク未設定）
           </span>
         ) : null)}

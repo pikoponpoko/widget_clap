@@ -26,7 +26,7 @@ Cron（18:00 UTC）→ 完全JSON → 非公開バックアップ専用R2
 承認後に使うコマンドの例（このタスクでは実行していません）：
 
 ```sh
-npx wrangler d1 migrations apply support --config wrangler.owner.jsonc --remote
+npx wrangler d1 migrations apply hakushu --config wrangler.owner.jsonc --remote
 # scripts/seed.sql は本番に適用しません。ページは管理画面で作成します。
 npm run build:owner
 npx wrangler deploy --config wrangler.owner.jsonc
@@ -55,7 +55,7 @@ npx wrangler deploy --config wrangler.owner.jsonc
 
 ```sh
 # 作成されたバックアップには非公開情報を含みます。安全な保管場所へ出力します。
-npx wrangler d1 export support --remote --output <安全な場所>/d1-backup.sql
+npx wrangler d1 export hakushu --remote --output <安全な場所>/d1-backup.sql
 # 復旧用の別D1へインポートし、検証後にDBバインディングを切り替えます。
 npx wrangler d1 execute <復旧先DB> --remote --file <安全な場所>/d1-backup.sql
 ```

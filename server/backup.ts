@@ -94,6 +94,7 @@ const project = z
     tip_legal_checked: flag,
     tip_terms_checked: flag,
     tip_privacy_checked: flag,
+    ng_words: z.string().max(8000).default("[]"),
     created_at: timestamp,
   })
   .strict();
@@ -139,6 +140,7 @@ const schema = z
             project_id: ident,
             created_at: timestamp,
             dedupe_key: hash,
+            visitor: z.string().max(64).default(""),
             page_url: z.string().max(500).default(""),
             page_title: z.string().max(200).default(""),
           })
@@ -258,6 +260,7 @@ function validProject(p: z.infer<typeof project>) {
     return projectSchema.safeParse({
       ...fields,
       allowed_origins: JSON.parse(p.allowed_origins),
+      ng_words: JSON.parse(p.ng_words),
       clap_enabled: !!p.clap_enabled,
       message_enabled: !!p.message_enabled,
       favorite_enabled: !!p.favorite_enabled,

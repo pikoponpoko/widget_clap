@@ -2727,6 +2727,122 @@ html.embed-document {
 .widget-description:empty {
   display: none;
 }
+.chart-column {
+  border: 0;
+  padding: 0;
+  background: none;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.chart-column.active .bar-clap {
+  background: #4a4a4a;
+}
+.chart-column.active .bar-message {
+  background: #262626;
+}
+.hour-date {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+.hour-tables {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  padding: 0 22px;
+}
+.hour-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.hour-table th {
+  color: #767676;
+  font-weight: 400;
+  text-align: right;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.hour-table td {
+  text-align: right;
+  padding: 3px 6px;
+  border-bottom: 1px solid #f2f2f2;
+}
+.hour-table tr.zero td {
+  color: #adadad;
+}
+.hour-table .hour-bar-cell {
+  width: 45%;
+  text-align: left;
+}
+.hour-bar {
+  display: block;
+  height: 8px;
+  border-radius: 2px;
+  background: #adadad;
+}
+.hour-total {
+  display: flex;
+  justify-content: flex-end;
+  gap: 18px;
+  padding: 12px 22px 16px;
+  font-size: 10px;
+  color: #767676;
+}
+.hour-total b {
+  color: var(--ink);
+  font-size: 12px;
+}
+.month-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 12px;
+}
+.month-bar .select-wrap select {
+  min-width: 170px;
+}
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 22px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+.bulk-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.message-item {
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid #f2f2f2;
+}
+.message-item .message-row {
+  border-top: 0;
+}
+.message-check {
+  margin: 0 0 0 22px;
+  align-self: center;
+}
+.message-item:has(.message-check) .message-row {
+  padding-left: 14px;
+}
+@media (max-width: 760px) {
+  .hour-tables {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .message-check {
+    margin-left: 14px;
+  }
+}
 .tip-label-field {
   display: flex;
   align-items: center;

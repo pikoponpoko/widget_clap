@@ -22,6 +22,8 @@ import {
   csvCell,
   tipVisible,
   token,
+  hasNgWord,
+  jstDay,
   type Env,
 } from "./security";
 import { snapshot, scheduledBackup, restore } from "./backup";
@@ -134,10 +136,12 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   const dedupe = await hash(
     `${key}:${p.id}:${page.page_url}:${now().slice(0, 13)}`,
   );
+  // Daily-salted so visitors cannot be linked across days.
+  const visitor = (await hash(`${key}:visitor:${jstDay()}`)).slice(0, 32);
   const result = await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title) SELECT ?,?,?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
+    "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor) SELECT ?,?,?,?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
   )
-    .bind(id(), p.id, now(), dedupe, page.page_url, page.page_title)
+    .bind(id(), p.id, now(), dedupe, page.page_url, page.page_title, visitor)
     .run();
   if (
     !result.meta.changes &&
@@ -184,7 +188,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
   await limit(c.env, `message:${key}`, 5, 3600);
   // Global capacity bounds backups and prevents unbounded D1 growth in this single-owner edition.
   const result = await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,publication_consent,reply_token_hash,dedupe_key,page_url,page_title) SELECT ?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
+    "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,publication_consent,reply_token_hash,dedupe_key,page_url,page_title,blocked) SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
   )
     .bind(
       id(),
@@ -196,6 +200,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
       dedupe,
       page.page_url,
       page.page_title,
+      hasNgWord(data.body, JSON.parse(p.ng_words || "[]")) ? 1 : 0,
       new TextEncoder().encode(data.body).length,
     )
     .run();
@@ -265,6 +270,7 @@ app.get("/api/owner/projects", async (c) => {
     rows.results.map((p) => ({
       ...p,
       allowed_origins: JSON.parse(p.allowed_origins as string),
+      ng_words: JSON.parse((p.ng_words as string) || "[]"),
     })),
   );
 });
@@ -272,7 +278,7 @@ app.post("/api/owner/projects", async (c) => {
   const data = await jsonBody(c.req.raw, projectSchema);
   const keys = Object.keys(data),
     values = Object.entries(data).map(([k, v]) =>
-      k === "allowed_origins"
+      k === "allowed_origins" || k === "ng_words"
         ? JSON.stringify(v)
         : typeof v === "boolean"
           ? Number(v)
@@ -305,7 +311,7 @@ app.put("/api/owner/projects/:id", async (c) => {
   const data = await jsonBody(c.req.raw, projectSchema);
   const keys = Object.keys(data),
     values = Object.entries(data).map(([k, v]) =>
-      k === "allowed_origins"
+      k === "allowed_origins" || k === "ng_words"
         ? JSON.stringify(v)
         : typeof v === "boolean"
           ? Number(v)
@@ -337,20 +343,33 @@ app.get("/api/owner/messages", async (c) => {
   if (status === "replied") where.push("r.id IS NOT NULL AND m.blocked=0");
   if (status === "blocked") where.push("m.blocked=1");
   else where.push("m.blocked=0");
+  const monthWhere = [...where],
+    monthValues = [...values];
+  const month = c.req.query("month");
+  if (month) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+      throw new ApiError(400, "月の指定が正しくありません。");
+    where.push("strftime('%Y-%m',m.created_at,'+9 hours')=?");
+    values.push(month);
+  }
   const page = Math.max(0, Math.min(10000, Number(c.req.query("page")) || 0));
   const clause = where.join(" AND ");
-  const [rows, total] = await c.env.DB.batch([
+  const [rows, total, months] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT m.id,m.project_id,m.body,m.created_at,m.page_url,m.page_title,m.read_at,m.publication_consent,m.blocked,(m.reply_token_hash IS NOT NULL) AS reply_link_active,p.title AS project_title,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause} ORDER BY m.created_at DESC,m.id DESC LIMIT 50 OFFSET ?`,
     ).bind(...values, page * 50),
     c.env.DB.prepare(
       `SELECT count(*) AS total FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause}`,
     ).bind(...values),
+    c.env.DB.prepare(
+      `SELECT strftime('%Y-%m',m.created_at,'+9 hours') AS month,count(*) AS count FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${monthWhere.join(" AND ")} GROUP BY month ORDER BY month DESC`,
+    ).bind(...monthValues),
   ]);
   return c.json({
     items: rows.results,
     total: (total.results[0] as { total: number }).total,
     page,
+    months: months.results,
   });
 });
 app.patch("/api/owner/messages/:id", async (c) => {
@@ -410,6 +429,30 @@ app.post("/api/owner/messages/:id/reply-token", async (c) => {
     .run();
   await audit(c.env, "reply-token." + data.action, m.id);
   return c.json({ token: raw });
+});
+app.post("/api/owner/messages/bulk", async (c) => {
+  const data = await jsonBody(
+    c.req.raw,
+    z
+      .object({
+        ids: z.array(z.string().min(1).max(64)).min(1).max(200),
+        action: z.enum(["read", "unread", "block", "unblock", "delete"]),
+      })
+      .strict(),
+  );
+  const marks = data.ids.map(() => "?").join(",");
+  const sql = {
+    read: `UPDATE messages SET read_at=COALESCE(read_at,?) WHERE id IN (${marks})`,
+    unread: `UPDATE messages SET read_at=NULL WHERE id IN (${marks})`,
+    block: `UPDATE messages SET blocked=1 WHERE id IN (${marks})`,
+    unblock: `UPDATE messages SET blocked=0 WHERE id IN (${marks})`,
+    delete: `DELETE FROM messages WHERE id IN (${marks})`,
+  }[data.action];
+  const result = await c.env.DB.prepare(sql)
+    .bind(...(data.action === "read" ? [now()] : []), ...data.ids)
+    .run();
+  await audit(c.env, "message.bulk." + data.action, String(data.ids.length));
+  return c.json({ ok: true, changed: result.meta.changes });
 });
 app.delete("/api/owner/messages/:id", async (c) => {
   const m = await messageBy(c.env, c.req.param("id"));
@@ -500,31 +543,85 @@ app.get("/api/owner/stats", async (c) => {
       400,
       "日付の範囲は正しい日付で366日以内にしてください。",
     );
+  const pageUrl = c.req.query("page") || "";
   const suffix = project ? " AND project_id=?" : "",
-    args = project
-      ? [start, end + "T23:59:59.999Z", project]
-      : [start, end + "T23:59:59.999Z"];
-  const [claps, messages, totals, pages] = await c.env.DB.batch([
+    range = [
+      new Date(Date.parse(start + "T00:00:00+09:00")).toISOString(),
+      new Date(Date.parse(end + "T23:59:59.999+09:00")).toISOString(),
+    ],
+    args = project ? [...range, project] : range,
+    pageSuffix = suffix + (pageUrl ? " AND page_url=?" : ""),
+    pageArgs = pageUrl ? [...args, pageUrl] : args,
+    day = "strftime('%Y-%m-%d',created_at,'+9 hours')";
+  const [claps, messages, totals, pages, visitors] = await c.env.DB.batch([
     c.env.DB.prepare(
-      `SELECT substr(created_at,1,10) AS day,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY day ORDER BY day`,
-    ).bind(...args),
+      `SELECT ${day} AS day,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
+    ).bind(...pageArgs),
     c.env.DB.prepare(
-      `SELECT substr(created_at,1,10) AS day,count(*) AS count FROM messages WHERE blocked=0 AND created_at>=? AND created_at<=?${suffix} GROUP BY day ORDER BY day`,
-    ).bind(...args),
+      `SELECT ${day} AS day,count(*) AS count FROM messages WHERE blocked=0 AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
+    ).bind(...pageArgs),
     c.env.DB.prepare(
       `SELECT count(*) AS total,sum(read_at IS NULL) AS unread,sum(NOT EXISTS(SELECT 1 FROM replies r WHERE r.message_id=messages.id)) AS unreplied FROM messages WHERE blocked=0${suffix}`,
     ).bind(...(project ? [project] : [])),
     c.env.DB.prepare(
       `SELECT page_url,max(page_title) AS page_title,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY page_url ORDER BY count DESC,page_url LIMIT 100`,
     ).bind(...args),
+    c.env.DB.prepare(
+      `SELECT ${day} AS day,count(DISTINCT visitor) AS count FROM claps WHERE visitor<>'' AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
+    ).bind(...pageArgs),
   ]);
   return c.json({
     claps: claps.results,
     messages: messages.results,
+    visitors: visitors.results,
     totals: totals.results[0],
     pages: pages.results,
     from: start,
     to: end,
+  });
+});
+app.get("/api/owner/stats/hours", async (c) => {
+  const project = c.req.query("project"),
+    pageUrl = c.req.query("page") || "",
+    day = c.req.query("day") || jstDay();
+  if (!z.iso.date().safeParse(day).success)
+    throw new ApiError(400, "日付が正しくありません。");
+  const args: unknown[] = [
+    new Date(Date.parse(day + "T00:00:00+09:00")).toISOString(),
+    new Date(Date.parse(day + "T23:59:59.999+09:00")).toISOString(),
+  ];
+  let suffix = "";
+  if (project) {
+    suffix += " AND project_id=?";
+    args.push(project);
+  }
+  if (pageUrl) {
+    suffix += " AND page_url=?";
+    args.push(pageUrl);
+  }
+  const hour = "CAST(strftime('%H',created_at,'+9 hours') AS INTEGER)";
+  const [claps, messages] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `SELECT ${hour} AS hour,count(*) AS claps,count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY hour`,
+    ).bind(...args),
+    c.env.DB.prepare(
+      `SELECT ${hour} AS hour,count(*) AS messages FROM messages WHERE blocked=0 AND created_at>=? AND created_at<=?${suffix} GROUP BY hour`,
+    ).bind(...args),
+  ]);
+  const c2 = claps.results as {
+      hour: number;
+      claps: number;
+      visitors: number;
+    }[],
+    m2 = messages.results as { hour: number; messages: number }[];
+  return c.json({
+    day,
+    hours: Array.from({ length: 24 }, (_, h) => ({
+      hour: h,
+      claps: c2.find((x) => x.hour === h)?.claps || 0,
+      visitors: c2.find((x) => x.hour === h)?.visitors || 0,
+      messages: m2.find((x) => x.hour === h)?.messages || 0,
+    })),
   });
 });
 app.get("/api/owner/export", async (c) => {

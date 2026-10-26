@@ -38,13 +38,15 @@
 |GET /api/owner/session|Owner権限・課金免除・ローカル判定|
 |GET, POST /api/owner/projects|設置先一覧・作成|
 |PUT /api/owner/projects/:id|作品設定|
-|GET /api/owner/messages|project/status/pageで絞り込み、50件ページング|
+|GET /api/owner/messages|project/status/page/month（YYYY-MM・日本時間）で絞り込み、50件ページング。monthsに月別件数|
+|POST /api/owner/messages/bulk|ids（最大200）にread/unread/block/unblock/deleteを一括適用|
 |PATCH, DELETE /api/owner/messages/:id|既読・非表示の変更、個別削除|
 |PUT /api/owner/messages/:id/reply|非公開返信を保存|
 |POST /api/owner/messages/:id/reply-token|revoke / rotate|
 |GET, POST /api/owner/projects/:id/assets|画像一覧・バイナリ登録（kind=button/thanks）|
 |DELETE /api/owner/assets/:id|公開画像削除|
-|GET /api/owner/stats|project/from/toによる日別集計（UTC）|
+|GET /api/owner/stats|project/page/from/toによる日別集計（日本時間）。visitorsは拍手した人数|
+|GET /api/owner/stats/hours|dayの0〜23時別の人数・拍手・感想（日本時間）|
 |GET /api/owner/export|format=csv/json、任意のproject|
 |GET /api/owner/backup|画像込み完全バックアップ|
 |GET /api/owner/backup-status|日次バックアップの最新成功日時|

@@ -25,6 +25,7 @@ export interface Project {
   tip_legal_checked: boolean | number;
   tip_terms_checked: boolean | number;
   tip_privacy_checked: boolean | number;
+  ng_words?: string[];
   claps: number;
   messages: number;
   assets?: Asset[];
@@ -48,8 +49,13 @@ export interface Message {
 export interface Stats {
   claps: { day: string; count: number }[];
   messages: { day: string; count: number }[];
+  visitors?: { day: string; count: number }[];
   totals: { total: number; unread: number; unreplied: number };
   pages?: { page_url: string; page_title: string; count: number }[];
   from: string;
   to: string;
+}
+export interface HourStats {
+  day: string;
+  hours: { hour: number; claps: number; visitors: number; messages: number }[];
 }

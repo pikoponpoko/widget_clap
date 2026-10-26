@@ -40,7 +40,11 @@ import {
 } from "lucide-react";
 import { api, date, dateTime, downloadEndpoint, send, useApi } from "./api";
 import { defaultPrint, type PrintOptions } from "./print-options";
-import type { Asset, Message, Project, Stats } from "./types";
+import type { Asset, HourStats, Message, Project, Stats } from "./types";
+const jstToday = (offsetDays = 0) =>
+  new Date(Date.now() + 9 * 3600000 - offsetDays * 86400000)
+    .toISOString()
+    .slice(0, 10);
 type Section = "overview" | "inbox" | "projects" | "print" | "data";
 const titles: Record<Section, string> = {
   overview: "ダッシュボード",
@@ -164,10 +168,23 @@ function PageStats({ stats }: { stats: Stats | null }) {
     </ol>
   );
 }
-function Chart({ stats }: { stats: Stats | null }) {
+function Chart({
+  stats,
+  selected,
+  onSelect,
+}: {
+  stats: Stats | null;
+  selected: string;
+  onSelect: (day: string) => void;
+}) {
   if (!stats)
     return <div className="chart-loading">集計を読み込んでいます…</div>;
-  const days: { day: string; claps: number; messages: number }[] = [];
+  const days: {
+    day: string;
+    claps: number;
+    messages: number;
+    visitors: number;
+  }[] = [];
   let start = new Date(stats.from + "T00:00:00Z");
   let end = new Date(stats.to + "T00:00:00Z");
   while (start <= end && days.length < 366) {
@@ -176,6 +193,7 @@ function Chart({ stats }: { stats: Stats | null }) {
       day,
       claps: stats.claps.find((x) => x.day === day)?.count || 0,
       messages: stats.messages.find((x) => x.day === day)?.count || 0,
+      visitors: stats.visitors?.find((x) => x.day === day)?.count || 0,
     });
     start = new Date(start.getTime() + 86400000);
   }
@@ -189,10 +207,13 @@ function Chart({ stats }: { stats: Stats | null }) {
       </div>
       <div className="chart-bars">
         {days.map((d) => (
-          <div
-            className="chart-column"
+          <button
+            type="button"
+            className={"chart-column " + (d.day === selected ? "active" : "")}
             key={d.day}
-            title={`${d.day} 拍手 ${d.claps}・感想 ${d.messages}`}
+            title={`${d.day} 人数 ${d.visitors}・拍手 ${d.claps}・感想 ${d.messages}`}
+            aria-label={`${d.day} 拍手 ${d.claps} 件`}
+            onClick={() => onSelect(d.day)}
           >
             <div className="chart-stack">
               <div
@@ -204,7 +225,7 @@ function Chart({ stats }: { stats: Stats | null }) {
                 style={{ height: `${(d.claps / max) * 115}px` }}
               />
             </div>
-          </div>
+          </button>
         ))}
       </div>
       <div className="chart-axis">
@@ -212,6 +233,61 @@ function Chart({ stats }: { stats: Stats | null }) {
         <span>{stats.to.replaceAll("-", " / ")}</span>
       </div>
     </div>
+  );
+}
+function HourTable({ data }: { data: HourStats | null }) {
+  if (!data)
+    return <div className="chart-loading">集計を読み込んでいます…</div>;
+  const max = Math.max(1, ...data.hours.map((h) => h.claps));
+  const sum = (k: "claps" | "visitors" | "messages") =>
+    data.hours.reduce((a, h) => a + h[k], 0);
+  const half = (rows: HourStats["hours"]) => (
+    <table className="hour-table">
+      <thead>
+        <tr>
+          <th>時</th>
+          <th>人数</th>
+          <th>拍手</th>
+          <th>感想</th>
+          <th aria-hidden="true" />
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((h) => (
+          <tr key={h.hour} className={h.claps ? "" : "zero"}>
+            <td>{h.hour}</td>
+            <td>{h.visitors}</td>
+            <td>{h.claps}</td>
+            <td>{h.messages}</td>
+            <td className="hour-bar-cell">
+              <span
+                className="hour-bar"
+                style={{ width: `${(h.claps / max) * 100}%` }}
+              />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+  return (
+    <>
+      <div className="hour-tables">
+        {half(data.hours.slice(0, 12))}
+        {half(data.hours.slice(12))}
+      </div>
+      <div className="hour-total">
+        <span>
+          人数 <b>{sum("visitors")}</b>
+        </span>
+        <span>
+          拍手 <b>{sum("claps")}</b>
+        </span>
+        <span>
+          感想 <b>{sum("messages")}</b>
+        </span>
+      </div>
+    </>
   );
 }
 export default function App() {
@@ -227,10 +303,10 @@ export default function App() {
       ? (location.hash.slice(1) as Section)
       : "overview",
   );
-  const [from, setFrom] = useState(
-      new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10),
-    ),
-    [to, setTo] = useState(new Date().toISOString().slice(0, 10));
+  const [from, setFrom] = useState(jstToday(29)),
+    [to, setTo] = useState(jstToday()),
+    [day, setDay] = useState(jstToday()),
+    [pageUrl, setPageUrl] = useState("");
   const [project, setProject] = useState(""),
     [toast, setToast] = useState(""),
     [mobileNav, setMobileNav] = useState(false),
@@ -240,9 +316,19 @@ export default function App() {
       "/owner/stats?" +
         new URLSearchParams({
           ...(project ? { project } : {}),
+          ...(pageUrl ? { page: pageUrl } : {}),
           v: String(version),
           from,
           to,
+        }),
+    ),
+    hours = useApi<HourStats>(
+      "/owner/stats/hours?" +
+        new URLSearchParams({
+          ...(project ? { project } : {}),
+          ...(pageUrl ? { page: pageUrl } : {}),
+          v: String(version),
+          day,
         }),
     );
   const [selected, setSelected] = useState<Message | null>(null),
@@ -386,7 +472,10 @@ export default function App() {
                 <select
                   aria-label="作品で絞り込む"
                   value={project}
-                  onChange={(e) => setProject(e.target.value)}
+                  onChange={(e) => {
+                    setProject(e.target.value);
+                    setPageUrl("");
+                  }}
                 >
                   <option value="">すべてのサイト</option>
                   {list.map((p) => (
@@ -399,6 +488,27 @@ export default function App() {
               </div>
               {section === "overview" && (
                 <>
+                  <div className="select-wrap">
+                    <select
+                      aria-label="ページで絞り込む"
+                      value={pageUrl}
+                      onChange={(e) => setPageUrl(e.target.value)}
+                    >
+                      <option value="">すべてのページ</option>
+                      {pageUrl &&
+                        !stats.data?.pages?.some(
+                          (p) => p.page_url === pageUrl,
+                        ) && <option value={pageUrl}>{pageUrl}</option>}
+                      {(stats.data?.pages || [])
+                        .filter((p) => p.page_url)
+                        .map((p) => (
+                          <option key={p.page_url} value={p.page_url}>
+                            {p.page_title || p.page_url}
+                          </option>
+                        ))}
+                    </select>
+                    <ChevronDown size={14} />
+                  </div>
                   <div className="date-range">
                     <input
                       type="date"
@@ -446,7 +556,7 @@ export default function App() {
                   <section className="panel activity-panel">
                     <div className="panel-heading">
                       <h2>日別の拍手</h2>
-                      <span className="muted small-text">日別集計 · UTC</span>
+                      <span className="muted small-text">日本時間</span>
                     </div>
                     <div className="chart-legend">
                       <span>
@@ -458,7 +568,27 @@ export default function App() {
                         感想
                       </span>
                     </div>
-                    <Chart stats={stats.data} />
+                    <Chart
+                      stats={stats.data}
+                      selected={day}
+                      onSelect={setDay}
+                    />
+                  </section>
+                  <section className="panel activity-panel">
+                    <div className="panel-heading">
+                      <h2>時間別</h2>
+                      <input
+                        type="date"
+                        className="hour-date"
+                        aria-label="時間別の日付"
+                        value={day}
+                        onChange={(e) =>
+                          e.target.value && setDay(e.target.value)
+                        }
+                      />
+                    </div>
+                    <ErrorText>{hours.error}</ErrorText>
+                    <HourTable data={hours.data} />
                   </section>
                   <section className="panel activity-panel">
                     <div className="panel-heading">
@@ -561,6 +691,10 @@ export default function App() {
                 project={project}
                 version={version}
                 onSelect={setSelected}
+                onChanged={(text) => {
+                  notify(text);
+                  refresh();
+                }}
               />
             </section>
           )}
@@ -664,29 +798,60 @@ function InboxList({
   version,
   compact = false,
   onSelect,
+  onChanged,
 }: {
   project: string;
   version: number;
   compact?: boolean;
   onSelect: (m: Message) => void;
+  onChanged?: (text: string) => void;
 }) {
   const [status, setStatus] = useState("all"),
     [page, setPage] = useState(0),
-    [search, setSearch] = useState("");
-  useEffect(() => setPage(0), [project, status]);
+    [search, setSearch] = useState(""),
+    [month, setMonth] = useState(""),
+    [checked, setChecked] = useState<Set<string>>(new Set()),
+    [busy, setBusy] = useState(false),
+    [bulkError, setBulkError] = useState("");
+  useEffect(() => setPage(0), [project, status, month]);
+  useEffect(
+    () => setChecked(new Set()),
+    [project, status, month, page, version],
+  );
   const { data, error, loading } = useApi<{
     items: Message[];
     total: number;
     page: number;
+    months?: { month: string; count: number }[];
   }>(
     "/owner/messages?" +
       new URLSearchParams({
         project,
         status,
+        ...(month && !compact ? { month } : {}),
         page: String(page),
         v: String(version),
       }),
   );
+  const months = data?.months || [];
+  const monthIndex = months.findIndex((x) => x.month === month);
+  async function bulk(action: string, label: string) {
+    if (
+      action === "delete" &&
+      !confirm(`${checked.size} 件の感想を削除します。元に戻せません。`)
+    )
+      return;
+    setBusy(true);
+    setBulkError("");
+    try {
+      await send("/owner/messages/bulk", { ids: [...checked], action });
+      onChanged?.(`${checked.size} 件を${label}`);
+    } catch (e) {
+      setBulkError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   const items = (data?.items || []).filter(
     (m) =>
       !search ||
@@ -715,6 +880,42 @@ function InboxList({
                 </button>
               ))}
             </div>
+            <div className="month-bar">
+              <button
+                className="icon-button"
+                disabled={!month || monthIndex >= months.length - 1}
+                onClick={() => setMonth(months[monthIndex + 1].month)}
+                aria-label="前の月"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <div className="select-wrap">
+                <select
+                  aria-label="月で絞り込む"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                >
+                  <option value="">すべての月</option>
+                  {month && monthIndex < 0 && (
+                    <option value={month}>{month.replace("-", "年")}月</option>
+                  )}
+                  {months.map((x) => (
+                    <option key={x.month} value={x.month}>
+                      {x.month.replace("-", "年")}月（{x.count}）
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} />
+              </div>
+              <button
+                className="icon-button"
+                disabled={!month || monthIndex <= 0}
+                onClick={() => setMonth(months[monthIndex - 1].month)}
+                aria-label="次の月"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
             <label className="search-input">
               <Search size={15} />
               <input
@@ -727,45 +928,111 @@ function InboxList({
           </div>
         </>
       )}
-      <ErrorText>{error}</ErrorText>
+      <ErrorText>{error || bulkError}</ErrorText>
+      {!compact && !!items.length && (
+        <div className="bulk-bar">
+          <label className="check-label">
+            <input
+              type="checkbox"
+              aria-label="表示中の感想をすべて選択"
+              checked={items.every((m) => checked.has(m.id))}
+              onChange={(e) =>
+                setChecked(
+                  new Set(e.target.checked ? items.map((m) => m.id) : []),
+                )
+              }
+            />
+            {checked.size ? `${checked.size} 件選択` : "すべて選択"}
+          </label>
+          {!!checked.size && (
+            <div className="bulk-actions">
+              {(status === "blocked"
+                ? [
+                    ["unblock", "再表示"],
+                    ["delete", "削除"],
+                  ]
+                : [
+                    ["read", "既読にする"],
+                    ["unread", "未読にする"],
+                    ["block", "非表示"],
+                    ["delete", "削除"],
+                  ]
+              ).map(([action, label]) => (
+                <button
+                  key={action}
+                  className={"btn " + (action === "delete" ? "danger" : "")}
+                  disabled={busy}
+                  onClick={() =>
+                    bulk(
+                      action,
+                      label === "既読にする"
+                        ? "既読にしました"
+                        : label === "未読にする"
+                          ? "未読にしました"
+                          : label + "しました",
+                    )
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {loading && !data ? (
         <p className="loading-text">読み込んでいます…</p>
       ) : items.length ? (
         <div className="message-list">
           {items.slice(0, compact ? 4 : 50).map((m) => (
-            <button
-              className={"message-row " + (!m.read_at ? "unread" : "")}
-              key={m.id}
-              onClick={() => onSelect(m)}
-            >
-              <span className="letter-avatar">
-                <Mail size={18} strokeWidth={1.3} />
-              </span>
-              <div className="message-summary">
-                <div className="message-meta">
-                  <span className="project-tag">
-                    {m.page_title || m.project_title}
-                  </span>
-                  {!m.read_at && <span className="unread-dot" />}
-                  {!!m.publication_consent && (
-                    <span className="consent-badge">公開許可あり</span>
-                  )}
-                  <time>{dateTime(m.created_at)}</time>
-                </div>
-                <p>{m.body}</p>
-                <span className="reply-status">
-                  {m.reply_body ? (
-                    <>
-                      <CheckCheck size={12} />
-                      返信済み
-                    </>
-                  ) : (
-                    "未返信"
-                  )}
+            <div className="message-item" key={m.id}>
+              {!compact && (
+                <input
+                  type="checkbox"
+                  className="message-check"
+                  aria-label="この感想を選択"
+                  checked={checked.has(m.id)}
+                  onChange={(e) => {
+                    const next = new Set(checked);
+                    if (e.target.checked) next.add(m.id);
+                    else next.delete(m.id);
+                    setChecked(next);
+                  }}
+                />
+              )}
+              <button
+                className={"message-row " + (!m.read_at ? "unread" : "")}
+                onClick={() => onSelect(m)}
+              >
+                <span className="letter-avatar">
+                  <Mail size={18} strokeWidth={1.3} />
                 </span>
-              </div>
-              <ChevronRight size={15} />
-            </button>
+                <div className="message-summary">
+                  <div className="message-meta">
+                    <span className="project-tag">
+                      {m.page_title || m.project_title}
+                    </span>
+                    {!m.read_at && <span className="unread-dot" />}
+                    {!!m.publication_consent && (
+                      <span className="consent-badge">公開許可あり</span>
+                    )}
+                    <time>{dateTime(m.created_at)}</time>
+                  </div>
+                  <p>{m.body}</p>
+                  <span className="reply-status">
+                    {m.reply_body ? (
+                      <>
+                        <CheckCheck size={12} />
+                        返信済み
+                      </>
+                    ) : (
+                      "未返信"
+                    )}
+                  </span>
+                </div>
+                <ChevronRight size={15} />
+              </button>
+            </div>
           ))}
         </div>
       ) : (
@@ -1023,6 +1290,7 @@ const blankProject = {
   tip_legal_checked: false,
   tip_terms_checked: false,
   tip_privacy_checked: false,
+  ng_words: [] as string[],
 };
 function ProjectModal({
   project,
@@ -1057,9 +1325,11 @@ function ProjectModal({
           tip_legal_checked: !!project.tip_legal_checked,
           tip_terms_checked: !!project.tip_terms_checked,
           tip_privacy_checked: !!project.tip_privacy_checked,
+          ng_words: project.ng_words || [],
         };
   const [form, setForm] = useState(initial),
     [origins, setOrigins] = useState(initial.allowed_origins.join("\n")),
+    [ngWords, setNgWords] = useState(initial.ng_words.join("\n")),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("settings"),
@@ -1085,6 +1355,14 @@ function ProjectModal({
             .split("\n")
             .map((s) => s.trim())
             .filter(Boolean),
+          ng_words: [
+            ...new Set(
+              ngWords
+                .split("\n")
+                .map((s) => s.trim())
+                .filter(Boolean),
+            ),
+          ],
         },
         project === "new" ? "POST" : "PUT",
       );
@@ -1201,6 +1479,15 @@ function ProjectModal({
               <small>
                 オリジンを1行ずつ。末尾スラッシュ・ページパスは不要です。
               </small>
+            </label>
+            <label>
+              NGキーワード
+              <textarea
+                rows={3}
+                value={ngWords}
+                onChange={(e) => setNgWords(e.target.value)}
+              />
+              <small>1行に1語。含む感想は「非表示」に入ります。</small>
             </label>
             <div className="setting-section">
               <h3>ウィジェットの機能</h3>

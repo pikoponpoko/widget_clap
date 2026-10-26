@@ -12,6 +12,8 @@ import {
   tipVisible,
   validateImage,
   type Env,
+  hasNgWord,
+  jstDay,
 } from "../server/security";
 import { readFile } from "node:fs/promises";
 import { PDFDocument, PDFDict, PDFName } from "pdf-lib";
@@ -330,5 +332,17 @@ describe("integrated widget feature policy", () => {
       true,
       false,
     ]);
+  });
+});
+describe("NG keywords and Japan time", () => {
+  it("matches NG words across width and case", () => {
+    expect(hasNgWord("ｽﾊﾟﾑです", ["スパム"])).toBe(true);
+    expect(hasNgWord("SPAM!", ["spam"])).toBe(true);
+    expect(hasNgWord("よかったです", ["スパム"])).toBe(false);
+    expect(hasNgWord("よかったです", [])).toBe(false);
+  });
+  it("uses the Japan date", () => {
+    expect(jstDay("2026-10-25T15:30:00.000Z")).toBe("2026-10-26");
+    expect(jstDay("2026-10-25T14:59:59.999Z")).toBe("2026-10-25");
   });
 });

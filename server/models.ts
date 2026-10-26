@@ -17,6 +17,7 @@ export interface Project {
   tip_legal_checked: number;
   tip_terms_checked: number;
   tip_privacy_checked: number;
+  ng_words: string;
   created_at: string;
 }
 export interface Message {

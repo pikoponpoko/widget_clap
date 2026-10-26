@@ -13,6 +13,8 @@ import {
   jsonBody,
   readBounded,
   projectSchema,
+  clapSchema,
+  normalizePage,
   messageSchema,
   replySchema,
   checkSpam,
@@ -123,13 +125,19 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   assertSameOrigin(c.req.raw);
   const p = await projectBy(c.env, c.req.param("slug"));
   if (!p.clap_enabled) throw new ApiError(403, "拍手は現在お休み中です。");
+  const page = normalizePage(
+    await jsonBody(c.req.raw, clapSchema, 4000),
+    p.allowed_origins,
+  );
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `clap:${key}`, 60, 60);
-  const dedupe = await hash(`${key}:${p.id}:${now().slice(0, 13)}`);
+  const dedupe = await hash(
+    `${key}:${p.id}:${page.page_url}:${now().slice(0, 13)}`,
+  );
   const result = await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key) SELECT ?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
+    "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title) SELECT ?,?,?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
   )
-    .bind(id(), p.id, now(), dedupe)
+    .bind(id(), p.id, now(), dedupe, page.page_url, page.page_title)
     .run();
   if (
     !result.meta.changes &&
@@ -149,6 +157,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
   if (!p.message_enabled)
     throw new ApiError(403, "感想の受付は現在お休み中です。");
   const data = await jsonBody(c.req.raw, messageSchema);
+  const page = normalizePage(data, p.allowed_origins);
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `attempt:${key}`, 40, 3600);
   const dedupe = await hash(`${p.id}:${data.request_id}`);
@@ -175,7 +184,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
   await limit(c.env, `message:${key}`, 5, 3600);
   // Global capacity bounds backups and prevents unbounded D1 growth in this single-owner edition.
   const result = await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,publication_consent,reply_token_hash,dedupe_key) SELECT ?,?,?,?,?,?,? WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
+    "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,publication_consent,reply_token_hash,dedupe_key,page_url,page_title) SELECT ?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
   )
     .bind(
       id(),
@@ -185,6 +194,8 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
       data.publication_consent ? 1 : 0,
       p.reply_enabled ? await hash(replyToken) : null,
       dedupe,
+      page.page_url,
+      page.page_title,
       new TextEncoder().encode(data.body).length,
     )
     .run();
@@ -330,7 +341,7 @@ app.get("/api/owner/messages", async (c) => {
   const clause = where.join(" AND ");
   const [rows, total] = await c.env.DB.batch([
     c.env.DB.prepare(
-      `SELECT m.id,m.project_id,m.body,m.created_at,m.read_at,m.publication_consent,m.blocked,(m.reply_token_hash IS NOT NULL) AS reply_link_active,p.title AS project_title,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause} ORDER BY m.created_at DESC,m.id DESC LIMIT 50 OFFSET ?`,
+      `SELECT m.id,m.project_id,m.body,m.created_at,m.page_url,m.page_title,m.read_at,m.publication_consent,m.blocked,(m.reply_token_hash IS NOT NULL) AS reply_link_active,p.title AS project_title,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause} ORDER BY m.created_at DESC,m.id DESC LIMIT 50 OFFSET ?`,
     ).bind(...values, page * 50),
     c.env.DB.prepare(
       `SELECT count(*) AS total FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause}`,
@@ -493,7 +504,7 @@ app.get("/api/owner/stats", async (c) => {
     args = project
       ? [start, end + "T23:59:59.999Z", project]
       : [start, end + "T23:59:59.999Z"];
-  const [claps, messages, totals] = await c.env.DB.batch([
+  const [claps, messages, totals, pages] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT substr(created_at,1,10) AS day,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY day ORDER BY day`,
     ).bind(...args),
@@ -503,11 +514,15 @@ app.get("/api/owner/stats", async (c) => {
     c.env.DB.prepare(
       `SELECT count(*) AS total,sum(read_at IS NULL) AS unread,sum(NOT EXISTS(SELECT 1 FROM replies r WHERE r.message_id=messages.id)) AS unreplied FROM messages WHERE blocked=0${suffix}`,
     ).bind(...(project ? [project] : [])),
+    c.env.DB.prepare(
+      `SELECT page_url,max(page_title) AS page_title,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY page_url ORDER BY count DESC,page_url LIMIT 100`,
+    ).bind(...args),
   ]);
   return c.json({
     claps: claps.results,
     messages: messages.results,
     totals: totals.results[0],
+    pages: pages.results,
     from: start,
     to: end,
   });
@@ -515,7 +530,7 @@ app.get("/api/owner/stats", async (c) => {
 app.get("/api/owner/export", async (c) => {
   const project = c.req.query("project");
   const sql =
-    "SELECT m.id,m.project_id,p.title AS project_title,m.body,m.created_at,m.publication_consent,m.blocked,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE p.owner_id=?" +
+    "SELECT m.id,m.project_id,p.title AS project_title,m.page_url,m.page_title,m.body,m.created_at,m.publication_consent,m.blocked,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE p.owner_id=?" +
     (project ? " AND m.project_id=?" : "") +
     " ORDER BY m.created_at,m.id";
   const rows = await c.env.DB.prepare(sql)
@@ -530,6 +545,8 @@ app.get("/api/owner/export", async (c) => {
       "id",
       "project_id",
       "project_title",
+      "page_title",
+      "page_url",
       "body",
       "created_at",
       "publication_consent",

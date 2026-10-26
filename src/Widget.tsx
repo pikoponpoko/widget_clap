@@ -1,5 +1,6 @@
 import { ClapControl } from "./ClapButton";
 import { previewMode } from "./mode";
+import { pageContext, tipLabel, tipRequested } from "./page-context";
 import { assetUrl } from "./asset-url";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -106,12 +107,17 @@ export function Widget({
     [website, setWebsite] = useState(""),
     [thanksIndex, setThanksIndex] = useState(() => Math.random()),
     [clapBusy, setClapBusy] = useState(false);
+  // Favorites are per page when embedded, so one code can serve many works.
+  const favoriteKey =
+    "support-favorite:" +
+    slug +
+    (pageContext.page_url ? ":" + pageContext.page_url : "");
   const started = useRef(Date.now()),
     requestId = useRef(crypto.randomUUID()),
     lastBody = useRef("");
   useEffect(() => {
     try {
-      setFavorite(localStorage.getItem("support-favorite:" + slug) === "true");
+      setFavorite(localStorage.getItem(favoriteKey) === "true");
     } catch {
       setNotice("このブラウザではお気に入りを保存できません。");
     }
@@ -125,7 +131,10 @@ export function Widget({
     setClapBusy(true);
     setNotice("");
     try {
-      await send("/public/projects/" + encodeURIComponent(slug) + "/claps", {});
+      await send(
+        "/public/projects/" + encodeURIComponent(slug) + "/claps",
+        pageContext,
+      );
       setThanksIndex(Math.random());
       setStage("clap");
     } catch (e) {
@@ -136,7 +145,7 @@ export function Widget({
   }
   function toggleFavorite() {
     try {
-      localStorage.setItem("support-favorite:" + slug, String(!favorite));
+      localStorage.setItem(favoriteKey, String(!favorite));
       setFavorite(!favorite);
     } catch {
       setNotice(
@@ -162,6 +171,7 @@ export function Widget({
           website,
           started_at: started.current,
           turnstile: captcha || undefined,
+          ...pageContext,
         },
       );
       setReplyUrl(
@@ -224,21 +234,13 @@ export function Widget({
         )}
         <h1>
           {sent
-            ? "感想を、ありがとう。"
+            ? "送信しました"
             : stage === "clap"
-              ? "拍手を、ありがとう。"
-              : "ひとこと、どうぞ。"}
+              ? "拍手しました"
+              : "メッセージ"}
         </h1>
         <p className="widget-description" role="status">
-          {sent
-            ? previewMode
-              ? "このブラウザに、体験用の便りを保存しました。"
-              : "あなたの便りを作者に届けました。"
-            : stage === "clap"
-              ? previewMode
-                ? "体験用の拍手を保存しました。感想は任意です。"
-                : "拍手を届けました。感想は書かなくても大丈夫です。"
-              : p.description}
+          {sent || stage === "clap" ? null : p.description}
         </p>
         {previewMode && (
           <p className="preview-widget-note">
@@ -249,7 +251,7 @@ export function Widget({
           {!!p.clap_enabled && (
             <button className="btn" disabled={clapBusy} onClick={anotherClap}>
               <ThumbsUp size={16} />
-              {clapBusy ? "送信中…" : "もう一度、拍手"}
+              {clapBusy ? "送信中…" : "もう一度"}
             </button>
           )}
           {!!p.favorite_enabled && (
@@ -271,7 +273,7 @@ export function Widget({
                 <b>返信はこちらから</b>
                 <p>
                   {previewMode
-                    ? "体験版のURLは、このブラウザだけで確認できます。"
+                    ? "体験版のURLはこのブラウザでのみ確認できます。"
                     : "このURLを保存してください。共有した相手も閲覧できます。再表示はできません。"}
                 </p>
                 <a href={replyUrl} target="_blank" rel="noreferrer">
@@ -313,7 +315,7 @@ export function Widget({
                 setCaptchaReset((n) => n + 1);
               }}
             >
-              もうひとこと書く
+              メッセージを追加
             </button>
           </>
         ) : (
@@ -321,7 +323,7 @@ export function Widget({
             <form className="optional-message" onSubmit={submit}>
               <label className="field-label" htmlFor="message">
                 <MessageCircle size={15} />
-                ひとこと、添える（任意）
+                メッセージ（任意）
               </label>
               <textarea
                 id="message"
@@ -329,7 +331,6 @@ export function Widget({
                 onChange={(e) => setBody(e.target.value)}
                 maxLength={2000}
                 required
-                placeholder="使ってみたこと、好きだったところ。お気軽に。"
                 rows={4}
               />
               <div className="character-count">{body.length} / 2,000</div>
@@ -375,28 +376,37 @@ export function Widget({
                   ? "保存しています…"
                   : previewMode
                     ? "感想を保存して試す"
-                    : "感想を届ける"}
+                    : "送信"}
               </button>
             </form>
           )
         )}
-        {p.tip_url && (
-          <a
-            className="tip-link"
-            href={p.tip_url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            任意の支援をする <ArrowUpRight size={14} />
+        {p.tip_url && tipRequested && (
+          <div className="tip-link">
+            <a
+              className="tip-button"
+              href={p.tip_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {tipLabel} <ArrowUpRight size={14} />
+            </a>
             <small>支援なしでも無料で利用できます</small>
-          </a>
+          </div>
+        )}
+        {previewMode && tipRequested && !p.tip_url && (
+          <div className="tip-link">
+            <span className="tip-button tip-preview" aria-disabled="true">
+              {tipLabel}
+            </span>
+            <small>体験版：決済リンク未設定のため押せません</small>
+          </div>
         )}
         {notice && (
           <p className="error" role="alert">
             {notice}
           </p>
         )}
-        <div className="widget-footer">あなたのペースで、応援を。</div>
       </section>
     </div>
   );
@@ -427,12 +437,10 @@ export function ReplyPage() {
     <main className="reply-page">
       <div className="widget-wordmark">
         <span className="tiny-dot" />
-        応援の便り
+        Hakushu
       </div>
-      <h1>あなたへの返信</h1>
-      <p className="muted">
-        このURLを知っている人だけが確認できます。大切に保管してください。
-      </p>
+      <h1>返信</h1>
+      <p className="muted">このURLを知っている人は誰でも閲覧できます。</p>
       {error ? (
         <p className="error" role="alert">
           {error}
@@ -441,16 +449,13 @@ export function ReplyPage() {
         <>
           <span className="eyebrow">{data.title}</span>
           <div className="reply-original">
-            <small>あなたの感想</small>
+            <small>送信したメッセージ</small>
             <p>{data.body}</p>
           </div>
           <div className="reply-letter">
             <Heart size={24} strokeWidth={1.2} />
             <h2>作者から</h2>
-            <p>
-              {data.reply_body ||
-                "まだ返信は届いていません。また、のぞいてみてください。"}
-            </p>
+            <p>{data.reply_body || "返信はまだありません"}</p>
           </div>
           <button className="btn" onClick={() => location.reload()}>
             最新の返信を確認

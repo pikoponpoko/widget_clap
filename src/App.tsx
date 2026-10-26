@@ -1,4 +1,5 @@
 import { embedCode } from "./embed-code";
+import { cleanTipLabel, defaultTipLabel } from "./page-context";
 import { previewMode } from "./mode";
 import { assetUrl } from "./asset-url";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -44,15 +45,15 @@ type Section = "overview" | "inbox" | "projects" | "print" | "data";
 const titles: Record<Section, string> = {
   overview: "ダッシュボード",
   inbox: "届いた感想",
-  projects: "作品・ツール",
-  print: "手帳に残す",
+  projects: "サイト",
+  print: "感想を印刷",
   data: "データ管理",
 };
 const navs: [Section, typeof Inbox, string][] = [
   ["overview", LayoutDashboard, "ダッシュボード"],
   ["inbox", Inbox, "届いた感想"],
-  ["projects", FolderHeart, "作品・ツール"],
-  ["print", Printer, "手帳に残す"],
+  ["projects", FolderHeart, "サイト"],
+  ["print", Printer, "感想を印刷"],
 ];
 function ErrorText({ children }: { children: ReactNode }) {
   return children ? (
@@ -125,7 +126,7 @@ function StatCard({
   label: string;
   value: number | string;
   icon: typeof Heart;
-  note: string;
+  note?: string;
 }) {
   return (
     <div className="stat-card">
@@ -137,8 +138,30 @@ function StatCard({
         {typeof value === "number" ? value.toLocaleString() : value}
         <small>件</small>
       </div>
-      <span className="stat-note">{note}</span>
+      {note && <span className="stat-note">{note}</span>}
     </div>
+  );
+}
+function PageStats({ stats }: { stats: Stats | null }) {
+  if (!stats) return null;
+  const pages = stats.pages || [];
+  if (!pages.length)
+    return <Empty title="拍手はまだありません" icon={ThumbsUp} />;
+  return (
+    <ol className="page-stats">
+      {pages.map((p) => (
+        <li key={p.page_url}>
+          {p.page_url ? (
+            <a href={p.page_url} target="_blank" rel="noopener noreferrer">
+              {p.page_title || p.page_url}
+            </a>
+          ) : (
+            <span className="muted">ページ不明</span>
+          )}
+          <b>{p.count.toLocaleString()}</b>
+        </li>
+      ))}
+    </ol>
   );
 }
 function Chart({ stats }: { stats: Stats | null }) {
@@ -255,17 +278,14 @@ export default function App() {
   if (session.loading)
     return (
       <div className="auth-page">
-        <span className="brand-mark">
-          <Heart size={24} />
-        </span>
-        <p>応援の便りを開いています…</p>
+        <p>読み込み中…</p>
       </div>
     );
   if (session.error)
     return (
       <div className="auth-page">
         <LockKeyhole size={32} />
-        <h1>Ownerのための場所です。</h1>
+        <h1>Owner専用</h1>
         <p>{session.error}</p>
         <button className="btn primary" onClick={() => location.reload()}>
           ログイン状態を確認する
@@ -276,10 +296,7 @@ export default function App() {
     <div className="app-shell">
       <aside className={"sidebar " + (mobileNav ? "is-open" : "")}>
         <a className="brand" href="/admin">
-          <span className="brand-mark">
-            <Heart size={22} strokeWidth={1.5} />
-          </span>
-          <span>応援の便り</span>
+          <span>Hakushu</span>
         </a>
         <div className="workspace">
           <span className="avatar">K</span>
@@ -312,12 +329,6 @@ export default function App() {
             <Database size={18} strokeWidth={1.6} />
             データ管理
           </button>
-          <div className="private-note">
-            <ShieldCheck size={17} />
-            <span>
-              あなたと、送り主だけの場所。<small>感想は公開されません。</small>
-            </span>
-          </div>
           <div className="owner-profile">
             <span className="avatar small">K</span>
             <div>
@@ -353,17 +364,6 @@ export default function App() {
           <div className="page-heading">
             <div>
               <h1>{titles[section]}</h1>
-              <p>
-                {section === "overview"
-                  ? "届いた応援を、今日の制作の力に。"
-                  : section === "inbox"
-                    ? "ひとつひとつの言葉を、ゆっくりと。"
-                    : section === "projects"
-                      ? "それぞれの場所に、小さな応援の入口を。"
-                      : section === "print"
-                        ? "大切な言葉を、手にとれるかたちに。"
-                        : "受け取った便りを、大切に保管する。"}
-              </p>
             </div>
             {section === "projects" ? (
               <button className="btn primary" onClick={() => setEdit("new")}>
@@ -381,14 +381,14 @@ export default function App() {
             section === "inbox" ||
             section === "print") && (
             <div className="scope-bar">
-              <span className="scope-label">作品・ツール</span>
+              <span className="scope-label">サイト</span>
               <div className="select-wrap">
                 <select
                   aria-label="作品で絞り込む"
                   value={project}
                   onChange={(e) => setProject(e.target.value)}
                 >
-                  <option value="">すべての作品・ツール</option>
+                  <option value="">すべてのサイト</option>
                   {list.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.title}
@@ -427,26 +427,25 @@ export default function App() {
                   label="受け取った拍手"
                   value={countClaps}
                   icon={ThumbsUp}
-                  note="これまでに届いた応援"
+                  note="累計"
                 />
                 <StatCard
                   label="届いた感想"
                   value={total?.total || 0}
                   icon={MessageCircle}
-                  note={`${total?.unread || 0} 件の未読の便り`}
+                  note={`${total?.unread || 0} 件 未読`}
                 />
                 <StatCard
-                  label="返信を待つ便り"
+                  label="未返信"
                   value={total?.unreplied || 0}
                   icon={Reply}
-                  note="あなたのペースで大丈夫です"
                 />
               </div>
               <div className="dashboard-columns">
                 <div className="dashboard-main">
                   <section className="panel activity-panel">
                     <div className="panel-heading">
-                      <h2>応援のあしあと</h2>
+                      <h2>日別の拍手</h2>
                       <span className="muted small-text">日別集計 · UTC</span>
                     </div>
                     <div className="chart-legend">
@@ -460,6 +459,12 @@ export default function App() {
                       </span>
                     </div>
                     <Chart stats={stats.data} />
+                  </section>
+                  <section className="panel activity-panel">
+                    <div className="panel-heading">
+                      <h2>ページ別の拍手</h2>
+                    </div>
+                    <PageStats stats={stats.data} />
                   </section>
                   <section className="panel">
                     <div className="panel-heading">
@@ -483,19 +488,11 @@ export default function App() {
                       onSelect={setSelected}
                     />
                   </section>
-                  <div className="quiet-note">
-                    <LockKeyhole size={15} />
-                    <p>
-                      届いた言葉は、あなただけのもの。
-                      <br />
-                      <span>個人的な保存や印刷で、いつでも読み返せます。</span>
-                    </p>
-                  </div>
                 </div>
                 <div className="dashboard-side">
                   <section className="panel widget-preview-panel">
                     <div className="panel-heading">
-                      <h2>応援の入口</h2>
+                      <h2>ウィジェット</h2>
                       <span className="status-dot">プレビュー</span>
                     </div>
                     {list.length ? (
@@ -509,7 +506,6 @@ export default function App() {
                               (list.find((p) => p.id === project) || list[0])
                                 .title
                             }
-                            <small>訪問者に表示されるウィジェット</small>
                           </span>
                         </div>
                         <iframe
@@ -540,30 +536,19 @@ export default function App() {
                         </div>
                       </>
                     ) : (
-                      <Empty title="最初の入口をつくる">
+                      <Empty title="サイトを追加">
                         <button className="btn" onClick={() => setEdit("new")}>
-                          作品を追加
+                          サイトを追加
                         </button>
                       </Empty>
                     )}
                   </section>
                   <section className="paper-note">
-                    <Heart size={26} strokeWidth={1} />
-                    <h3>
-                      うれしい言葉を、
-                      <br />
-                      手帳の片すみに。
-                    </h3>
-                    <p>
-                      届いた感想をカードにして、
-                      <br />
-                      制作のお守りにしませんか。
-                    </p>
                     <button
                       className="text-button"
                       onClick={() => navigate("print")}
                     >
-                      手帳に残す <ArrowRight size={14} />
+                      感想を印刷 <ArrowRight size={14} />
                     </button>
                   </section>
                 </div>
@@ -626,7 +611,7 @@ export default function App() {
               ))}
               <button className="add-project" onClick={() => setEdit("new")}>
                 <Plus size={24} />
-                <span>新しい作品・ツールを追加</span>
+                <span>サイトを追加</span>
               </button>
             </div>
           )}
@@ -637,7 +622,7 @@ export default function App() {
             <DataPanel notify={notify} refresh={refresh} />
           )}
           <footer className="page-footer">
-            <span>応援の便り</span>
+            <span>Hakushu</span>
             <span>
               Owner · 非公開{session.data?.local ? " · ローカル開発環境" : ""}
             </span>
@@ -704,7 +689,9 @@ function InboxList({
   );
   const items = (data?.items || []).filter(
     (m) =>
-      !search || m.body.includes(search) || m.project_title.includes(search),
+      !search ||
+      m.body.includes(search) ||
+      (m.page_title || m.project_title).includes(search),
   );
   return (
     <>
@@ -756,7 +743,9 @@ function InboxList({
               </span>
               <div className="message-summary">
                 <div className="message-meta">
-                  <span className="project-tag">{m.project_title}</span>
+                  <span className="project-tag">
+                    {m.page_title || m.project_title}
+                  </span>
                   {!m.read_at && <span className="unread-dot" />}
                   {!!m.publication_consent && (
                     <span className="consent-badge">公開許可あり</span>
@@ -785,14 +774,10 @@ function InboxList({
             search
               ? "該当する感想がありません"
               : status === "all"
-                ? "最初の便りを、待っています。"
-                : "該当する便りはありません。"
+                ? "メッセージはまだありません"
+                : "該当するメッセージはありません"
           }
-        >
-          {status === "all" && !search
-            ? "作品にウィジェットを置くと、ここに感想が届きます。"
-            : undefined}
-        </Empty>
+        ></Empty>
       )}
       {!compact && !!data?.total && (
         <div className="pagination">
@@ -857,7 +842,18 @@ function MessageModal({
     <Modal title="届いた感想" onClose={onClose}>
       <div className="modal-body">
         <div className="message-detail-meta">
-          <span className="project-tag">{m.project_title}</span>
+          {m.page_url ? (
+            <a
+              className="project-tag"
+              href={m.page_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {m.page_title || m.page_url}
+            </a>
+          ) : (
+            <span className="project-tag">{m.project_title}</span>
+          )}
           <time>
             {date(m.created_at)} · {dateTime(m.created_at)}
           </time>
@@ -932,7 +928,7 @@ function MessageModal({
             aria-label="返信内容"
             rows={5}
             maxLength={4000}
-            placeholder="便りへのお返事を。"
+            placeholder="返信内容"
             value={reply}
             onChange={(e) => setReply(e.target.value)}
           />
@@ -1066,7 +1062,9 @@ function ProjectModal({
     [origins, setOrigins] = useState(initial.allowed_origins.join("\n")),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [tab, setTab] = useState("settings");
+    [tab, setTab] = useState("settings"),
+    [embedTip, setEmbedTip] = useState(false),
+    [embedTipLabel, setEmbedTipLabel] = useState("");
   const assets = useApi<Asset[]>(
     project === "new"
       ? "/owner/projects/new/assets"
@@ -1124,12 +1122,12 @@ function ProjectModal({
   const embed = embedCode(
     location.origin,
     project === "new" ? form.slug : project.slug,
+    embedTip,
+    cleanTipLabel(embedTipLabel),
   );
   return (
     <Modal
-      title={
-        project === "new" ? "作品・ツールを追加" : project.title + "の設定"
-      }
+      title={project === "new" ? "サイトを追加" : project.title + "の設定"}
       onClose={onClose}
       wide
     >
@@ -1156,7 +1154,7 @@ function ProjectModal({
           <form onSubmit={save} className="settings-form">
             <div className="form-grid">
               <label>
-                作品・ツール名
+                サイト名
                 <input
                   required
                   maxLength={80}
@@ -1388,10 +1386,29 @@ function ProjectModal({
         )}
         {tab === "embed" && (
           <div className="embed-settings">
-            <h3>あなたのサイトに、応援の入口を。</h3>
+            <h3>埋め込みコード</h3>
             <p className="muted">
-              基本設定で設置先のオリジンを許可し、ボタンを置きたい位置に下のコードを貼り付けてください。
+              どのページにも同じコードを貼ります。押されたページのURLとタイトルが記録されます。設置先のオリジンは基本設定で許可してください。
             </p>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={embedTip}
+                onChange={(e) => setEmbedTip(e.target.checked)}
+              />
+              このページで投げ銭を表示（data-tip="on"）
+            </label>
+            {embedTip && (
+              <label className="tip-label-field">
+                投げ銭の文言
+                <input
+                  value={embedTipLabel}
+                  maxLength={30}
+                  placeholder={defaultTipLabel}
+                  onChange={(e) => setEmbedTipLabel(e.target.value)}
+                />
+              </label>
+            )}
             <textarea
               aria-label="埋め込みコード"
               readOnly
@@ -1424,9 +1441,6 @@ function ProjectModal({
                 ウィジェットを開く <ExternalLink size={14} />
               </a>
             </div>
-            <p className="small-text muted">
-              設置先には128×52pxの小さな画像ボタンだけを表示します。クリック後のお礼画面はダイアログで開き、本文の高さや配置を変えません。
-            </p>
           </div>
         )}
       </div>
@@ -1506,7 +1520,7 @@ function PrintPanel({
                   />
                   <span>
                     <small>
-                      {m.project_title} · {date(m.created_at)}
+                      {m.page_title || m.project_title} · {date(m.created_at)}
                     </small>
                     <p>{m.body}</p>
                   </span>
@@ -1515,9 +1529,7 @@ function PrintPanel({
             </div>
           </>
         ) : (
-          <Empty title="残したい便りが届いたら。" icon={Printer}>
-            感想を選んで、カードやシール用PDFにできます。
-          </Empty>
+          <Empty title="メッセージはまだありません" icon={Printer} />
         )}
       </section>
       <div className="print-controls">
@@ -1540,6 +1552,7 @@ function PrintPanel({
               >
                 <option value="a4">A4・10面（2列×5段）</option>
                 <option value="card">カード単体・91×55mm</option>
+                <option value="l">L判・89×127mm</option>
               </select>
             </label>
             {options.layout === "a4" && (
@@ -1584,8 +1597,10 @@ function PrintPanel({
               裁断線を付ける
             </label>
             <div className="print-card-preview">
-              <small>{preview?.project_title || "作品・ツール名"}</small>
-              <p>{preview?.body || "大切な言葉が、ここに。"}</p>
+              <small>
+                {preview?.page_title || preview?.project_title || "ページ名"}
+              </small>
+              <p>{preview?.body || "メッセージ本文"}</p>
               <span>
                 {preview ? date(preview.created_at) : "91 × 55 mm"} · 私的保存用
               </span>
@@ -1605,7 +1620,7 @@ function PrintPanel({
           </div>
         </section>
         <p className="small-text muted print-disclaimer">
-          画面のカードはイメージです。シール用紙の規格と印刷位置は、普通紙で試してから調整してください。
+          画面のカードはイメージです。
         </p>
       </div>
     </div>
@@ -1702,11 +1717,10 @@ function DataPanel({
       <ErrorText>{error}</ErrorText>
       <section className="panel">
         <div className="panel-heading">
-          <h2>便りを書き出す</h2>
+          <h2>メッセージの書き出し</h2>
           <ArrowDownToLine size={18} />
         </div>
         <div className="data-section">
-          <p>すべての感想・返信・公開同意を、手元に保存できます。</p>
           <div className="button-row">
             <button
               className="btn"
@@ -1772,7 +1786,7 @@ function DataPanel({
                 action(async () => {
                   await downloadEndpoint(
                     "/owner/backup",
-                    "応援の便り_バックアップ.json",
+                    "hakushu_backup.json",
                   );
                   notify("完全バックアップを書き出しました");
                 })
@@ -1872,7 +1886,7 @@ function DataPanel({
               disabled={busy}
               onClick={() => {
                 const input = prompt(
-                  "「バックアップを含む全データを削除」と入力すると、作品・画像・便り・バックアップをすべて削除します。元に戻せません。",
+                  "「バックアップを含む全データを削除」と入力すると、作品・画像・メッセージ・バックアップをすべて削除します。元に戻せません。",
                 );
                 if (input === "バックアップを含む全データを削除")
                   action(async () => {

@@ -66,29 +66,33 @@ export async function makePdf(
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit); // Full embedding avoids missing Japanese glyphs in fontkit subset output.
   const font = await doc.embedFont(await res.arrayBuffer(), { subset: false });
-  doc.setTitle("応援の便り — 私的保存用");
+  doc.setTitle("Hakushu — 私的保存用");
   doc.setCreator("Creator Support Widget");
   const charset = new Set(font.getCharacterSet());
   const printable = (s: string) =>
     Array.from(s, (c) =>
       c === "\n" || c === "\r" || charset.has(c.codePointAt(0)!) ? c : "□",
     ).join("");
-  const textSize = 9,
-    lineHeight = 13,
-    width = 91 * mm,
-    height = 55 * mm,
-    pad = 12;
+  // L判 (89×127mm) prints one message per sheet with larger text.
+  const photo = options.layout === "l",
+    single = options.layout !== "a4",
+    textSize = photo ? 11 : 9,
+    lineHeight = photo ? 17 : 13,
+    width = (photo ? 89 : 91) * mm,
+    height = (photo ? 127 : 55) * mm,
+    pad = photo ? 18 : 12,
+    perCard = Math.floor((height - 67) / lineHeight) + 1;
   const cards: { m: Message; lines: string[]; part: number; total: number }[] =
     [];
   for (const m of messages) {
     const lines = wrapText(printable(m.body), width - pad * 2, (s) =>
       font.widthOfTextAtSize(s, textSize),
     );
-    const total = Math.ceil(lines.length / 7);
+    const total = Math.ceil(lines.length / perCard);
     for (let i = 0; i < total; i++)
       cards.push({
         m,
-        lines: lines.slice(i * 7, (i + 1) * 7),
+        lines: lines.slice(i * perCard, (i + 1) * perCard),
         part: i + 1,
         total,
       });
@@ -101,31 +105,30 @@ export async function makePdf(
     return chars.join("");
   };
   cards.forEach((card, index) => {
-    if (options.layout === "card" || index % 10 === 0)
-      page = doc.addPage(
-        options.layout === "card" ? [width, height] : [210 * mm, 297 * mm],
-      );
+    if (single || index % 10 === 0)
+      page = doc.addPage(single ? [width, height] : [210 * mm, 297 * mm]);
     const col = index % 2,
       row = Math.floor((index % 10) / 2);
-    const x =
-      options.layout === "card"
-        ? 0
-        : (options.marginX + options.offsetX + col * (91 + options.gapX)) * mm;
-    const y =
-      options.layout === "card"
-        ? 0
-        : 297 * mm -
-          (options.marginY + options.offsetY + row * (55 + options.gapY)) * mm -
-          height;
+    const x = single
+      ? 0
+      : (options.marginX + options.offsetX + col * (91 + options.gapX)) * mm;
+    const y = single
+      ? 0
+      : 297 * mm -
+        (options.marginY + options.offsetY + row * (55 + options.gapY)) * mm -
+        height;
     if (options.cropMarks && options.layout === "a4")
       drawMarks(page!, x, y, width, height);
-    page!.drawText(fit(card.m.project_title, width - 2 * pad, 8), {
-      x: x + pad,
-      y: y + height - 20,
-      size: 8,
-      font,
-      color: rgb(0.38, 0.38, 0.38),
-    });
+    page!.drawText(
+      fit(card.m.page_title || card.m.project_title, width - 2 * pad, 8),
+      {
+        x: x + pad,
+        y: y + height - 20,
+        size: 8,
+        font,
+        color: rgb(0.38, 0.38, 0.38),
+      },
+    );
     page!.drawLine({
       start: { x: x + pad, y: y + height - 27 },
       end: { x: x + width - pad, y: y + height - 27 },
@@ -172,6 +175,10 @@ export async function savePdf(messages: Message[], options: PrintOptions) {
   const bytes = await makePdf(messages, options);
   download(
     new Blob([bytes as BlobPart], { type: "application/pdf" }),
-    options.layout === "a4" ? "応援の便り_A4.pdf" : "応援の便り_91x55mm.pdf",
+    {
+      a4: "hakushu_A4.pdf",
+      card: "hakushu_91x55mm.pdf",
+      l: "hakushu_L_89x127mm.pdf",
+    }[options.layout],
   );
 }

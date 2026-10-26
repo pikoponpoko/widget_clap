@@ -108,6 +108,8 @@ const message = z
     reply_token_hash: hash.nullable(),
     dedupe_key: hash,
     blocked: flag,
+    page_url: z.string().max(500).default(""),
+    page_title: z.string().max(200).default(""),
   })
   .strict();
 const asset = z
@@ -137,6 +139,8 @@ const schema = z
             project_id: ident,
             created_at: timestamp,
             dedupe_key: hash,
+            page_url: z.string().max(500).default(""),
+            page_title: z.string().max(200).default(""),
           })
           .strict(),
       )

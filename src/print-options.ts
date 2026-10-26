@@ -1,5 +1,5 @@
 export interface PrintOptions {
-  layout: "a4" | "card";
+  layout: "a4" | "card" | "l";
   marginX: number;
   marginY: number;
   gapX: number;

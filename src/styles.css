@@ -751,7 +751,7 @@ small {
 }
 .paper-note {
   margin-top: 20px;
-  padding: 27px 24px;
+  padding: 14px 18px;
   border: 1px solid #ebebeb;
   background: #f2f2f2;
   border-radius: 8px;
@@ -783,7 +783,7 @@ small {
   line-height: 2;
 }
 .paper-note .text-button {
-  margin-top: 18px;
+  margin-top: 0;
   font-size: 10px;
 }
 .page-footer {
@@ -1685,20 +1685,38 @@ small {
 }
 .tip-link {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
   gap: 6px;
   margin-top: 22px;
-  font-size: 11px;
-  text-decoration: underline;
 }
 .tip-link small {
-  width: 100%;
-  text-align: center;
   font-size: 8px;
+  color: var(--muted);
+}
+/* The tip is its own button, separate from the clap button; no hover change. */
+.tip-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 7px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
   text-decoration: none;
-  color: #767676;
+  white-space: nowrap;
+}
+.tip-preview {
+  border-color: var(--line);
+  background: var(--soft);
+  color: var(--muted);
+  cursor: not-allowed;
 }
 .reply-page {
   max-width: 670px;
@@ -2308,6 +2326,23 @@ small {
   min-height: 0;
   overflow: hidden;
 }
+.mini-clap-frame {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 0;
+}
+.mini-tip {
+  margin: 6px 4px 4px;
+  min-height: 28px;
+  padding: 3px 12px;
+  font-size: 11px;
+}
+.mini-tip.tip-preview {
+  border-color: var(--line);
+  background: var(--soft);
+  color: var(--muted);
+}
 .mini-clap-wrap {
   display: inline-flex;
   align-items: flex-start;
@@ -2325,21 +2360,16 @@ small {
   margin: 0;
   padding: 4px;
   line-height: 0;
-  width: 128px;
-  height: 52px;
   max-width: 100%;
   cursor: pointer;
 }
 .mini-clap img {
   display: block;
-  max-width: 120px;
-  max-height: 44px;
+  max-width: 320px;
+  max-height: 240px;
   width: auto;
   height: auto;
   object-fit: contain;
-}
-.mini-clap:hover {
-  filter: brightness(0.96);
 }
 .mini-clap:active {
   transform: translateY(1px);
@@ -2469,7 +2499,7 @@ small {
 }
 .demo-examples {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
   align-items: stretch;
 }
@@ -2674,4 +2704,33 @@ small {
 }
 html.embed-document {
   background: transparent;
+}
+.page-stats {
+  list-style: none;
+  margin: 0;
+  padding: 0 22px 12px;
+}
+.page-stats li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.page-stats a {
+  color: inherit;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.widget-description:empty {
+  display: none;
+}
+.tip-label-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+  font-size: 12px;
 }

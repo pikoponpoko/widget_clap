@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, Copy, Inbox } from "lucide-react";
 import { embedCode } from "./embed-code";
+import { cleanTipLabel, defaultTipLabel } from "./page-context";
 const slug = "kazuki";
 // The demo shows three pages on one screen, so each copy names its page explicitly.
 function EmbedExample({
   path,
   title,
   tip = false,
+  tipLabel = "",
 }: {
   path: string;
   title: string;
   tip?: boolean;
+  tipLabel?: string;
 }) {
   const host = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -21,17 +24,19 @@ function EmbedExample({
     script.dataset.pageUrl = new URL(path, location.origin).href;
     script.dataset.pageTitle = title;
     if (tip) script.dataset.tip = "on";
+    if (tipLabel) script.dataset.tipLabel = tipLabel;
     node.appendChild(script);
     return () => {
       node.replaceChildren();
     };
-  }, [path, title, tip]);
+  }, [path, title, tip, tipLabel]);
   return <span className="demo-button-mount" ref={host} />;
 }
 export default function EmbedDemo() {
   const [tip, setTip] = useState(false),
+    [label, setLabel] = useState(""),
     [copied, setCopied] = useState(false);
-  const code = embedCode(location.origin, slug, tip);
+  const code = embedCode(location.origin, slug, tip, cleanTipLabel(label));
   return (
     <div className="embed-demo">
       <header>
@@ -92,7 +97,7 @@ export default function EmbedDemo() {
           </article>
           <article className="demo-example demo-tool">
             <span className="demo-example-type">
-              投げ銭ON（data-tip=&quot;on&quot;）
+              投げ銭ON・文言変更（data-tip-label）
             </span>
             <h2>Animator&apos;s Stopwatch</h2>
             <div className="demo-inline-embed">
@@ -100,6 +105,7 @@ export default function EmbedDemo() {
                 path="/tools/animators-stopwatch"
                 title="Animator's Stopwatch"
                 tip
+                tipLabel="コーヒーをおごる"
               />
             </div>
           </article>
@@ -122,6 +128,20 @@ export default function EmbedDemo() {
             />
             このページで投げ銭を表示
           </label>
+          {tip && (
+            <label>
+              投げ銭の文言
+              <input
+                value={label}
+                maxLength={30}
+                placeholder={defaultTipLabel}
+                onChange={(e) => {
+                  setLabel(e.target.value);
+                  setCopied(false);
+                }}
+              />
+            </label>
+          )}
           <textarea
             aria-label="小型ボタンの埋め込みコード"
             readOnly

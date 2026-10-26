@@ -1,5 +1,5 @@
 import { previewMode } from "./mode";
-import { pageContext } from "./page-context";
+import { pageContext, tipLabel, tipRequested } from "./page-context";
 import { useEffect, useRef, useState } from "react";
 import { assetUrl } from "./asset-url";
 import { send, useApi } from "./api";
@@ -154,6 +154,23 @@ export function EmbeddedButton({ slug }: { slug: string }) {
   return (
     <span ref={frame} className="mini-clap-frame">
       <ClapControl project={p} onOpen={open} />
+      {/* data-tip="on" pages (e.g. tool downloads) show the tip link before any click. */}
+      {tipRequested &&
+        (p.clap_enabled || p.message_enabled || p.favorite_enabled) &&
+        (p.tip_url ? (
+          <a
+            className="tip-button mini-tip"
+            href={p.tip_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {tipLabel}
+          </a>
+        ) : previewMode ? (
+          <span className="tip-button mini-tip tip-preview" aria-disabled="true">
+            {tipLabel}（体験版：決済リンク未設定）
+          </span>
+        ) : null)}
       {fallback && (
         <a
           className="button-fallback-link"

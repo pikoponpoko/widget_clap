@@ -1,4 +1,5 @@
 import { embedCode } from "./embed-code";
+import { cleanTipLabel, defaultTipLabel } from "./page-context";
 import { previewMode } from "./mode";
 import { assetUrl } from "./asset-url";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -1332,7 +1333,8 @@ function ProjectModal({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("settings"),
-    [embedTip, setEmbedTip] = useState(false);
+    [embedTip, setEmbedTip] = useState(false),
+    [embedTipLabel, setEmbedTipLabel] = useState("");
   const assets = useApi<Asset[]>(
     project === "new"
       ? "/owner/projects/new/assets"
@@ -1399,6 +1401,7 @@ function ProjectModal({
     location.origin,
     project === "new" ? form.slug : project.slug,
     embedTip,
+    cleanTipLabel(embedTipLabel),
   );
   return (
     <Modal
@@ -1682,6 +1685,17 @@ function ProjectModal({
               />
               このページで投げ銭を表示（data-tip="on"）
             </label>
+            {embedTip && (
+              <label className="tip-label-field">
+                投げ銭の文言
+                <input
+                  value={embedTipLabel}
+                  maxLength={30}
+                  placeholder={defaultTipLabel}
+                  onChange={(e) => setEmbedTipLabel(e.target.value)}
+                />
+              </label>
+            )}
             <textarea
               aria-label="埋め込みコード"
               readOnly
@@ -1893,7 +1907,7 @@ function PrintPanel({
           </div>
         </section>
         <p className="small-text muted print-disclaimer">
-          画面のカードはイメージです。シール用紙の規格と印刷位置は、普通紙で試してから調整してください。
+          画面のカードはイメージです。
         </p>
       </div>
     </div>

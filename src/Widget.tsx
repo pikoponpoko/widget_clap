@@ -1,6 +1,6 @@
 import { ClapControl } from "./ClapButton";
 import { previewMode } from "./mode";
-import { pageContext, tipRequested } from "./page-context";
+import { pageContext, tipLabel, tipRequested } from "./page-context";
 import { assetUrl } from "./asset-url";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -382,21 +382,25 @@ export function Widget({
           )
         )}
         {p.tip_url && tipRequested && (
-          <a
-            className="tip-link"
-            href={p.tip_url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            任意の支援をする <ArrowUpRight size={14} />
+          <div className="tip-link">
+            <a
+              className="tip-button"
+              href={p.tip_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {tipLabel} <ArrowUpRight size={14} />
+            </a>
             <small>支援なしでも無料で利用できます</small>
-          </a>
+          </div>
         )}
         {previewMode && tipRequested && !p.tip_url && (
-          <span className="tip-link tip-preview" aria-disabled="true">
-            任意の支援をする
+          <div className="tip-link">
+            <span className="tip-button tip-preview" aria-disabled="true">
+              {tipLabel}
+            </span>
             <small>体験版：決済リンク未設定のため押せません</small>
-          </span>
+          </div>
         )}
         {notice && (
           <p className="error" role="alert">

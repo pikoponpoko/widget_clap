@@ -3,7 +3,15 @@ import { ArrowUpRight, Check, Copy, Inbox } from "lucide-react";
 import { embedCode } from "./embed-code";
 const slug = "kazuki";
 // The demo shows three pages on one screen, so each copy names its page explicitly.
-function EmbedExample({ path, title }: { path: string; title: string }) {
+function EmbedExample({
+  path,
+  title,
+  tip = false,
+}: {
+  path: string;
+  title: string;
+  tip?: boolean;
+}) {
   const host = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const node = host.current!;
@@ -12,11 +20,12 @@ function EmbedExample({ path, title }: { path: string; title: string }) {
     script.dataset.project = slug;
     script.dataset.pageUrl = new URL(path, location.origin).href;
     script.dataset.pageTitle = title;
+    if (tip) script.dataset.tip = "on";
     node.appendChild(script);
     return () => {
       node.replaceChildren();
     };
-  }, [path, title]);
+  }, [path, title, tip]);
   return <span className="demo-button-mount" ref={host} />;
 }
 export default function EmbedDemo() {
@@ -42,7 +51,7 @@ export default function EmbedDemo() {
       <main>
         <div className="demo-heading">
           <h1>埋め込みデモ</h1>
-          <p>3つのページに同じコードを貼っています。</p>
+          <p>4つのページに同じコードを貼っています。</p>
         </div>
         <div className="demo-examples">
           <article className="demo-example demo-tool">
@@ -80,6 +89,19 @@ export default function EmbedDemo() {
               <EmbedExample path="/blog/2026-10-26" title="ブログ記事" />
             </div>
             <p className="demo-following-content">記事の本文が続きます。</p>
+          </article>
+          <article className="demo-example demo-tool">
+            <span className="demo-example-type">
+              投げ銭ON（data-tip=&quot;on&quot;）
+            </span>
+            <h2>Animator&apos;s Stopwatch</h2>
+            <div className="demo-inline-embed">
+              <EmbedExample
+                path="/tools/animators-stopwatch"
+                title="Animator's Stopwatch"
+                tip
+              />
+            </div>
           </article>
         </div>
         <section className="demo-embed-code">

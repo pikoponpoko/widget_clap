@@ -1700,6 +1700,11 @@ small {
   text-decoration: none;
   color: #767676;
 }
+.tip-preview {
+  text-decoration: none;
+  color: var(--muted);
+  cursor: not-allowed;
+}
 .reply-page {
   max-width: 670px;
   margin: 70px auto;
@@ -2471,7 +2476,7 @@ small {
 }
 .demo-examples {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
   align-items: stretch;
 }

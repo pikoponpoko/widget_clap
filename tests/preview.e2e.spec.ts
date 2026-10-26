@@ -267,14 +267,15 @@ test("does not open the thank-you modal or claim success if applause cannot be s
   await expect(
     frame.getByRole("button", { name: "拍手を送る", exact: true }),
   ).toBeVisible();
-  const serviceFrame = page
+  // Every embedded copy loads the same button page; make storage fail in all of them.
+  for (const serviceFrame of page
     .frames()
-    .find((f) => f.url().includes("/button/kazuki"))!;
-  await serviceFrame.evaluate(() => {
-    Storage.prototype.setItem = () => {
-      throw new DOMException("full", "QuotaExceededError");
-    };
-  });
+    .filter((f) => f.url().includes("/button/kazuki")))
+    await serviceFrame.evaluate(() => {
+      Storage.prototype.setItem = () => {
+        throw new DOMException("full", "QuotaExceededError");
+      };
+    });
   await frame.getByRole("button", { name: "拍手を送る", exact: true }).click();
   await expect(frame.getByRole("alert")).toContainText("保存容量");
   await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -348,4 +349,27 @@ test("one code serves many pages: claps and messages are listed per page in the 
     page.locator(".project-tag", { hasText: "ブログ記事" }).first(),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Hakushu" })).toBeVisible();
+});
+test("the tip-enabled demo page shows the unconnected tip placeholder only there", async ({
+  page,
+}) => {
+  await page.goto("/demo");
+  const frames = page.frameLocator('iframe[title="拍手ボタン"]');
+  await frames
+    .nth(3)
+    .getByRole("button", { name: "拍手を送る", exact: true })
+    .click();
+  await expect(thanksFrame(page).getByText("決済リンク未設定")).toBeVisible();
+  await expect(
+    thanksFrame(page).getByRole("link", { name: /任意の支援/ }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "お礼画面を閉じる" }).click();
+  await frames
+    .nth(0)
+    .getByRole("button", { name: "拍手を送る", exact: true })
+    .click();
+  await expect(
+    thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
+  ).toBeVisible();
+  await expect(thanksFrame(page).getByText("決済リンク未設定")).toHaveCount(0);
 });

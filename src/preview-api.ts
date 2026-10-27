@@ -18,9 +18,9 @@ interface Store {
   }[];
   assets: PreviewAsset[];
 }
-const key = "hakushu-browser-preview-v2";
+const key = "hakushu-browser-preview-v3";
 function initial(): Store {
-  const rows = [["kazuki", "kazukisekiguchi.com", ""]];
+  const rows = [["sample", "example.com", ""]];
   return {
     version: 1,
     projects: rows.map(([id, title, description]) => ({
@@ -28,8 +28,8 @@ function initial(): Store {
       title,
       description,
       slug: id,
-      site_url: "https://kazukisekiguchi.com",
-      allowed_origins: ["https://kazukisekiguchi.com"],
+      site_url: "https://example.com",
+      allowed_origins: ["https://example.com"],
       clap_enabled: true,
       message_enabled: true,
       favorite_enabled: true,
@@ -507,11 +507,15 @@ export async function previewRequest(
     const file = options.body as Blob;
     if (file.size > 2097152) fail("画像は2MB以下にしてください。");
     if (
-      !["image/png", "image/apng", "image/gif", "image/webp"].includes(
-        file.type,
-      )
+      ![
+        "image/png",
+        "image/apng",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+      ].includes(file.type)
     )
-      fail("PNG/APNG・GIF・WebPを選んでください。");
+      fail("PNG/APNG・JPG・GIF・WebPを選んでください。");
     const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = "";
     for (let i = 0; i < bytes.length; i += 8192)

@@ -208,10 +208,7 @@ export const projectSchema = z
     tip_legal_checked: z.boolean().default(false),
     tip_terms_checked: z.boolean().default(false),
     tip_privacy_checked: z.boolean().default(false),
-    ng_words: z
-      .array(z.string().trim().min(1).max(50))
-      .max(100)
-      .default([]),
+    ng_words: z.array(z.string().trim().min(1).max(50)).max(100).default([]),
   })
   .strict();
 export const normalizeWord = (s: string) => s.normalize("NFKC").toLowerCase();
@@ -367,11 +364,38 @@ export function validateImage(bytes: Uint8Array) {
       w = (bits & 16383) + 1;
       h = ((bits >>> 14) & 16383) + 1;
     }
+  } else if (
+    bytes.length >= 4 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  ) {
+    // Walk the JPEG segments to the first SOF marker, which holds the size.
+    let p = 2;
+    while (p + 9 < bytes.length && bytes[p] === 0xff) {
+      const marker = bytes[p + 1];
+      if (marker === 0xff) {
+        p++;
+        continue;
+      }
+      const n = view.getUint16(p + 2);
+      if (
+        marker >= 0xc0 &&
+        marker <= 0xcf &&
+        ![0xc4, 0xc8, 0xcc].includes(marker)
+      ) {
+        h = view.getUint16(p + 5);
+        w = view.getUint16(p + 7);
+        mime = "image/jpeg";
+        break;
+      }
+      p += 2 + n;
+    }
   }
   if (!mime || !w || !h || w > 4096 || h > 4096 || w * h > 16000000)
     throw new ApiError(
       400,
-      "PNG/APNG・GIF・WebP（4096px以下）の画像を選んでください。SVGは利用できません。",
+      "PNG/APNG・JPG・GIF・WebP（4096px以下）の画像を選んでください。SVGは利用できません。",
     );
   return { mime, width: w, height: h };
 }

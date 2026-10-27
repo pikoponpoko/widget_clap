@@ -189,6 +189,7 @@ small {
   margin: 12px 0;
   color: #282828;
   overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 .loading-text {
   padding: 30px;
@@ -2888,4 +2889,14 @@ html.embed-document {
   order: 0;
   width: auto;
   margin-left: 0;
+}
+.widget-presets .btn.active,
+.widget-presets .btn.active:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--white);
+}
+.upload-tile.dragging {
+  border-color: var(--ink);
+  color: var(--ink);
 }

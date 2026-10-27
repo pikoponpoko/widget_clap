@@ -90,6 +90,8 @@ const project = z
     reply_enabled: flag.default(1),
     tip_enabled: flag.default(0),
     thanks_mode: z.enum(["random", "fixed"]),
+    thanks_order: z.enum(["random", "sequential", "fixed"]).default("random"),
+    thanks_message: z.string().max(200).default(""),
     tip_url: z.string(),
     tip_legal_checked: flag,
     tip_terms_checked: flag,
@@ -111,6 +113,8 @@ const message = z
     blocked: flag,
     page_url: z.string().max(500).default(""),
     page_title: z.string().max(200).default(""),
+    sender_name: z.string().max(50).default(""),
+    reply_wanted: flag.nullable().default(null),
   })
   .strict();
 const asset = z
@@ -123,6 +127,7 @@ const asset = z
     size: z.number().int().min(1).max(2097152),
     name: z.string().max(120),
     created_at: timestamp,
+    sort_order: z.number().int().min(0).max(1000).default(0),
     data: z.string().max(2800000),
   })
   .strict();
@@ -256,7 +261,13 @@ export async function restore(env: Env, input: unknown) {
 }
 function validProject(p: z.infer<typeof project>) {
   try {
-    const { id: _, owner_id: __, created_at: ___, ...fields } = p;
+    const {
+      id: _,
+      owner_id: __,
+      created_at: ___,
+      thanks_mode: ____,
+      ...fields
+    } = p;
     return projectSchema.safeParse({
       ...fields,
       allowed_origins: JSON.parse(p.allowed_origins),

@@ -64,7 +64,7 @@
   var style = document.createElement("style");
   if (script.nonce) style.nonce = script.nonce;
   style.textContent =
-    ":host{display:inline-block;vertical-align:middle;max-width:100%}iframe{border:0;display:block;background:transparent}dialog{box-sizing:border-box;width:440px;max-width:calc(100vw - 24px);height:86vh;height:86dvh;max-height:900px;padding:0;border:1px solid #ddd;border-radius:12px;background:white;color:#292929;box-shadow:0 15px 60px #0003}dialog[open]{display:flex;flex-direction:column}dialog::backdrop{background:#0006}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;padding:9px 14px;font:12px/1.5 system-ui,sans-serif}header button{width:34px;height:34px;border:0;border-radius:6px;background:#f5f5f5;color:#333;font-size:23px;cursor:pointer}header button:focus-visible{outline:2px solid #444}dialog iframe{width:100%;flex:1;min-height:0}";
+    ":host{display:inline-block;vertical-align:middle;max-width:100%}iframe{border:0;display:block;background:transparent}dialog{box-sizing:border-box;width:440px;max-width:calc(100vw - 24px);height:86vh;height:86dvh;max-height:900px;padding:0;border:1px solid #ddd;border-radius:12px;background:white;color:#292929;box-shadow:0 15px 60px #0003}dialog[open]{display:flex;flex-direction:column}dialog::backdrop{background:#0006}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;padding:9px 14px;font:600 15px/1.5 system-ui,sans-serif;letter-spacing:1px}header button{width:34px;height:34px;border:0;border-radius:6px;background:#f5f5f5;color:#333;font-size:23px;cursor:pointer}header button:focus-visible{outline:2px solid #444}dialog iframe{width:100%;flex:1;min-height:0}";
   var frame = document.createElement("iframe");
   frame.width = "128";
   frame.height = "52";
@@ -116,6 +116,18 @@
     }
   });
   function receive(event) {
+    // The thank-you frame asks for room to show its illustration at full size.
+    if (
+      host.isConnected &&
+      event.origin === origin &&
+      event.source === content.contentWindow &&
+      event.data &&
+      event.data.type === "creator-support:thanks-width"
+    ) {
+      var w = Math.min(1200, Math.max(0, Number(event.data.width) || 0));
+      dialog.style.width = Math.max(440, w + 50) + "px";
+      return;
+    }
     if (
       !host.isConnected ||
       event.origin !== origin ||
@@ -147,6 +159,7 @@
       return;
     var url = new URL("/widget/" + encodeURIComponent(slug), origin);
     url.searchParams.set("after", data.reason);
+    url.searchParams.set("parent_origin", location.origin);
     withPage(url);
     if (typeof dialog.showModal !== "function") {
       var link = document.createElement("a");
@@ -157,6 +170,7 @@
       shadow.append(link);
       return;
     }
+    dialog.style.width = "";
     content.src = url.href;
     if (!dialog.open) dialog.showModal();
     close.focus();

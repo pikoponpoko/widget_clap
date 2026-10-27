@@ -131,13 +131,22 @@ export const messageSchema = z
   .object({
     body: text(2000),
     publication_consent: z.boolean().default(false),
+    reply_wanted: z.boolean().nullable().default(null),
     request_id: z.uuid(),
     website: z.string().max(200).default(""),
     started_at: z.number(),
     turnstile: z.string().max(4096).optional(),
     page_url: z.string().max(2000).default(""),
     page_title: z.string().max(500).default(""),
+    sender_name: z
+      .string()
+      .transform((s) => s.replace(/[\u0000-\u001F\u007F]/g, " ").trim())
+      .pipe(z.string().max(50))
+      .default(""),
   })
+  .strict();
+export const assetOrderSchema = z
+  .object({ ids: z.array(z.string().max(80)).max(100) })
   .strict();
 export const clapSchema = z
   .object({
@@ -203,15 +212,13 @@ export const projectSchema = z
     thanks_enabled: z.boolean().default(true),
     reply_enabled: z.boolean().default(true),
     tip_enabled: z.boolean().default(false),
-    thanks_mode: z.enum(["fixed", "random"]).default("random"),
+    thanks_order: z.enum(["random", "sequential", "fixed"]).default("random"),
+    thanks_message: z.string().trim().max(200).default(""),
     tip_url: z.union([https, z.literal("")]).default(""),
     tip_legal_checked: z.boolean().default(false),
     tip_terms_checked: z.boolean().default(false),
     tip_privacy_checked: z.boolean().default(false),
-    ng_words: z
-      .array(z.string().trim().min(1).max(50))
-      .max(100)
-      .default([]),
+    ng_words: z.array(z.string().trim().min(1).max(50)).max(100).default([]),
   })
   .strict();
 export const normalizeWord = (s: string) => s.normalize("NFKC").toLowerCase();
@@ -367,11 +374,38 @@ export function validateImage(bytes: Uint8Array) {
       w = (bits & 16383) + 1;
       h = ((bits >>> 14) & 16383) + 1;
     }
+  } else if (
+    bytes.length >= 4 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  ) {
+    // Walk the JPEG segments to the first SOF marker, which holds the size.
+    let p = 2;
+    while (p + 9 < bytes.length && bytes[p] === 0xff) {
+      const marker = bytes[p + 1];
+      if (marker === 0xff) {
+        p++;
+        continue;
+      }
+      const n = view.getUint16(p + 2);
+      if (
+        marker >= 0xc0 &&
+        marker <= 0xcf &&
+        ![0xc4, 0xc8, 0xcc].includes(marker)
+      ) {
+        h = view.getUint16(p + 5);
+        w = view.getUint16(p + 7);
+        mime = "image/jpeg";
+        break;
+      }
+      p += 2 + n;
+    }
   }
   if (!mime || !w || !h || w > 4096 || h > 4096 || w * h > 16000000)
     throw new ApiError(
       400,
-      "PNG/APNG・GIF・WebP（4096px以下）の画像を選んでください。SVGは利用できません。",
+      "PNG/APNG・JPG・GIF・WebP（4096px以下）の画像を選んでください。SVGは利用できません。",
     );
   return { mime, width: w, height: h };
 }

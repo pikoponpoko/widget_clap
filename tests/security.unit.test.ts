@@ -212,6 +212,19 @@ describe("untrusted content", () => {
     new DataView(giant.buffer).setUint32(16, 9999);
     expect(() => validateImage(giant)).toThrow(ApiError);
   });
+  it("reads JPEG size from the SOF segment", () => {
+    // SOI, APP0 (2-byte body), SOF0 with height 3 and width 5, EOI.
+    const jpeg = new Uint8Array([
+      0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x0b,
+      0x08, 0x00, 0x03, 0x00, 0x05, 0x01, 0x01, 0x11, 0x00, 0xff, 0xd9,
+    ]);
+    expect(validateImage(jpeg)).toEqual({
+      mime: "image/jpeg",
+      width: 5,
+      height: 3,
+    });
+    expect(() => validateImage(jpeg.slice(0, 8))).toThrow(ApiError);
+  });
   it("hashes reply tokens without preserving plaintext", async () => {
     const t = "private-reply-token";
     const h = await hash(t);

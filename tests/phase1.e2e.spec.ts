@@ -381,7 +381,11 @@ test.describe.serial("Phase 1 integrated flow", () => {
     await expect(
       page.getByRole("button", { name: "お気に入り", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("checkbox")).not.toBeChecked();
+    await expect(
+      page.getByRole("checkbox", {
+        name: "この感想の第三者公開を許可する（任意）",
+      }),
+    ).not.toBeChecked();
     await page
       .getByRole("textbox", { name: "メッセージ（任意）" })
       .fill("スマートフォンからの便りです。");

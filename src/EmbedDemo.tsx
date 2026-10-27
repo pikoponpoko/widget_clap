@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, Copy, Inbox } from "lucide-react";
 import { embedCode } from "./embed-code";
 import { cleanTipLabel, defaultTipLabel } from "./page-context";
-const slug = "kazuki";
+const slug = "sample";
 // The demo shows three pages on one screen, so each copy names its page explicitly.
 function EmbedExample({
   path,

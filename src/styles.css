@@ -189,6 +189,7 @@ small {
   margin: 12px 0;
   color: #282828;
   overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 .loading-text {
   padding: 30px;
@@ -1572,7 +1573,8 @@ small {
   align-items: center;
   margin-bottom: 10px;
 }
-.support-widget textarea {
+.support-widget textarea,
+.support-widget .sender-name-input {
   font-size: 11px;
   min-height: 104px;
   border-color: #e6e6e6;
@@ -1629,19 +1631,21 @@ small {
   padding-top: 8px;
 }
 .thank-art {
-  height: 150px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #767676;
-  background: #f8f8f8;
-  border-radius: 10px;
   margin-bottom: 24px;
 }
 .thank-art img {
-  max-height: 100%;
+  display: block;
   max-width: 100%;
-  object-fit: contain;
+  height: auto;
+  margin: 0 auto;
+}
+.thank-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.9;
+  margin: 0 0 20px;
 }
 .thank-you h1 {
   font-size: 23px;
@@ -2888,4 +2892,59 @@ html.embed-document {
   order: 0;
   width: auto;
   margin-left: 0;
+}
+.widget-presets .btn.active,
+.widget-presets .btn.active:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--white);
+}
+.upload-tile.dragging {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.sender-name {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 6px;
+}
+.sender-name + .message-full {
+  padding-top: 8px;
+}
+.support-widget .sender-name-input {
+  min-height: 0;
+  margin-bottom: 16px;
+}
+.support-widget .sender-name-input {
+  width: 100%;
+}
+.thank-stage .preview-widget-note {
+  margin-top: 0;
+}
+.widget-wrap.thank-stage.embedded,
+.thank-stage.embedded .support-widget {
+  max-width: none;
+}
+.thank-stage.embedded .support-widget > :not(.thank-art) {
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.reply-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+.widget-logo {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-bottom: 20px;
+}
+.asset-item[draggable="true"] {
+  cursor: grab;
+}
+.asset-item.dragging {
+  opacity: 0.4;
 }

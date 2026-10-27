@@ -13,6 +13,8 @@ export interface Project {
   reply_enabled: number;
   tip_enabled: number;
   thanks_mode: "fixed" | "random";
+  thanks_order: "random" | "sequential" | "fixed";
+  thanks_message: string;
   tip_url: string;
   tip_legal_checked: number;
   tip_terms_checked: number;
@@ -32,6 +34,8 @@ export interface Message {
   blocked: number;
   page_url: string;
   page_title: string;
+  sender_name: string;
+  reply_wanted: number | null;
 }
 export interface Asset {
   id: string;
@@ -42,4 +46,5 @@ export interface Asset {
   size: number;
   name: string;
   created_at: string;
+  sort_order: number;
 }

@@ -27,10 +27,13 @@ const tables = {
     "reply_enabled",
     "tip_enabled",
     "thanks_mode",
+    "thanks_order",
+    "thanks_message",
     "tip_url",
     "tip_legal_checked",
     "tip_terms_checked",
     "tip_privacy_checked",
+    "ng_words",
     "created_at",
   ],
   claps: [
@@ -40,6 +43,7 @@ const tables = {
     "dedupe_key",
     "page_url",
     "page_title",
+    "visitor",
   ],
   messages: [
     "id",
@@ -53,6 +57,8 @@ const tables = {
     "blocked",
     "page_url",
     "page_title",
+    "sender_name",
+    "reply_wanted",
   ],
   replies: ["id", "message_id", "body", "created_at"],
   assets: [
@@ -64,6 +70,7 @@ const tables = {
     "size",
     "name",
     "created_at",
+    "sort_order",
   ],
 };
 if ((await stat(input)).size > 50 * 1024 * 1024) fail("Backup exceeds 50MB");
@@ -74,6 +81,22 @@ if (Array.isArray(data.projects))
     thanks_enabled: p.thanks_enabled ?? 1,
     reply_enabled: p.reply_enabled ?? 1,
     tip_enabled: p.tip_enabled ?? 0,
+    thanks_order: p.thanks_order ?? p.thanks_mode ?? "random",
+    thanks_message: p.thanks_message ?? "",
+    ng_words: p.ng_words ?? "[]",
+  }));
+if (Array.isArray(data.claps))
+  data.claps = data.claps.map((c) => ({ ...c, visitor: c.visitor ?? "" }));
+if (Array.isArray(data.assets))
+  data.assets = data.assets.map((a) => ({
+    ...a,
+    sort_order: a.sort_order ?? 0,
+  }));
+if (Array.isArray(data.messages))
+  data.messages = data.messages.map((m) => ({
+    ...m,
+    sender_name: m.sender_name ?? "",
+    reply_wanted: m.reply_wanted ?? null,
   }));
 for (const table of ["claps", "messages"])
   if (Array.isArray(data[table]))
@@ -127,7 +150,7 @@ const images = [];
 for (const a of data.assets) {
   if (
     !/^(public|restored)\/[a-f0-9-]{36}$/.test(a.storage_key) ||
-    !["image/png", "image/gif", "image/webp"].includes(a.mime) ||
+    !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(a.mime) ||
     typeof a.data !== "string" ||
     !/^[A-Za-z0-9+/]*={0,2}$/.test(a.data)
   )

@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { api, date, dateTime, downloadEndpoint, send, useApi } from "./api";
 import { defaultPrint, type PrintOptions } from "./print-options";
+import { collectImages } from "./image-files";
 import type { Asset, HourStats, Message, Project, Stats } from "./types";
 const jstToday = (offsetDays = 0) =>
   new Date(Date.now() + 9 * 3600000 - offsetDays * 86400000)
@@ -709,7 +710,6 @@ export default function App() {
                     </span>
                   </div>
                   <h2>{p.title}</h2>
-                  <p>{p.description || "まだ紹介文はありません。"}</p>
                   <div className="project-totals">
                     <span>
                       <ThumbsUp size={15} />
@@ -841,6 +841,7 @@ function InboxList({
     (m) =>
       !search ||
       m.body.includes(search) ||
+      (m.sender_name || "").includes(search) ||
       (m.page_title || m.project_title).includes(search),
   );
   return (
@@ -1001,8 +1002,16 @@ function InboxList({
                     {!!m.publication_consent && (
                       <span className="consent-badge">公開許可あり</span>
                     )}
+                    {m.reply_wanted != null && (
+                      <span className="consent-badge">
+                        {m.reply_wanted ? "返事希望" : "返事不要"}
+                      </span>
+                    )}
                     <time>{dateTime(m.created_at)}</time>
                   </div>
+                  {m.sender_name && (
+                    <b className="sender-name">{m.sender_name}</b>
+                  )}
                   <p>{m.body}</p>
                   <span className="reply-status">
                     {m.reply_body ? (
@@ -1109,7 +1118,13 @@ function MessageModal({
           <time>
             {date(m.created_at)} · {dateTime(m.created_at)}
           </time>
+          {m.reply_wanted != null && (
+            <span className="consent-badge">
+              {m.reply_wanted ? "返事希望" : "返事不要"}
+            </span>
+          )}
         </div>
+        {m.sender_name && <b className="sender-name">{m.sender_name}</b>}
         <div className="message-full">{m.body}</div>
         <div className="consent-note">
           <ShieldCheck size={14} />
@@ -1270,13 +1285,36 @@ const blankProject = {
   thanks_enabled: true,
   reply_enabled: true,
   tip_enabled: false,
-  thanks_mode: "random" as "random" | "fixed",
+  thanks_order: "random" as "random" | "sequential" | "fixed",
+  thanks_message: "",
   tip_url: "",
   tip_legal_checked: false,
   tip_terms_checked: false,
   tip_privacy_checked: false,
   ng_words: [] as string[],
 };
+// Accepts full page URLs too; only the origin is allowed to embed.
+function toOrigin(line: string) {
+  const s = line.trim();
+  try {
+    return s ? new URL(s).origin : "";
+  } catch {
+    return s;
+  }
+}
+function presetOf(f: {
+  clap_enabled: unknown;
+  message_enabled: unknown;
+  tip_enabled: unknown;
+}) {
+  const clap = !!f.clap_enabled,
+    message = !!f.message_enabled,
+    tip = !!f.tip_enabled;
+  if (clap && message && !tip) return "message";
+  if (clap && !message) return tip ? "clap-tip" : "clap";
+  if (!clap && !message && tip) return "tip";
+  return "";
+}
 function ProjectModal({
   project,
   tipEnabled,
@@ -1307,7 +1345,8 @@ function ProjectModal({
           reply_enabled:
             project.reply_enabled !== false && project.reply_enabled !== 0,
           tip_enabled: !!project.tip_enabled,
-          thanks_mode: project.thanks_mode,
+          thanks_order: project.thanks_order,
+          thanks_message: project.thanks_message || "",
           tip_url: project.tip_url || "",
           tip_legal_checked: !!project.tip_legal_checked,
           tip_terms_checked: !!project.tip_terms_checked,
@@ -1321,7 +1360,10 @@ function ProjectModal({
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("settings"),
     [embedTip, setEmbedTip] = useState(false),
-    [embedTipLabel, setEmbedTipLabel] = useState("");
+    [embedTipLabel, setEmbedTipLabel] = useState(""),
+    [dropKind, setDropKind] = useState(""),
+    [dragId, setDragId] = useState(""),
+    [order, setOrder] = useState<string[] | null>(null);
   const assets = useApi<Asset[]>(
     project === "new"
       ? "/owner/projects/new/assets"
@@ -1338,10 +1380,9 @@ function ProjectModal({
         project === "new" ? "/owner/projects" : "/owner/projects/" + project.id,
         {
           ...form,
-          allowed_origins: origins
-            .split("\n")
-            .map((s) => s.trim())
-            .filter(Boolean),
+          allowed_origins: [
+            ...new Set(origins.split("\n").map(toOrigin).filter(Boolean)),
+          ],
           ng_words: [
             ...new Set(
               ngWords
@@ -1361,25 +1402,82 @@ function ProjectModal({
       setBusy(false);
     }
   }
-  async function upload(file: File, kind: "button" | "thanks") {
+  async function upload(
+    source: FileList | DataTransfer,
+    kind: "button" | "thanks",
+  ) {
+    if (project === "new" || busy) return;
     setBusy(true);
     setError("");
+    const failed: string[] = [];
+    let added = 0;
     try {
-      if (file.size > 2097152) throw new Error("画像は2MB以下にしてください。");
-      if (project === "new") return;
-      await api("/owner/projects/" + project.id + "/assets?kind=" + kind, {
-        method: "POST",
-        body: file,
-        headers: { "Content-Type": "application/octet-stream" },
-      });
-      assets.refresh();
-      notify("画像を登録しました");
+      const files = await collectImages(source);
+      if (!files.length)
+        throw new Error("PNG/APNG・JPG・GIF・WebPの画像が見つかりません。");
+      const previous =
+        kind === "button"
+          ? (assets.data ?? []).filter((a) => a.kind === "button")
+          : [];
+      // Only one button image is allowed, so the current one makes way first.
+      for (const a of previous)
+        await api("/owner/assets/" + a.id, { method: "DELETE" });
+      for (const file of kind === "button" ? files.slice(0, 1) : files) {
+        try {
+          if (file.size > 2097152)
+            throw new Error("画像は2MB以下にしてください。");
+          await api("/owner/projects/" + project.id + "/assets?kind=" + kind, {
+            method: "POST",
+            body: file,
+            headers: { "Content-Type": "application/octet-stream" },
+          });
+          added++;
+        } catch (e) {
+          failed.push(file.name + ": " + (e as Error).message);
+          if (/上限/.test((e as Error).message)) break;
+        }
+      }
+      if (added) notify(added + "枚の画像を登録しました");
+      if (failed.length) setError(failed.join("\n"));
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      assets.refresh();
       setBusy(false);
     }
   }
+  const sortedAssets = (kind: "button" | "thanks") => {
+    const list = (assets.data ?? []).filter((a) => a.kind === kind);
+    return kind === "thanks" && order
+      ? [...list].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+      : list;
+  };
+  async function saveOrder() {
+    setDragId("");
+    if (project === "new" || !order) return;
+    const before = sortedAssets("thanks").map((a) => a.id);
+    const unchanged =
+      (assets.data ?? [])
+        .filter((a) => a.kind === "thanks")
+        .map((a) => a.id)
+        .join() === before.join();
+    if (unchanged) return setOrder(null);
+    try {
+      await send(
+        "/owner/projects/" + project.id + "/assets/order",
+        { ids: before },
+        "PUT",
+      );
+      notify("並び順を保存しました");
+    } catch (e) {
+      setError((e as Error).message);
+      setOrder(null);
+    }
+    assets.refresh();
+  }
+  useEffect(() => {
+    if (!dragId) setOrder(null);
+  }, [assets.data]);
   const widgetUrl =
     location.origin +
     "/widget/" +
@@ -1450,33 +1548,14 @@ function ProjectModal({
               </label>
             </div>
             <label>
-              ひとこと紹介
-              <input
-                maxLength={240}
-                value={form.description}
-                onChange={(e) => set("description", e.target.value)}
-              />
-            </label>
-            <label>
-              作品ページURL
-              <input
-                type="url"
-                placeholder="https://kazukisekiguchi.com/..."
-                value={form.site_url}
-                onChange={(e) => set("site_url", e.target.value)}
-              />
-            </label>
-            <label>
               埋め込みを許可するサイト
               <textarea
                 rows={3}
-                placeholder={"https://kazukisekiguchi.com\nhttps://example.com"}
+                placeholder={"https://example.com\nhttps://www.example.com"}
                 value={origins}
                 onChange={(e) => setOrigins(e.target.value)}
               />
-              <small>
-                オリジンを1行ずつ。末尾スラッシュ・ページパスは不要です。
-              </small>
+              <small>1行に1サイト。</small>
             </label>
             <label>
               NGキーワード
@@ -1498,7 +1577,10 @@ function ProjectModal({
                 ].map(([key, label]) => (
                   <button
                     type="button"
-                    className="btn"
+                    className={
+                      "btn" + (presetOf(form) === key ? " active" : "")
+                    }
+                    aria-pressed={presetOf(form) === key}
                     key={key}
                     onClick={() =>
                       setForm((f) => ({
@@ -1539,14 +1621,24 @@ function ProjectModal({
                 </label>
               ))}
               <label className="toggle-row">
-                <span>お礼イラストの表示</span>
+                <span>お礼イラストの表示順</span>
                 <select
-                  value={form.thanks_mode}
-                  onChange={(e) => set("thanks_mode", e.target.value)}
+                  value={form.thanks_order}
+                  onChange={(e) => set("thanks_order", e.target.value)}
                 >
                   <option value="random">ランダム</option>
-                  <option value="fixed">最初に登録した画像</option>
+                  <option value="sequential">順番</option>
+                  <option value="fixed">最初に登録した画像のみ</option>
                 </select>
+              </label>
+              <label>
+                お礼の一言
+                <textarea
+                  rows={2}
+                  maxLength={200}
+                  value={form.thanks_message}
+                  onChange={(e) => set("thanks_message", e.target.value)}
+                />
               </label>
             </div>
             <details className="tip-settings">
@@ -1610,7 +1702,7 @@ function ProjectModal({
         {tab === "images" && (
           <div className="images-settings">
             <p className="muted">
-              PNG/APNG・GIF・WebP、各2MB・4096px以下。SVGは受け付けません。画像は訪問者に公開されます。
+              PNG/APNG・JPG・GIF・WebP、各2MB・4096px以下。複数ファイル・フォルダ・zipはドロップで一括追加できます。SVGは受け付けません。画像は訪問者に公開されます。
             </p>
             {(["button", "thanks"] as const).map((kind) => (
               <section key={kind}>
@@ -1619,49 +1711,85 @@ function ProjectModal({
                   <small>{kind === "button" ? "1枚" : "最大20枚"}</small>
                 </h3>
                 <div className="asset-grid">
-                  {assets.data
-                    ?.filter((a) => a.kind === kind)
-                    .map((a) => (
-                      <div className="asset-item" key={a.id}>
-                        <img
-                          src={assetUrl(a.id)}
-                          alt={kind === "button" ? "ボタン画像" : "お礼画像"}
-                        />
-                        <button
-                          type="button"
-                          className="icon-button"
-                          disabled={busy}
-                          aria-label="画像を削除"
-                          onClick={async () => {
-                            if (!confirm("この公開画像を削除しますか？"))
-                              return;
-                            setBusy(true);
-                            try {
-                              await api("/owner/assets/" + a.id, {
-                                method: "DELETE",
-                              });
-                              assets.refresh();
-                            } catch (e) {
-                              setError((e as Error).message);
-                            } finally {
-                              setBusy(false);
-                            }
-                          }}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    ))}
-                  <label className="upload-tile">
+                  {sortedAssets(kind).map((a) => (
+                    <div
+                      className={
+                        "asset-item" + (dragId === a.id ? " dragging" : "")
+                      }
+                      key={a.id}
+                      draggable={kind === "thanks" && !busy}
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        setDragId(a.id);
+                        setOrder(sortedAssets("thanks").map((x) => x.id));
+                      }}
+                      onDragOver={(e) => {
+                        if (!dragId || kind !== "thanks") return;
+                        e.preventDefault();
+                        if (dragId !== a.id)
+                          setOrder((o) => {
+                            const ids = (o ?? []).filter((x) => x !== dragId);
+                            ids.splice(ids.indexOf(a.id), 0, dragId);
+                            return ids;
+                          });
+                      }}
+                      onDrop={(e) => e.preventDefault()}
+                      onDragEnd={saveOrder}
+                    >
+                      <img
+                        src={assetUrl(a.id)}
+                        alt={kind === "button" ? "ボタン画像" : "お礼画像"}
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        disabled={busy}
+                        aria-label="画像を削除"
+                        onClick={async () => {
+                          if (!confirm("この公開画像を削除しますか？")) return;
+                          setBusy(true);
+                          try {
+                            await api("/owner/assets/" + a.id, {
+                              method: "DELETE",
+                            });
+                            assets.refresh();
+                          } catch (e) {
+                            setError((e as Error).message);
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
+                  <label
+                    className={
+                      "upload-tile" + (dropKind === kind ? " dragging" : "")
+                    }
+                    onDragOver={(e) => {
+                      if (dragId) return;
+                      e.preventDefault();
+                      setDropKind(kind);
+                    }}
+                    onDragLeave={() => setDropKind("")}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDropKind("");
+                      if (!dragId) upload(e.dataTransfer, kind);
+                    }}
+                  >
                     <Plus size={22} />
-                    <span>画像を追加</span>
+                    <span>{busy ? "追加しています…" : "画像を追加"}</span>
                     <input
                       type="file"
-                      accept="image/png,image/apng,image/gif,image/webp"
+                      accept="image/png,image/apng,image/jpeg,image/gif,image/webp,.zip,application/zip"
+                      multiple={kind === "thanks"}
                       disabled={busy}
                       onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) upload(f, kind);
+                        if (e.target.files?.length)
+                          upload(e.target.files, kind);
                         e.target.value = "";
                       }}
                     />

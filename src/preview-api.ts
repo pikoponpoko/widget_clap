@@ -18,9 +18,9 @@ interface Store {
   }[];
   assets: PreviewAsset[];
 }
-const key = "hakushu-browser-preview-v2";
+const key = "hakushu-browser-preview-v3";
 function initial(): Store {
-  const rows = [["kazuki", "kazukisekiguchi.com", ""]];
+  const rows = [["sample", "example.com", ""]];
   return {
     version: 1,
     projects: rows.map(([id, title, description]) => ({
@@ -28,15 +28,16 @@ function initial(): Store {
       title,
       description,
       slug: id,
-      site_url: "https://kazukisekiguchi.com",
-      allowed_origins: ["https://kazukisekiguchi.com"],
+      site_url: "https://example.com",
+      allowed_origins: ["https://example.com"],
       clap_enabled: true,
       message_enabled: true,
       favorite_enabled: true,
       thanks_enabled: true,
       reply_enabled: true,
       tip_enabled: false,
-      thanks_mode: "random",
+      thanks_order: "random",
+      thanks_message: "",
       tip_url: "",
       tip_legal_checked: false,
       tip_terms_checked: false,
@@ -243,12 +244,24 @@ export async function previewRequest(
       project_id: pr.id,
       project_title: pr.title,
       ...previewPage(data),
+      sender_name: String(data.sender_name || "")
+        .replace(/[\u0000-\u001F\u007F]/g, " ")
+        .trim()
+        .slice(0, 50),
+      reply_wanted:
+        typeof data.reply_wanted === "boolean"
+          ? Number(data.reply_wanted)
+          : null,
       body: data.body.trim(),
       created_at: new Date().toISOString(),
       read_at: null,
       publication_consent: data.publication_consent === true ? 1 : 0,
       blocked: (pr.ng_words || []).some(
-        (w) => w && normalizeWord(data.body).includes(normalizeWord(w)),
+        (w) =>
+          w &&
+          normalizeWord(
+            String(data.sender_name || "") + "\n" + data.body,
+          ).includes(normalizeWord(w)),
       )
         ? 1
         : 0,
@@ -500,6 +513,19 @@ export async function previewRequest(
       }),
     };
   }
+  m = p.match(/^\/owner\/projects\/([^/]+)\/assets\/order$/);
+  if (m && method === "PUT") {
+    const ids: string[] = Array.isArray(data.ids) ? data.ids : [];
+    const rank = (id: string) => {
+      const i = ids.indexOf(id);
+      return i < 0 ? ids.length : i;
+    };
+    const mine = s.assets.filter((a) => a.project_id === m![1]);
+    const others = s.assets.filter((a) => a.project_id !== m![1]);
+    s.assets = [...others, ...mine.sort((a, b) => rank(a.id) - rank(b.id))];
+    save(s);
+    return { ok: true };
+  }
   m = p.match(/^\/owner\/projects\/([^/]+)\/assets$/);
   if (m) {
     if (method === "GET") return assets(m[1]);
@@ -507,11 +533,15 @@ export async function previewRequest(
     const file = options.body as Blob;
     if (file.size > 2097152) fail("画像は2MB以下にしてください。");
     if (
-      !["image/png", "image/apng", "image/gif", "image/webp"].includes(
-        file.type,
-      )
+      ![
+        "image/png",
+        "image/apng",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+      ].includes(file.type)
     )
-      fail("PNG/APNG・GIF・WebPを選んでください。");
+      fail("PNG/APNG・JPG・GIF・WebPを選んでください。");
     const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = "";
     for (let i = 0; i < bytes.length; i += 8192)
@@ -577,7 +607,9 @@ export async function previewDownload(path: string): Promise<Blob> {
         "project_title",
         "page_title",
         "page_url",
+        "sender_name",
         "body",
+        "reply_wanted",
         "created_at",
         "publication_consent",
         "reply_body",

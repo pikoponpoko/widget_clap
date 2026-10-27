@@ -18,7 +18,7 @@ export default function PreviewHome() {
           <h1>Hakushu</h1>
         </section>
         <div className="preview-home-widget">
-          <Widget slug="kazuki" embedded={false} />
+          <Widget slug="sample" embedded={false} />
         </div>
       </main>
       <footer>Hakushu · ブラウザ体験版</footer>

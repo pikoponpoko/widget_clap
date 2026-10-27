@@ -416,8 +416,9 @@ export async function previewRequest(
     const projectId = u.searchParams.get("project"),
       from =
         u.searchParams.get("from") ||
-        new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10),
-      to = u.searchParams.get("to") || new Date().toISOString().slice(0, 10);
+        jst(new Date(Date.now() - 29 * 86400000).toISOString()).slice(0, 10),
+      to =
+        u.searchParams.get("to") || jst(new Date().toISOString()).slice(0, 10);
     if (from > to || (Date.parse(to) - Date.parse(from)) / 86400000 > 365)
       fail("日付の範囲は366日以内にしてください。");
     const pageUrl = u.searchParams.get("page") || "";

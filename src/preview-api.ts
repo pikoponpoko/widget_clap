@@ -36,7 +36,8 @@ function initial(): Store {
       thanks_enabled: true,
       reply_enabled: true,
       tip_enabled: false,
-      thanks_mode: "random",
+      thanks_order: "random",
+      thanks_message: "",
       tip_url: "",
       tip_legal_checked: false,
       tip_terms_checked: false,
@@ -243,12 +244,20 @@ export async function previewRequest(
       project_id: pr.id,
       project_title: pr.title,
       ...previewPage(data),
+      sender_name: String(data.sender_name || "")
+        .replace(/[\u0000-\u001F\u007F]/g, " ")
+        .trim()
+        .slice(0, 50),
       body: data.body.trim(),
       created_at: new Date().toISOString(),
       read_at: null,
       publication_consent: data.publication_consent === true ? 1 : 0,
       blocked: (pr.ng_words || []).some(
-        (w) => w && normalizeWord(data.body).includes(normalizeWord(w)),
+        (w) =>
+          w &&
+          normalizeWord(
+            String(data.sender_name || "") + "\n" + data.body,
+          ).includes(normalizeWord(w)),
       )
         ? 1
         : 0,
@@ -581,6 +590,7 @@ export async function previewDownload(path: string): Promise<Blob> {
         "project_title",
         "page_title",
         "page_url",
+        "sender_name",
         "body",
         "created_at",
         "publication_consent",

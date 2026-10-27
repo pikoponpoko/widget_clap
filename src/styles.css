@@ -1573,7 +1573,8 @@ small {
   align-items: center;
   margin-bottom: 10px;
 }
-.support-widget textarea {
+.support-widget textarea,
+.support-widget .sender-name-input {
   font-size: 11px;
   min-height: 104px;
   border-color: #e6e6e6;
@@ -1630,19 +1631,22 @@ small {
   padding-top: 8px;
 }
 .thank-art {
-  height: 150px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #767676;
-  background: #f8f8f8;
-  border-radius: 10px;
   margin-bottom: 24px;
 }
 .thank-art img {
-  max-height: 100%;
-  max-width: 100%;
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 62vh;
   object-fit: contain;
+}
+.thank-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.9;
+  margin: 0 0 20px;
 }
 .thank-you h1 {
   font-size: 23px;
@@ -2899,4 +2903,23 @@ html.embed-document {
 .upload-tile.dragging {
   border-color: var(--ink);
   color: var(--ink);
+}
+.sender-name {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 6px;
+}
+.sender-name + .message-full {
+  padding-top: 8px;
+}
+.support-widget .sender-name-input {
+  min-height: 0;
+  margin-bottom: 16px;
+}
+.support-widget .sender-name-input {
+  width: 100%;
+}
+.thank-stage .preview-widget-note {
+  margin-top: 0;
 }

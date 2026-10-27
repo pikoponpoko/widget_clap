@@ -137,6 +137,11 @@ export const messageSchema = z
     turnstile: z.string().max(4096).optional(),
     page_url: z.string().max(2000).default(""),
     page_title: z.string().max(500).default(""),
+    sender_name: z
+      .string()
+      .transform((s) => s.replace(/[\u0000-\u001F\u007F]/g, " ").trim())
+      .pipe(z.string().max(50))
+      .default(""),
   })
   .strict();
 export const clapSchema = z
@@ -203,7 +208,8 @@ export const projectSchema = z
     thanks_enabled: z.boolean().default(true),
     reply_enabled: z.boolean().default(true),
     tip_enabled: z.boolean().default(false),
-    thanks_mode: z.enum(["fixed", "random"]).default("random"),
+    thanks_order: z.enum(["random", "sequential", "fixed"]).default("random"),
+    thanks_message: z.string().trim().max(200).default(""),
     tip_url: z.union([https, z.literal("")]).default(""),
     tip_legal_checked: z.boolean().default(false),
     tip_terms_checked: z.boolean().default(false),

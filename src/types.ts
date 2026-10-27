@@ -20,7 +20,8 @@ export interface Project {
   thanks_enabled: boolean | number;
   reply_enabled: boolean | number;
   tip_enabled: boolean | number;
-  thanks_mode: "fixed" | "random";
+  thanks_order: "random" | "sequential" | "fixed";
+  thanks_message: string;
   tip_url: string | null;
   tip_legal_checked: boolean | number;
   tip_terms_checked: boolean | number;
@@ -37,6 +38,7 @@ export interface Message {
   project_title: string;
   page_url?: string;
   page_title?: string;
+  sender_name?: string;
   body: string;
   created_at: string;
   read_at: string | null;

@@ -38,7 +38,7 @@ test("only the tiny button is embedded; click saves applause before optional fee
   await frame.getByRole("button", { name: "拍手を送る", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(
-    thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
+    thanksFrame(page).getByRole("img", { name: "作者からのお礼イラスト" }),
   ).toBeVisible();
   await expect(
     thanksFrame(page).getByAltText("作者からのお礼イラスト"),
@@ -82,7 +82,7 @@ test("mobile demo retains layout and allows closing the thank-you without a mess
     .getByRole("button", { name: "拍手を送る", exact: true })
     .click();
   await expect(
-    thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
+    thanksFrame(page).getByRole("img", { name: "作者からのお礼イラスト" }),
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/embed-mobile-thanks.png",
@@ -196,7 +196,7 @@ test("cross-origin embedding works and ignores forged host messages", async ({
       .getByRole("button", { name: "拍手を送る", exact: true })
       .click();
     await expect(
-      thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
+      thanksFrame(page).getByRole("img", { name: "作者からのお礼イラスト" }),
     ).toBeVisible();
     expect((await page.locator("#after").boundingBox())?.y).toBe(before?.y);
     await page.getByRole("button", { name: "お礼画面を閉じる" }).click();
@@ -298,7 +298,7 @@ test("the embedded button shows the GIF button image at its own size and records
   expect(box!.height).toBe(170);
   await image.click();
   await expect(
-    thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
+    thanksFrame(page).getByRole("img", { name: "作者からのお礼イラスト" }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -324,7 +324,7 @@ test("one code serves many pages: claps and messages are listed per page in the 
       .getByRole("button", { name: "拍手を送る", exact: true })
       .click();
     await expect(
-      thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
+      thanksFrame(page).getByRole("img", { name: "作者からのお礼イラスト" }),
     ).toBeVisible();
     if (n === 2) {
       await thanksFrame(page)
@@ -368,7 +368,7 @@ test("the tip-enabled demo page shows the unconnected tip placeholder only there
     .getByRole("button", { name: "拍手を送る", exact: true })
     .click();
   await expect(
-    thanksFrame(page).getByRole("heading", { name: "拍手しました" }),
+    thanksFrame(page).getByRole("img", { name: "作者からのお礼イラスト" }),
   ).toBeVisible();
   await expect(thanksFrame(page).getByText("決済リンク未設定")).toHaveCount(0);
 });

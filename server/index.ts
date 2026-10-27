@@ -73,7 +73,8 @@ function safeProject(p: Project, env: Env, assets: unknown[]) {
     thanks_enabled: !!p.thanks_enabled,
     reply_enabled: !!p.reply_enabled,
     tip_enabled: !!p.tip_enabled,
-    thanks_mode: p.thanks_mode,
+    thanks_order: p.thanks_order,
+    thanks_message: p.thanks_message,
     tip_url: tipVisible(p as unknown as Record<string, unknown>, env)
       ? p.tip_url
       : null,
@@ -188,7 +189,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
   await limit(c.env, `message:${key}`, 5, 3600);
   // Global capacity bounds backups and prevents unbounded D1 growth in this single-owner edition.
   const result = await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,publication_consent,reply_token_hash,dedupe_key,page_url,page_title,blocked) SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
+    "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,publication_consent,reply_token_hash,dedupe_key,page_url,page_title,sender_name,blocked) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
   )
     .bind(
       id(),
@@ -200,7 +201,13 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
       dedupe,
       page.page_url,
       page.page_title,
-      hasNgWord(data.body, JSON.parse(p.ng_words || "[]")) ? 1 : 0,
+      data.sender_name,
+      hasNgWord(
+        data.sender_name + "\n" + data.body,
+        JSON.parse(p.ng_words || "[]"),
+      )
+        ? 1
+        : 0,
       new TextEncoder().encode(data.body).length,
     )
     .run();
@@ -356,7 +363,7 @@ app.get("/api/owner/messages", async (c) => {
   const clause = where.join(" AND ");
   const [rows, total, months] = await c.env.DB.batch([
     c.env.DB.prepare(
-      `SELECT m.id,m.project_id,m.body,m.created_at,m.page_url,m.page_title,m.read_at,m.publication_consent,m.blocked,(m.reply_token_hash IS NOT NULL) AS reply_link_active,p.title AS project_title,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause} ORDER BY m.created_at DESC,m.id DESC LIMIT 50 OFFSET ?`,
+      `SELECT m.id,m.project_id,m.body,m.sender_name,m.created_at,m.page_url,m.page_title,m.read_at,m.publication_consent,m.blocked,(m.reply_token_hash IS NOT NULL) AS reply_link_active,p.title AS project_title,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause} ORDER BY m.created_at DESC,m.id DESC LIMIT 50 OFFSET ?`,
     ).bind(...values, page * 50),
     c.env.DB.prepare(
       `SELECT count(*) AS total FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause}`,
@@ -627,7 +634,7 @@ app.get("/api/owner/stats/hours", async (c) => {
 app.get("/api/owner/export", async (c) => {
   const project = c.req.query("project");
   const sql =
-    "SELECT m.id,m.project_id,p.title AS project_title,m.page_url,m.page_title,m.body,m.created_at,m.publication_consent,m.blocked,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE p.owner_id=?" +
+    "SELECT m.id,m.project_id,p.title AS project_title,m.page_url,m.page_title,m.sender_name,m.body,m.created_at,m.publication_consent,m.blocked,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE p.owner_id=?" +
     (project ? " AND m.project_id=?" : "") +
     " ORDER BY m.created_at,m.id";
   const rows = await c.env.DB.prepare(sql)
@@ -644,6 +651,7 @@ app.get("/api/owner/export", async (c) => {
       "project_title",
       "page_title",
       "page_url",
+      "sender_name",
       "body",
       "created_at",
       "publication_consent",

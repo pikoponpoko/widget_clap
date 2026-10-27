@@ -842,6 +842,7 @@ function InboxList({
     (m) =>
       !search ||
       m.body.includes(search) ||
+      (m.sender_name || "").includes(search) ||
       (m.page_title || m.project_title).includes(search),
   );
   return (
@@ -1004,6 +1005,9 @@ function InboxList({
                     )}
                     <time>{dateTime(m.created_at)}</time>
                   </div>
+                  {m.sender_name && (
+                    <b className="sender-name">{m.sender_name}</b>
+                  )}
                   <p>{m.body}</p>
                   <span className="reply-status">
                     {m.reply_body ? (
@@ -1111,6 +1115,7 @@ function MessageModal({
             {date(m.created_at)} · {dateTime(m.created_at)}
           </time>
         </div>
+        {m.sender_name && <b className="sender-name">{m.sender_name}</b>}
         <div className="message-full">{m.body}</div>
         <div className="consent-note">
           <ShieldCheck size={14} />
@@ -1271,7 +1276,8 @@ const blankProject = {
   thanks_enabled: true,
   reply_enabled: true,
   tip_enabled: false,
-  thanks_mode: "random" as "random" | "fixed",
+  thanks_order: "random" as "random" | "sequential" | "fixed",
+  thanks_message: "",
   tip_url: "",
   tip_legal_checked: false,
   tip_terms_checked: false,
@@ -1321,7 +1327,8 @@ function ProjectModal({
           reply_enabled:
             project.reply_enabled !== false && project.reply_enabled !== 0,
           tip_enabled: !!project.tip_enabled,
-          thanks_mode: project.thanks_mode,
+          thanks_order: project.thanks_order,
+          thanks_message: project.thanks_message || "",
           tip_url: project.tip_url || "",
           tip_legal_checked: !!project.tip_legal_checked,
           tip_terms_checked: !!project.tip_terms_checked,
@@ -1583,14 +1590,24 @@ function ProjectModal({
                 </label>
               ))}
               <label className="toggle-row">
-                <span>お礼イラストの表示</span>
+                <span>お礼イラストの表示順</span>
                 <select
-                  value={form.thanks_mode}
-                  onChange={(e) => set("thanks_mode", e.target.value)}
+                  value={form.thanks_order}
+                  onChange={(e) => set("thanks_order", e.target.value)}
                 >
                   <option value="random">ランダム</option>
-                  <option value="fixed">最初に登録した画像</option>
+                  <option value="sequential">順番</option>
+                  <option value="fixed">最初に登録した画像のみ</option>
                 </select>
+              </label>
+              <label>
+                お礼の一言
+                <textarea
+                  rows={2}
+                  maxLength={200}
+                  value={form.thanks_message}
+                  onChange={(e) => set("thanks_message", e.target.value)}
+                />
               </label>
             </div>
             <details className="tip-settings">

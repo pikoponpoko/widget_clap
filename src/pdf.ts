@@ -120,7 +120,13 @@ export async function makePdf(
     if (options.cropMarks && options.layout === "a4")
       drawMarks(page!, x, y, width, height);
     page!.drawText(
-      fit(card.m.page_title || card.m.project_title, width - 2 * pad, 8),
+      fit(
+        [card.m.sender_name, card.m.page_title || card.m.project_title]
+          .filter(Boolean)
+          .join(" · "),
+        width - 2 * pad,
+        8,
+      ),
       {
         x: x + pad,
         y: y + height - 20,

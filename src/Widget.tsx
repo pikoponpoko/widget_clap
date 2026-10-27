@@ -95,6 +95,7 @@ export function Widget({
       : "button",
   );
   const [body, setBody] = useState(""),
+    [name, setName] = useState(""),
     [consent, setConsent] = useState(false),
     [favorite, setFavorite] = useState(false),
     [busy, setBusy] = useState(false),
@@ -105,7 +106,9 @@ export function Widget({
     [captcha, setCaptcha] = useState(""),
     [captchaReset, setCaptchaReset] = useState(0),
     [website, setWebsite] = useState(""),
-    [thanksIndex, setThanksIndex] = useState(() => Math.random()),
+    [thanksIndex, setThanksIndex] = useState(() =>
+      stage === "button" ? { random: 0, sequence: 0 } : nextThanks(),
+    ),
     [clapBusy, setClapBusy] = useState(false);
   // Favorites are per page when embedded, so one code can serve many works.
   const favoriteKey =
@@ -122,9 +125,19 @@ export function Widget({
       setNotice("このブラウザではお気に入りを保存できません。");
     }
   }, [slug]);
+  // Each showing advances a per-browser counter, used by the "sequential" order.
+  function nextThanks() {
+    const key = "hakushu-thanks:" + slug;
+    let n = 0;
+    try {
+      n = Number(localStorage.getItem(key)) || 0;
+      localStorage.setItem(key, String(n + 1));
+    } catch {}
+    return { random: Math.random(), sequence: n };
+  }
   function open(reason: "clap" | "message" | "favorite") {
     setStage(reason);
-    setThanksIndex(Math.random());
+    setThanksIndex(nextThanks());
   }
   async function anotherClap() {
     if (clapBusy) return;
@@ -135,7 +148,7 @@ export function Widget({
         "/public/projects/" + encodeURIComponent(slug) + "/claps",
         pageContext,
       );
-      setThanksIndex(Math.random());
+      setThanksIndex(nextThanks());
       setStage("clap");
     } catch (e) {
       setNotice((e as Error).message);
@@ -166,6 +179,7 @@ export function Widget({
         "/public/projects/" + encodeURIComponent(slug) + "/messages",
         {
           body,
+          sender_name: name,
           publication_consent: consent,
           request_id: requestId.current,
           website,
@@ -213,7 +227,11 @@ export function Widget({
   const thanks = (p.assets || []).filter((a) => a.kind === "thanks");
   const image = thanks.length
     ? thanks[
-        p.thanks_mode === "fixed" ? 0 : Math.floor(thanksIndex * thanks.length)
+        p.thanks_order === "fixed"
+          ? 0
+          : p.thanks_order === "sequential"
+            ? thanksIndex.sequence % thanks.length
+            : Math.floor(thanksIndex.random * thanks.length)
       ]
     : null;
   const thanksEnabled = p.thanks_enabled !== false && p.thanks_enabled !== 0;
@@ -232,16 +250,15 @@ export function Widget({
             />
           </div>
         )}
-        <h1>
-          {sent
-            ? "送信しました"
-            : stage === "clap"
-              ? "拍手しました"
-              : "メッセージ"}
-        </h1>
-        <p className="widget-description" role="status">
-          {sent || stage === "clap" ? null : p.description}
-        </p>
+        {(stage === "clap" || sent) && p.thanks_message && (
+          <p className="thank-message">{p.thanks_message}</p>
+        )}
+        {(sent || stage !== "clap") && (
+          <h1>{sent ? "送信しました" : "メッセージ"}</h1>
+        )}
+        {!sent && stage !== "clap" && p.description && (
+          <p className="widget-description">{p.description}</p>
+        )}
         {previewMode && (
           <p className="preview-widget-note">
             体験版：このブラウザ内の保存です。作者への送信はありません。
@@ -321,6 +338,17 @@ export function Widget({
         ) : (
           !!p.message_enabled && (
             <form className="optional-message" onSubmit={submit}>
+              <label className="field-label" htmlFor="sender-name">
+                お名前（任意）
+              </label>
+              <input
+                id="sender-name"
+                className="sender-name-input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={50}
+                autoComplete="nickname"
+              />
               <label className="field-label" htmlFor="message">
                 <MessageCircle size={15} />
                 メッセージ（任意）

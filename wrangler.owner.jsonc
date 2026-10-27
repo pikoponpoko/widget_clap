@@ -3,6 +3,8 @@
   "name": "creator-support-widget",
   "main": "server/index.ts",
   "compatibility_date": "2026-10-24",
+  "workers_dev": false,
+  "routes": [{ "pattern": "hakushu.kazukisekiguchi.com", "custom_domain": true }],
   "assets": {
     "directory": "./dist-owner",
     "binding": "ASSETS",
@@ -12,15 +14,19 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "support",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_name": "hakushu",
+      "database_id": "2f993e66-cbcc-4aac-a55f-86f7a39010de",
       "migrations_dir": "migrations",
     },
   ],
   "r2_buckets": [
-    { "binding": "IMAGES", "bucket_name": "creator-support-images" },
-    { "binding": "BACKUPS", "bucket_name": "creator-support-private-backups" },
+    { "binding": "IMAGES", "bucket_name": "hakushu-images" },
+    { "binding": "BACKUPS", "bucket_name": "hakushu-backups" },
   ],
   "triggers": { "crons": ["0 18 * * *"] },
-  "vars": { "ENVIRONMENT": "production", "TIP_LINKS_ENABLED": "false" },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "TIP_LINKS_ENABLED": "false",
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFnTOEUlIaTGKY_h",
+  },
 }

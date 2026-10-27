@@ -135,6 +135,19 @@ export function Widget({
     } catch {}
     return { random: Math.random(), sequence: n };
   }
+  // Widens the host dialog so the illustration can be shown at 100%.
+  function fitDialog(width: number) {
+    const host = new URLSearchParams(location.search).get("parent_origin");
+    if (!host || window.parent === window) return;
+    try {
+      const origin = new URL(host).origin;
+      if (origin === host)
+        window.parent.postMessage(
+          { type: "creator-support:thanks-width", width },
+          origin,
+        );
+    } catch {}
+  }
   function open(reason: "clap" | "message" | "favorite") {
     setStage(reason);
     setThanksIndex(nextThanks());
@@ -247,6 +260,7 @@ export function Widget({
             <img
               src={image ? assetUrl(image.id) : "/thanks.svg"}
               alt="作者からのお礼イラスト"
+              onLoad={(e) => fitDialog(e.currentTarget.naturalWidth)}
             />
           </div>
         )}
@@ -255,9 +269,6 @@ export function Widget({
         )}
         {(sent || stage !== "clap") && (
           <h1>{sent ? "送信しました" : "メッセージ"}</h1>
-        )}
-        {!sent && stage !== "clap" && p.description && (
-          <p className="widget-description">{p.description}</p>
         )}
         {previewMode && (
           <p className="preview-widget-note">

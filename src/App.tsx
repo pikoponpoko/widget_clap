@@ -710,7 +710,6 @@ export default function App() {
                     </span>
                   </div>
                   <h2>{p.title}</h2>
-                  <p>{p.description || "まだ紹介文はありません。"}</p>
                   <div className="project-totals">
                     <span>
                       <ThumbsUp size={15} />
@@ -1284,6 +1283,15 @@ const blankProject = {
   tip_privacy_checked: false,
   ng_words: [] as string[],
 };
+// Accepts full page URLs too; only the origin is allowed to embed.
+function toOrigin(line: string) {
+  const s = line.trim();
+  try {
+    return s ? new URL(s).origin : "";
+  } catch {
+    return s;
+  }
+}
 function presetOf(f: {
   clap_enabled: unknown;
   message_enabled: unknown;
@@ -1360,10 +1368,9 @@ function ProjectModal({
         project === "new" ? "/owner/projects" : "/owner/projects/" + project.id,
         {
           ...form,
-          allowed_origins: origins
-            .split("\n")
-            .map((s) => s.trim())
-            .filter(Boolean),
+          allowed_origins: [
+            ...new Set(origins.split("\n").map(toOrigin).filter(Boolean)),
+          ],
           ng_words: [
             ...new Set(
               ngWords
@@ -1498,23 +1505,6 @@ function ProjectModal({
               </label>
             </div>
             <label>
-              ひとこと紹介
-              <input
-                maxLength={240}
-                value={form.description}
-                onChange={(e) => set("description", e.target.value)}
-              />
-            </label>
-            <label>
-              作品ページURL
-              <input
-                type="url"
-                placeholder="https://example.com/works"
-                value={form.site_url}
-                onChange={(e) => set("site_url", e.target.value)}
-              />
-            </label>
-            <label>
               埋め込みを許可するサイト
               <textarea
                 rows={3}
@@ -1522,9 +1512,7 @@ function ProjectModal({
                 value={origins}
                 onChange={(e) => setOrigins(e.target.value)}
               />
-              <small>
-                オリジンを1行ずつ。末尾スラッシュ・ページパスは不要です。
-              </small>
+              <small>1行に1サイト。</small>
             </label>
             <label>
               NGキーワード

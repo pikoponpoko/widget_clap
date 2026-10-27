@@ -116,6 +116,18 @@
     }
   });
   function receive(event) {
+    // The thank-you frame asks for room to show its illustration at full size.
+    if (
+      host.isConnected &&
+      event.origin === origin &&
+      event.source === content.contentWindow &&
+      event.data &&
+      event.data.type === "creator-support:thanks-width"
+    ) {
+      var w = Math.min(1200, Math.max(0, Number(event.data.width) || 0));
+      dialog.style.width = Math.max(440, w + 50) + "px";
+      return;
+    }
     if (
       !host.isConnected ||
       event.origin !== origin ||
@@ -147,6 +159,7 @@
       return;
     var url = new URL("/widget/" + encodeURIComponent(slug), origin);
     url.searchParams.set("after", data.reason);
+    url.searchParams.set("parent_origin", location.origin);
     withPage(url);
     if (typeof dialog.showModal !== "function") {
       var link = document.createElement("a");
@@ -157,6 +170,7 @@
       shadow.append(link);
       return;
     }
+    dialog.style.width = "";
     content.src = url.href;
     if (!dialog.open) dialog.showModal();
     close.focus();

@@ -32,6 +32,13 @@ npm run build:owner
 npx wrangler deploy --config wrangler.owner.jsonc
 ```
 
+本番は Workers Builds で `main` から自動デプロイします（Worker `creator-support-widget`）。
+
+- Build command: `npm run build:owner`
+- Deploy command: `npx wrangler d1 migrations apply hakushu --remote --config wrangler.owner.jsonc && npx wrangler deploy --config wrangler.owner.jsonc`
+- Preview builds: 無効（本番のD1/R2に接続するため）
+- 「wrangler.jsonc の name を creator-support-widget にする」という提案・自動PRは採用しません。`wrangler.jsonc` は体験版 `widget-clap` 用です。
+
 各リソース名・ID・Worker名は実環境に合わせます。CloudflareアカウントのログインやAPIトークンは通常の安全な認証経路を使います。
 
 ## 投稿・画像の防御

@@ -2926,3 +2926,25 @@ html.embed-document {
 .thank-stage.embedded .support-widget {
   max-width: none;
 }
+.thank-stage.embedded .support-widget > :not(.thank-art) {
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.reply-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+.widget-logo {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-bottom: 20px;
+}
+.asset-item[draggable="true"] {
+  cursor: grab;
+}
+.asset-item.dragging {
+  opacity: 0.4;
+}

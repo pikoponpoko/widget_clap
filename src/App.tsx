@@ -1002,6 +1002,11 @@ function InboxList({
                     {!!m.publication_consent && (
                       <span className="consent-badge">公開許可あり</span>
                     )}
+                    {m.reply_wanted != null && (
+                      <span className="consent-badge">
+                        {m.reply_wanted ? "返事希望" : "返事不要"}
+                      </span>
+                    )}
                     <time>{dateTime(m.created_at)}</time>
                   </div>
                   {m.sender_name && (
@@ -1113,6 +1118,11 @@ function MessageModal({
           <time>
             {date(m.created_at)} · {dateTime(m.created_at)}
           </time>
+          {m.reply_wanted != null && (
+            <span className="consent-badge">
+              {m.reply_wanted ? "返事希望" : "返事不要"}
+            </span>
+          )}
         </div>
         {m.sender_name && <b className="sender-name">{m.sender_name}</b>}
         <div className="message-full">{m.body}</div>
@@ -1351,7 +1361,9 @@ function ProjectModal({
     [tab, setTab] = useState("settings"),
     [embedTip, setEmbedTip] = useState(false),
     [embedTipLabel, setEmbedTipLabel] = useState(""),
-    [dropKind, setDropKind] = useState("");
+    [dropKind, setDropKind] = useState(""),
+    [dragId, setDragId] = useState(""),
+    [order, setOrder] = useState<string[] | null>(null);
   const assets = useApi<Asset[]>(
     project === "new"
       ? "/owner/projects/new/assets"
@@ -1407,6 +1419,9 @@ function ProjectModal({
         kind === "button"
           ? (assets.data ?? []).filter((a) => a.kind === "button")
           : [];
+      // Only one button image is allowed, so the current one makes way first.
+      for (const a of previous)
+        await api("/owner/assets/" + a.id, { method: "DELETE" });
       for (const file of kind === "button" ? files.slice(0, 1) : files) {
         try {
           if (file.size > 2097152)
@@ -1422,10 +1437,6 @@ function ProjectModal({
           if (/上限/.test((e as Error).message)) break;
         }
       }
-      // A new button image replaces the current one.
-      if (kind === "button" && added)
-        for (const a of previous)
-          await api("/owner/assets/" + a.id, { method: "DELETE" });
       if (added) notify(added + "枚の画像を登録しました");
       if (failed.length) setError(failed.join("\n"));
     } catch (e) {
@@ -1435,6 +1446,38 @@ function ProjectModal({
       setBusy(false);
     }
   }
+  const sortedAssets = (kind: "button" | "thanks") => {
+    const list = (assets.data ?? []).filter((a) => a.kind === kind);
+    return kind === "thanks" && order
+      ? [...list].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+      : list;
+  };
+  async function saveOrder() {
+    setDragId("");
+    if (project === "new" || !order) return;
+    const before = sortedAssets("thanks").map((a) => a.id);
+    const unchanged =
+      (assets.data ?? [])
+        .filter((a) => a.kind === "thanks")
+        .map((a) => a.id)
+        .join() === before.join();
+    if (unchanged) return setOrder(null);
+    try {
+      await send(
+        "/owner/projects/" + project.id + "/assets/order",
+        { ids: before },
+        "PUT",
+      );
+      notify("並び順を保存しました");
+    } catch (e) {
+      setError((e as Error).message);
+      setOrder(null);
+    }
+    assets.refresh();
+  }
+  useEffect(() => {
+    if (!dragId) setOrder(null);
+  }, [assets.data]);
   const widgetUrl =
     location.origin +
     "/widget/" +
@@ -1668,44 +1711,65 @@ function ProjectModal({
                   <small>{kind === "button" ? "1枚" : "最大20枚"}</small>
                 </h3>
                 <div className="asset-grid">
-                  {assets.data
-                    ?.filter((a) => a.kind === kind)
-                    .map((a) => (
-                      <div className="asset-item" key={a.id}>
-                        <img
-                          src={assetUrl(a.id)}
-                          alt={kind === "button" ? "ボタン画像" : "お礼画像"}
-                        />
-                        <button
-                          type="button"
-                          className="icon-button"
-                          disabled={busy}
-                          aria-label="画像を削除"
-                          onClick={async () => {
-                            if (!confirm("この公開画像を削除しますか？"))
-                              return;
-                            setBusy(true);
-                            try {
-                              await api("/owner/assets/" + a.id, {
-                                method: "DELETE",
-                              });
-                              assets.refresh();
-                            } catch (e) {
-                              setError((e as Error).message);
-                            } finally {
-                              setBusy(false);
-                            }
-                          }}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    ))}
+                  {sortedAssets(kind).map((a) => (
+                    <div
+                      className={
+                        "asset-item" + (dragId === a.id ? " dragging" : "")
+                      }
+                      key={a.id}
+                      draggable={kind === "thanks" && !busy}
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        setDragId(a.id);
+                        setOrder(sortedAssets("thanks").map((x) => x.id));
+                      }}
+                      onDragOver={(e) => {
+                        if (!dragId || kind !== "thanks") return;
+                        e.preventDefault();
+                        if (dragId !== a.id)
+                          setOrder((o) => {
+                            const ids = (o ?? []).filter((x) => x !== dragId);
+                            ids.splice(ids.indexOf(a.id), 0, dragId);
+                            return ids;
+                          });
+                      }}
+                      onDrop={(e) => e.preventDefault()}
+                      onDragEnd={saveOrder}
+                    >
+                      <img
+                        src={assetUrl(a.id)}
+                        alt={kind === "button" ? "ボタン画像" : "お礼画像"}
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        disabled={busy}
+                        aria-label="画像を削除"
+                        onClick={async () => {
+                          if (!confirm("この公開画像を削除しますか？")) return;
+                          setBusy(true);
+                          try {
+                            await api("/owner/assets/" + a.id, {
+                              method: "DELETE",
+                            });
+                            assets.refresh();
+                          } catch (e) {
+                            setError((e as Error).message);
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
                   <label
                     className={
                       "upload-tile" + (dropKind === kind ? " dragging" : "")
                     }
                     onDragOver={(e) => {
+                      if (dragId) return;
                       e.preventDefault();
                       setDropKind(kind);
                     }}
@@ -1713,7 +1777,7 @@ function ProjectModal({
                     onDrop={(e) => {
                       e.preventDefault();
                       setDropKind("");
-                      upload(e.dataTransfer, kind);
+                      if (!dragId) upload(e.dataTransfer, kind);
                     }}
                   >
                     <Plus size={22} />

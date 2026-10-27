@@ -114,6 +114,7 @@ const message = z
     page_url: z.string().max(500).default(""),
     page_title: z.string().max(200).default(""),
     sender_name: z.string().max(50).default(""),
+    reply_wanted: flag.nullable().default(null),
   })
   .strict();
 const asset = z
@@ -126,6 +127,7 @@ const asset = z
     size: z.number().int().min(1).max(2097152),
     name: z.string().max(120),
     created_at: timestamp,
+    sort_order: z.number().int().min(0).max(1000).default(0),
     data: z.string().max(2800000),
   })
   .strict();

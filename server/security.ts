@@ -131,6 +131,7 @@ export const messageSchema = z
   .object({
     body: text(2000),
     publication_consent: z.boolean().default(false),
+    reply_wanted: z.boolean().nullable().default(null),
     request_id: z.uuid(),
     website: z.string().max(200).default(""),
     started_at: z.number(),
@@ -143,6 +144,9 @@ export const messageSchema = z
       .pipe(z.string().max(50))
       .default(""),
   })
+  .strict();
+export const assetOrderSchema = z
+  .object({ ids: z.array(z.string().max(80)).max(100) })
   .strict();
 export const clapSchema = z
   .object({

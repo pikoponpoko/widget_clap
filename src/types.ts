@@ -39,6 +39,7 @@ export interface Message {
   page_url?: string;
   page_title?: string;
   sender_name?: string;
+  reply_wanted?: number | null;
   body: string;
   created_at: string;
   read_at: string | null;

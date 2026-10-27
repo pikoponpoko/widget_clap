@@ -58,6 +58,7 @@ const tables = {
     "page_url",
     "page_title",
     "sender_name",
+    "reply_wanted",
   ],
   replies: ["id", "message_id", "body", "created_at"],
   assets: [
@@ -69,6 +70,7 @@ const tables = {
     "size",
     "name",
     "created_at",
+    "sort_order",
   ],
 };
 if ((await stat(input)).size > 50 * 1024 * 1024) fail("Backup exceeds 50MB");
@@ -85,10 +87,16 @@ if (Array.isArray(data.projects))
   }));
 if (Array.isArray(data.claps))
   data.claps = data.claps.map((c) => ({ ...c, visitor: c.visitor ?? "" }));
+if (Array.isArray(data.assets))
+  data.assets = data.assets.map((a) => ({
+    ...a,
+    sort_order: a.sort_order ?? 0,
+  }));
 if (Array.isArray(data.messages))
   data.messages = data.messages.map((m) => ({
     ...m,
     sender_name: m.sender_name ?? "",
+    reply_wanted: m.reply_wanted ?? null,
   }));
 for (const table of ["claps", "messages"])
   if (Array.isArray(data[table]))

@@ -16,6 +16,7 @@ import {
   clapSchema,
   normalizePage,
   messageSchema,
+  assetOrderSchema,
   replySchema,
   checkSpam,
   validateImage,
@@ -55,7 +56,7 @@ async function messageBy(env: Env, messageId: string) {
 }
 async function assetList(env: Env, projectId: string) {
   const rows = await env.DB.prepare(
-    "SELECT id,project_id,kind,mime,size,name,created_at FROM assets WHERE project_id=? ORDER BY created_at,id",
+    "SELECT id,project_id,kind,mime,size,name,created_at,sort_order FROM assets WHERE project_id=? ORDER BY sort_order,created_at,id",
   )
     .bind(projectId)
     .all();
@@ -189,7 +190,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
   await limit(c.env, `message:${key}`, 5, 3600);
   // Global capacity bounds backups and prevents unbounded D1 growth in this single-owner edition.
   const result = await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,publication_consent,reply_token_hash,dedupe_key,page_url,page_title,sender_name,blocked) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
+    "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,publication_consent,reply_token_hash,dedupe_key,page_url,page_title,sender_name,reply_wanted,blocked) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
   )
     .bind(
       id(),
@@ -202,6 +203,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
       page.page_url,
       page.page_title,
       data.sender_name,
+      data.reply_wanted === null ? null : Number(data.reply_wanted),
       hasNgWord(
         data.sender_name + "\n" + data.body,
         JSON.parse(p.ng_words || "[]"),
@@ -363,7 +365,7 @@ app.get("/api/owner/messages", async (c) => {
   const clause = where.join(" AND ");
   const [rows, total, months] = await c.env.DB.batch([
     c.env.DB.prepare(
-      `SELECT m.id,m.project_id,m.body,m.sender_name,m.created_at,m.page_url,m.page_title,m.read_at,m.publication_consent,m.blocked,(m.reply_token_hash IS NOT NULL) AS reply_link_active,p.title AS project_title,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause} ORDER BY m.created_at DESC,m.id DESC LIMIT 50 OFFSET ?`,
+      `SELECT m.id,m.project_id,m.body,m.sender_name,m.reply_wanted,m.created_at,m.page_url,m.page_title,m.read_at,m.publication_consent,m.blocked,(m.reply_token_hash IS NOT NULL) AS reply_link_active,p.title AS project_title,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause} ORDER BY m.created_at DESC,m.id DESC LIMIT 50 OFFSET ?`,
     ).bind(...values, page * 50),
     c.env.DB.prepare(
       `SELECT count(*) AS total FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause}`,
@@ -493,7 +495,7 @@ app.post("/api/owner/projects/:id/assets", async (c) => {
   await c.env.IMAGES.put(key, bytes, { httpMetadata: { contentType: v.mime } });
   try {
     const result = await c.env.DB.prepare(
-      "INSERT INTO assets(id,project_id,kind,storage_key,mime,size,name,created_at) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT COALESCE(sum(size),0) FROM assets)+?<=10485760 AND (SELECT count(*) FROM assets)<100 AND (SELECT count(*) FROM assets WHERE project_id=? AND kind=?)<?",
+      "INSERT INTO assets(id,project_id,kind,storage_key,mime,size,name,created_at,sort_order) SELECT ?,?,?,?,?,?,?,?,(SELECT COALESCE(max(sort_order),0)+1 FROM assets WHERE project_id=?) WHERE (SELECT COALESCE(sum(size),0) FROM assets)+?<=10485760 AND (SELECT count(*) FROM assets)<100 AND (SELECT count(*) FROM assets WHERE project_id=? AND kind=?)<?",
     )
       .bind(
         assetId,
@@ -504,6 +506,7 @@ app.post("/api/owner/projects/:id/assets", async (c) => {
         bytes.length,
         "画像",
         now(),
+        c.req.param("id"),
         bytes.length,
         c.req.param("id"),
         kind,
@@ -521,6 +524,28 @@ app.post("/api/owner/projects/:id/assets", async (c) => {
   }
   await audit(c.env, "asset.upload", assetId);
   return c.json({ id: assetId }, 201);
+});
+app.put("/api/owner/projects/:id/assets/order", async (c) => {
+  const { ids } = await jsonBody(c.req.raw, assetOrderSchema);
+  const owned = await c.env.DB.prepare(
+    "SELECT a.id FROM assets a JOIN projects p ON p.id=a.project_id WHERE a.project_id=? AND p.owner_id=?",
+  )
+    .bind(c.req.param("id"), "owner")
+    .all<{ id: string }>();
+  const known = new Set(owned.results.map((r) => r.id));
+  if (!ids.every((x) => known.has(x)))
+    throw new ApiError(404, "画像が見つかりません。");
+  if (ids.length)
+    await c.env.DB.batch(
+      ids.map((assetId, i) =>
+        c.env.DB.prepare("UPDATE assets SET sort_order=? WHERE id=?").bind(
+          i + 1,
+          assetId,
+        ),
+      ),
+    );
+  await audit(c.env, "asset.reorder", c.req.param("id"));
+  return c.json({ ok: true });
 });
 app.delete("/api/owner/assets/:id", async (c) => {
   const a = await c.env.DB.prepare(
@@ -634,7 +659,7 @@ app.get("/api/owner/stats/hours", async (c) => {
 app.get("/api/owner/export", async (c) => {
   const project = c.req.query("project");
   const sql =
-    "SELECT m.id,m.project_id,p.title AS project_title,m.page_url,m.page_title,m.sender_name,m.body,m.created_at,m.publication_consent,m.blocked,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE p.owner_id=?" +
+    "SELECT m.id,m.project_id,p.title AS project_title,m.page_url,m.page_title,m.sender_name,m.body,m.created_at,m.reply_wanted,m.publication_consent,m.blocked,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE p.owner_id=?" +
     (project ? " AND m.project_id=?" : "") +
     " ORDER BY m.created_at,m.id";
   const rows = await c.env.DB.prepare(sql)
@@ -654,6 +679,7 @@ app.get("/api/owner/export", async (c) => {
       "sender_name",
       "body",
       "created_at",
+      "reply_wanted",
       "publication_consent",
       "blocked",
       "reply_body",

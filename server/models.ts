@@ -35,6 +35,7 @@ export interface Message {
   page_url: string;
   page_title: string;
   sender_name: string;
+  reply_wanted: number | null;
 }
 export interface Asset {
   id: string;
@@ -45,4 +46,5 @@ export interface Asset {
   size: number;
   name: string;
   created_at: string;
+  sort_order: number;
 }

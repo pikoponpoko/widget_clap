@@ -97,6 +97,7 @@ export function Widget({
   const [body, setBody] = useState(""),
     [name, setName] = useState(""),
     [consent, setConsent] = useState(false),
+    [replyWanted, setReplyWanted] = useState<boolean | null>(null),
     [favorite, setFavorite] = useState(false),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
@@ -193,6 +194,7 @@ export function Widget({
         {
           body,
           sender_name: name,
+          reply_wanted: replyWanted,
           publication_consent: consent,
           request_id: requestId.current,
           website,
@@ -251,10 +253,7 @@ export function Widget({
   return (
     <div className={"widget-wrap thank-stage " + (embedded ? "embedded" : "")}>
       <section className="support-widget">
-        <div className="widget-wordmark">
-          <span className="tiny-dot" />
-          {p.title}
-        </div>
+        {!embedded && <div className="widget-logo">Hakushu</div>}
         {thanksEnabled && (stage === "clap" || sent) && (
           <div className="thank-art">
             <img
@@ -337,6 +336,7 @@ export function Widget({
                 setSent(false);
                 setReplyUrl("");
                 setConsent(false);
+                setReplyWanted(null);
                 requestId.current = crypto.randomUUID();
                 started.current = Date.now();
                 setCaptcha("");
@@ -389,6 +389,25 @@ export function Widget({
                   ? "体験版の感想はこのブラウザ内に保存し、作者には送信しません。"
                   : "作者だけに届きます。作者が個人的に保存・印刷することがあります。"}
               </p>
+              <div className="reply-choice">
+                {(
+                  [
+                    [false, "返事不要"],
+                    [true, "返事が欲しい"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label className="check-label" key={label}>
+                    <input
+                      type="checkbox"
+                      checked={replyWanted === value}
+                      onChange={(e) =>
+                        setReplyWanted(e.target.checked ? value : null)
+                      }
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
               <label className="check-label">
                 <input
                   type="checkbox"

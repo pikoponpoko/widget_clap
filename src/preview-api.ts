@@ -248,6 +248,10 @@ export async function previewRequest(
         .replace(/[\u0000-\u001F\u007F]/g, " ")
         .trim()
         .slice(0, 50),
+      reply_wanted:
+        typeof data.reply_wanted === "boolean"
+          ? Number(data.reply_wanted)
+          : null,
       body: data.body.trim(),
       created_at: new Date().toISOString(),
       read_at: null,
@@ -509,6 +513,19 @@ export async function previewRequest(
       }),
     };
   }
+  m = p.match(/^\/owner\/projects\/([^/]+)\/assets\/order$/);
+  if (m && method === "PUT") {
+    const ids: string[] = Array.isArray(data.ids) ? data.ids : [];
+    const rank = (id: string) => {
+      const i = ids.indexOf(id);
+      return i < 0 ? ids.length : i;
+    };
+    const mine = s.assets.filter((a) => a.project_id === m![1]);
+    const others = s.assets.filter((a) => a.project_id !== m![1]);
+    s.assets = [...others, ...mine.sort((a, b) => rank(a.id) - rank(b.id))];
+    save(s);
+    return { ok: true };
+  }
   m = p.match(/^\/owner\/projects\/([^/]+)\/assets$/);
   if (m) {
     if (method === "GET") return assets(m[1]);
@@ -592,6 +609,7 @@ export async function previewDownload(path: string): Promise<Blob> {
         "page_url",
         "sender_name",
         "body",
+        "reply_wanted",
         "created_at",
         "publication_consent",
         "reply_body",

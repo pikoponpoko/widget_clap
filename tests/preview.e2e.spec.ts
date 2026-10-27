@@ -43,7 +43,11 @@ test("only the tiny button is embedded; click saves applause before optional fee
   await expect(
     thanksFrame(page).getByAltText("作者からのお礼イラスト"),
   ).toBeVisible();
-  await expect(thanksFrame(page).getByRole("checkbox")).not.toBeChecked();
+  await expect(
+    thanksFrame(page).getByRole("checkbox", {
+      name: "この感想の第三者公開を許可する（任意）",
+    }),
+  ).not.toBeChecked();
   const after = await page.locator(".demo-following-content").boundingBox();
   expect(after?.y).toBe(before?.y);
   expect(
@@ -112,7 +116,11 @@ test("optional message and reply remain browser-local, favorites persist, and an
   await expect(page.getByRole("textbox")).toHaveCount(0);
   await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
   await page.getByRole("button", { name: "お気に入り", exact: true }).click();
-  await expect(page.getByRole("checkbox")).not.toBeChecked();
+  await expect(
+    page.getByRole("checkbox", {
+      name: "この感想の第三者公開を許可する（任意）",
+    }),
+  ).not.toBeChecked();
   await page
     .getByRole("textbox", { name: "メッセージ（任意）" })
     .fill("体験用の感想です。使いやすい道具をありがとう。");

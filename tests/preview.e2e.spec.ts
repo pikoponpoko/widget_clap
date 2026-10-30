@@ -319,7 +319,7 @@ test("the embedded button shows the GIF button image at its own size and records
         ),
       storeKey,
     ),
-  ).toEqual([["/tools/prepro", "プリプロ名人"]]);
+  ).toEqual([["/tools/sample-tool", "サンプルツール"]]);
 });
 test("one code serves many pages: claps and messages are listed per page in the dashboard", async ({
   page,
@@ -350,7 +350,9 @@ test("one code serves many pages: claps and messages are listed per page in the 
   }
   await page.goto("/admin");
   const pages = page.locator(".page-stats");
-  await expect(pages.getByRole("link", { name: "プリプロ名人" })).toBeVisible();
+  await expect(
+    pages.getByRole("link", { name: "サンプルツール" }),
+  ).toBeVisible();
   await expect(pages.getByRole("link", { name: "ブログ記事" })).toBeVisible();
   await expect(
     page.locator(".project-tag", { hasText: "ブログ記事" }).first(),

@@ -61,12 +61,12 @@ export default function EmbedDemo() {
         <div className="demo-examples">
           <article className="demo-example demo-tool">
             <span className="demo-example-type">無料ツールの配布ページ</span>
-            <h2>プリプロ名人</h2>
+            <h2>サンプルツール</h2>
             <span className="demo-download-label">
               ツールはいつでも無料で利用できます
             </span>
             <div className="demo-inline-embed">
-              <EmbedExample path="/tools/prepro" title="プリプロ名人" />
+              <EmbedExample path="/tools/sample-tool" title="サンプルツール" />
             </div>
           </article>
           <article className="demo-example demo-work">
@@ -99,11 +99,11 @@ export default function EmbedDemo() {
             <span className="demo-example-type">
               投げ銭ON・文言変更（data-tip-label）
             </span>
-            <h2>Animator&apos;s Stopwatch</h2>
+            <h2>サンプルアプリ</h2>
             <div className="demo-inline-embed">
               <EmbedExample
-                path="/tools/animators-stopwatch"
-                title="Animator's Stopwatch"
+                path="/tools/sample-app"
+                title="サンプルアプリ"
                 tip
                 tipLabel="コーヒーをおごる"
               />

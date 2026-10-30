@@ -563,8 +563,8 @@ app.get("/api/owner/stats", async (c) => {
   const project = c.req.query("project");
   const start =
       c.req.query("from") ||
-      new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10),
-    end = c.req.query("to") || now().slice(0, 10);
+      jstDay(new Date(Date.now() - 29 * 86400000).toISOString()),
+    end = c.req.query("to") || jstDay();
   if (
     !z.iso.date().safeParse(start).success ||
     !z.iso.date().safeParse(end).success ||
@@ -770,7 +770,18 @@ function pageCsp(ancestors: string) {
   return `default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; font-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors ${ancestors}`;
 }
 async function embedPage(c: import("hono").Context<{ Bindings: Env }>) {
-  const p = await projectBy(c.env, c.req.param("slug") || "");
+  let p: Awaited<ReturnType<typeof projectBy>>;
+  try {
+    p = await projectBy(c.env, c.req.param("slug") || "");
+  } catch (error) {
+    // An embedded frame must stay blank rather than show an API error as text.
+    if (error instanceof ApiError && error.status === 404)
+      return c.html('<!doctype html><meta charset="utf-8">', 404, {
+        "Content-Security-Policy": pageCsp("*"),
+        "Cache-Control": "no-store",
+      });
+    throw error;
+  }
   const origins = JSON.parse(p.allowed_origins) as string[];
   const response = await c.env.ASSETS.fetch(
     new Request(new URL("/", c.req.url), c.req.raw),
@@ -784,6 +795,10 @@ async function embedPage(c: import("hono").Context<{ Bindings: Env }>) {
   out.headers.set("Cache-Control", "no-store");
   return out;
 }
+// The embed demo belongs to the browser trial; the Owner site starts at the admin screen.
+app.get("/", (c) => c.redirect("/admin"));
+app.get("/demo", (c) => c.redirect("/admin"));
+app.get("/about", (c) => c.redirect("/admin"));
 app.get("/widget/:slug", embedPage);
 app.get("/button/:slug", embedPage);
 app.all("/api/*", (c) => c.json({ error: "APIが見つかりません。" }, 404));

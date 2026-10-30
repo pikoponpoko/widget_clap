@@ -30,7 +30,7 @@ Cloudflareのビルド欄に `npm run build` が既に入っている場合も�
 - ボタン以外のUIはクリック後にダイアログで開き、埋め込み先の本文や配置を動かしません。
 - `/demo` で無料ツール・作品・ブログ末尾への実際の埋め込みを体験できます。設置先ごとに別slugを発行可能です。
 - 拍手・感想・お気に入り・お礼・返信・投げ銭を設置先ごとに設定。未接続の投げ銭は公開しません。
-- PC・スマートフォンに対応。作品別の `/widget/prepro` なども直接開けます。
+- PC・スマートフォンに対応。作品別の `/widget/sample` なども直接開けます。
 - `/admin#inbox` から、このブラウザの便りを読み、返信の流れを試せます。
 - 入力内容は**このブラウザのlocalStorageだけ**に保存。作者やサーバーには送信しません。実データや秘密情報は入力しないでください。
 - 返信確認URLも同じブラウザ内だけで動きます。体験版の管理画面は認証付きの本番Owner画面ではありません。
@@ -43,7 +43,7 @@ Cloudflareのビルド欄に `npm run build` が既に入っている場合も�
 自分のページの、ボタンを置きたい位置に貼り付けます。
 
 ```html
-<script src="https://widget-clap.pikoponpoko.workers.dev/embed.js" data-project="prepro" defer></script>
+<script src="https://widget-clap.pikoponpoko.workers.dev/embed.js" data-project="sample" defer></script>
 ```
 
 標準サイズは128×52px、ボタン画像は120×44pxの範囲に縦横比を維持して表示します。設置先のCSSを変更せず、Shadow DOMとiframeで隔離します。`postMessage` の送信元オリジン・ウィンドウ・インスタンス・作品を検証してから、自分のボタンのお礼画面だけを開きます。ホストのCSPがある場合は、この配信元を `script-src` と `frame-src` へ許可してください。
@@ -58,8 +58,8 @@ npm run dev
 ```
 
 - 埋め込みデモ: http://127.0.0.1:8787/demo
-- 小型ボタン単体: http://127.0.0.1:8787/button/prepro
-- 埋め込み画面: http://127.0.0.1:8787/widget/prepro
+- 小型ボタン単体: http://127.0.0.1:8787/button/sample
+- 埋め込み画面: http://127.0.0.1:8787/widget/sample
 - このブラウザの受信箱: http://127.0.0.1:8787/admin#inbox
 
 `npm run build` の後、`npm run preview` でも起動できます。ローカルサーバーはループバックのみで待ち受けます。クラウド実行環境のlocalhostは利用者PCのlocalhostと異なります。

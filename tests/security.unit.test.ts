@@ -14,6 +14,8 @@ import {
   type Env,
   hasNgWord,
   jstDay,
+  embedOrigins,
+  normalizePage,
 } from "../server/security";
 import { readFile } from "node:fs/promises";
 import { PDFDocument, PDFDict, PDFName } from "pdf-lib";
@@ -357,5 +359,25 @@ describe("NG keywords and Japan time", () => {
   it("uses the Japan date", () => {
     expect(jstDay("2026-10-25T15:30:00.000Z")).toBe("2026-10-26");
     expect(jstDay("2026-10-25T14:59:59.999Z")).toBe("2026-10-25");
+  });
+});
+describe("embedding sites", () => {
+  it("lets the www and bare host of an allowed site embed", () => {
+    expect(embedOrigins(["https://kazukisekiguchi.com"])).toEqual([
+      "https://kazukisekiguchi.com",
+      "https://www.kazukisekiguchi.com",
+    ]);
+    expect(
+      normalizePage(
+        { page_url: "https://www.kazukisekiguchi.com/a#x", page_title: "A" },
+        JSON.stringify(["https://kazukisekiguchi.com"]),
+      ).page_url,
+    ).toBe("https://www.kazukisekiguchi.com/a");
+    expect(
+      normalizePage(
+        { page_url: "https://evil.example/a" },
+        JSON.stringify(["https://kazukisekiguchi.com"]),
+      ).page_url,
+    ).toBe("");
   });
 });

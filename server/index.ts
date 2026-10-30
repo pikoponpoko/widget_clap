@@ -15,6 +15,7 @@ import {
   projectSchema,
   clapSchema,
   normalizePage,
+  embedOrigins,
   messageSchema,
   assetOrderSchema,
   replySchema,
@@ -782,7 +783,7 @@ async function embedPage(c: import("hono").Context<{ Bindings: Env }>) {
       });
     throw error;
   }
-  const origins = JSON.parse(p.allowed_origins) as string[];
+  const origins = embedOrigins(JSON.parse(p.allowed_origins));
   const response = await c.env.ASSETS.fetch(
     new Request(new URL("/", c.req.url), c.req.raw),
   );

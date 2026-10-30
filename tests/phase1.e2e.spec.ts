@@ -264,6 +264,72 @@ test.describe.serial("Phase 1 integrated flow", () => {
     const box = await image.boundingBox();
     expect([box!.width, box!.height]).toEqual([180, 170]);
   });
+  test("works when pasted on another site: clap, message and download carry the article", async ({
+    request,
+    page,
+  }) => {
+    const siteSlug = slug + "-site";
+    const blank = slug + "-blank";
+    for (const [s, allowed] of [
+      [siteSlug, ["https://blog.example"]],
+      [blank, []],
+    ] as const)
+      expect(
+        (
+          await request.post("/api/owner/projects", {
+            headers,
+            data: { title: "設置テスト", slug: s, allowed_origins: allowed },
+          })
+        ).status(),
+      ).toBe(201);
+    const projects = await (
+      await request.get("/api/owner/projects", { headers })
+    ).json();
+    const pid = projects.find((p: { slug: string }) => p.slug === siteSlug).id;
+    await page.route("https://www.blog.example/**", (route) =>
+      route.fulfill({
+        contentType: "text/html; charset=utf-8",
+        body: `<!doctype html><title>記事一覧</title><meta property="og:title" content="記事C"><link rel="canonical" href="/posts/c"><h1>記事C</h1><script src="${origin}/embed.js" data-project="${siteSlug}" defer></script><script src="${origin}/embed.js" data-project="${blank}" defer></script>`,
+      }),
+    );
+    await page.goto("https://www.blog.example/posts/c?utm_source=x#top");
+    const hosts = page.locator("span[data-creator-support]");
+    await expect(hosts).toHaveCount(2);
+    const button = page
+      .frameLocator(`span[data-creator-support="${siteSlug}"] iframe`)
+      .first()
+      .getByRole("button", { name: "拍手を送る", exact: true });
+    await button.click();
+    const thanks = page.frameLocator(
+      `span[data-creator-support="${siteSlug}"] dialog iframe`,
+    );
+    await thanks.locator("textarea").first().fill("記事Cの感想");
+    await page.waitForTimeout(1600);
+    await thanks.getByRole("button", { name: "送信" }).click();
+    await expect(thanks.getByText("送信しました")).toBeVisible();
+    const article = "https://www.blog.example/posts/c";
+    const stats = await (
+      await request.get("/api/owner/stats?project=" + pid, { headers })
+    ).json();
+    expect(stats.pages).toEqual([
+      { page_url: article, page_title: "記事C", count: 1 },
+    ]);
+    const csv = await (
+      await request.get("/api/owner/export?format=csv&project=" + pid, {
+        headers,
+      })
+    ).text();
+    expect(csv).toContain(`"記事C","${article}","","記事Cの感想"`);
+    // Without an allowed site the browser refuses to frame the button.
+    const blankFrame = page
+      .locator(`span[data-creator-support="${blank}"] iframe`)
+      .first();
+    expect(
+      await (await blankFrame.elementHandle())!
+        .contentFrame()
+        .then((f) => f!.locator("button").count()),
+    ).toBe(0);
+  });
   test("honors per-placement reply and tip switches", async ({ request }) => {
     const response = await request.post("/api/owner/projects", {
       headers,

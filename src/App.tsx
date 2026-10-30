@@ -1805,6 +1805,11 @@ function ProjectModal({
             <p className="muted">
               どのページにも同じコードを貼ります。押されたページのURLとタイトルが記録されます。設置先のオリジンは基本設定で許可してください。
             </p>
+            {!origins.trim() && (
+              <ErrorText>
+                埋め込みを許可するサイトが未設定のため、設置してもボタンは表示されません。
+              </ErrorText>
+            )}
             <label className="check-label">
               <input
                 type="checkbox"

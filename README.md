@@ -1,6 +1,6 @@
-# Creator Support Widget — 応援の便り
+# Hakushu
 
-任意のWebページに小さな画像ボタンを置ける、React + TypeScript製のWeb拍手ウィジェットです。[統合仕様との照合・実装計画](docs/spec-reconciliation.md) と [当初の開発計画書](docs/creator_support_widget_plan_v2.md) を参照してください。
+任意のWebページに小さな画像ボタンを置ける、React + TypeScript製のウィジェットです。[統合仕様との照合・実装計画](docs/spec-reconciliation.md) と [当初の開発計画書](docs/creator_support_widget_plan_v2.md) を参照してください。
 
 **[埋め込みデモを開く](https://widget-clap.pikoponpoko.workers.dev/demo)** · [管理画面](https://widget-clap.pikoponpoko.workers.dev/admin#projects) · [サービス紹介](https://widget-clap.pikoponpoko.workers.dev/about)
 

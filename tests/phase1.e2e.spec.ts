@@ -60,7 +60,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
     expect(project.owner_id).toBeUndefined();
     const page = await request.get("/widget/" + slug);
     expect(page.headers()["content-security-policy"]).toContain(
-      "frame-ancestors 'self' https://kazukisekiguchi.com",
+      "frame-ancestors *",
     );
     expect(
       (await request.get("/reply")).headers()["content-security-policy"],
@@ -218,7 +218,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
     for (const [page_url, page_title] of [
       ["https://kazukisekiguchi.com/blog/a#comments", "記事A"],
       ["https://kazukisekiguchi.com/blog/b", "記事B"],
-      ["https://evil.example/blog/c", "外部"],
+      ["https://other.example/blog/c", "別サイト"],
     ])
       expect(
         (
@@ -246,9 +246,9 @@ test.describe.serial("Phase 1 integrated flow", () => {
     expect(
       stats.pages.map((p: { page_url: string }) => p.page_url).sort(),
     ).toEqual([
-      "",
       "https://kazukisekiguchi.com/blog/a",
       "https://kazukisekiguchi.com/blog/b",
+      "https://other.example/blog/c",
     ]);
     const messages = await (
       await request.get("/api/owner/messages?project=" + pid, { headers })
@@ -320,15 +320,13 @@ test.describe.serial("Phase 1 integrated flow", () => {
       })
     ).text();
     expect(csv).toContain(`"記事C","${article}","","記事Cの感想"`);
-    // Without an allowed site the browser refuses to frame the button.
-    const blankFrame = page
-      .locator(`span[data-creator-support="${blank}"] iframe`)
-      .first();
-    expect(
-      await (await blankFrame.elementHandle())!
-        .contentFrame()
-        .then((f) => f!.locator("button").count()),
-    ).toBe(0);
+    // No site list is needed: a project without one shows its button too.
+    await expect(
+      page
+        .frameLocator(`span[data-creator-support="${blank}"] iframe`)
+        .first()
+        .getByRole("button", { name: "拍手を送る", exact: true }),
+    ).toBeVisible();
   });
   test("honors per-placement reply and tip switches", async ({ request }) => {
     const response = await request.post("/api/owner/projects", {
@@ -351,7 +349,11 @@ test.describe.serial("Phase 1 integrated flow", () => {
     ).json();
     expect(config.reply_enabled).toBe(false);
     expect(config.thanks_enabled).toBe(false);
-    expect(config.tip_url).toBeNull();
+    // The tip link follows the server switch (TIP_LINKS_ENABLED).
+    const session = await (await request.get("/api/owner/session")).json();
+    expect(config.tip_url).toBe(
+      session.tip_links_enabled ? "https://example.com" : null,
+    );
     const message = await request.post(
       "/api/public/projects/" + slug + "-no-reply/messages",
       { headers, data: body() },

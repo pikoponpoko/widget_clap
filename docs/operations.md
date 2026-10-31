@@ -21,7 +21,7 @@ Cron（18:00 UTC）→ 完全JSON → 非公開バックアップ専用R2
 5. `ENVIRONMENT=production` は設定ファイルに記載。`ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com`、`ACCESS_AUDIENCE=<AccessアプリのAUD>`、`OWNER_EMAIL=<Ownerメール>` はリポジトリに残さないよう `wrangler secret put` で登録します。`LOCAL_OWNER_ENABLED` は本番で設定しません。コードはJWTのRS256署名・issuer・audience・期限・email・subを検証します。
 6. Secrets：ランダムな32バイト以上の `SPAM_SECRET` と `TURNSTILE_SECRET_KEY`。環境変数 `TURNSTILE_SITE_KEY`。Turnstileの許可ホストにウィジェット配信ホスト `hakushu.kazukisekiguchi.com`（設置先サイトではない）を登録し、`message` actionを利用します。未設定の本番投稿は503で閉じます。
 7. `TIP_LINKS_ENABLED=true`（2026-10-31 ユーザー承認）。投げ銭リンクはサイトごとにURLと3つの確認チェックが揃った場合のみ表示されます。本サービスは決済情報・本人確認情報を保存しません。PayPay個人間送金は使いません。
-8. 実際の設置元オリジンを作品設定に登録（例 `https://kazukisekiguchi.com`）。`frame-ancestors` で許可先を制限します。`www` 等は別オリジンとして追加します。
+8. 設置先サイトの登録は不要です。ボタンはどのサイトにも埋め込めます（`frame-ancestors *`）。押されたページのURLはhttp(s)のみ記録します。
 
 承認後に使うコマンドの例（このタスクでは実行していません）：
 

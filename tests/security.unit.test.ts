@@ -14,7 +14,6 @@ import {
   type Env,
   hasNgWord,
   jstDay,
-  embedOrigins,
   normalizePage,
 } from "../server/security";
 import { readFile } from "node:fs/promises";
@@ -362,22 +361,13 @@ describe("NG keywords and Japan time", () => {
   });
 });
 describe("embedding sites", () => {
-  it("lets the www and bare host of an allowed site embed", () => {
-    expect(embedOrigins(["https://kazukisekiguchi.com"])).toEqual([
-      "https://kazukisekiguchi.com",
-      "https://www.kazukisekiguchi.com",
-    ]);
+  it("records the page from any http(s) site", () => {
     expect(
-      normalizePage(
-        { page_url: "https://www.kazukisekiguchi.com/a#x", page_title: "A" },
-        JSON.stringify(["https://kazukisekiguchi.com"]),
-      ).page_url,
-    ).toBe("https://www.kazukisekiguchi.com/a");
-    expect(
-      normalizePage(
-        { page_url: "https://evil.example/a" },
-        JSON.stringify(["https://kazukisekiguchi.com"]),
-      ).page_url,
-    ).toBe("");
+      normalizePage({ page_url: "https://blog.example/a#x", page_title: "A" })
+        .page_url,
+    ).toBe("https://blog.example/a");
+    expect(normalizePage({ page_url: "javascript:alert(1)" }).page_url).toBe(
+      "",
+    );
   });
 });

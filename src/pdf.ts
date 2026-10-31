@@ -67,7 +67,7 @@ export async function makePdf(
   doc.registerFontkit(fontkit); // Full embedding avoids missing Japanese glyphs in fontkit subset output.
   const font = await doc.embedFont(await res.arrayBuffer(), { subset: false });
   doc.setTitle("Hakushu — 私的保存用");
-  doc.setCreator("Creator Support Widget");
+  doc.setCreator("Hakushu");
   const charset = new Set(font.getCharacterSet());
   const printable = (s: string) =>
     Array.from(s, (c) =>

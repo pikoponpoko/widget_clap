@@ -27,6 +27,7 @@ export interface Project {
   tip_terms_checked: boolean | number;
   tip_privacy_checked: boolean | number;
   ng_words?: string[];
+  blocked_sites?: string[];
   claps: number;
   messages: number;
   assets?: Asset[];

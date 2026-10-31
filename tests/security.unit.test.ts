@@ -15,6 +15,8 @@ import {
   hasNgWord,
   jstDay,
   normalizePage,
+  isBlockedSite,
+  siteHost,
 } from "../server/security";
 import { readFile } from "node:fs/promises";
 import { PDFDocument, PDFDict, PDFName } from "pdf-lib";
@@ -369,5 +371,16 @@ describe("embedding sites", () => {
     expect(normalizePage({ page_url: "javascript:alert(1)" }).page_url).toBe(
       "",
     );
+  });
+});
+describe("blocked sites", () => {
+  it("blocks a domain and its subdomains only", () => {
+    expect(siteHost(" https://Spam.example/path ")).toBe("spam.example");
+    expect(siteHost("spam.example")).toBe("spam.example");
+    const list = ["spam.example"];
+    expect(isBlockedSite("https://spam.example/a", list)).toBe(true);
+    expect(isBlockedSite("https://www.spam.example/a", list)).toBe(true);
+    expect(isBlockedSite("https://notspam.example/a", list)).toBe(false);
+    expect(isBlockedSite("", list)).toBe(false);
   });
 });

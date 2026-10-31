@@ -43,6 +43,7 @@ function initial(): Store {
       tip_terms_checked: false,
       tip_privacy_checked: false,
       ng_words: [],
+      blocked_sites: [],
       claps: 0,
       messages: 0,
     })),
@@ -89,6 +90,7 @@ function read(): Store {
       reply_enabled: p.reply_enabled ?? true,
       tip_enabled: p.tip_enabled ?? false,
       ng_words: p.ng_words ?? [],
+      blocked_sites: p.blocked_sites ?? [],
     }));
     return data;
   } catch {

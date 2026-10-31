@@ -218,8 +218,28 @@ export const projectSchema = z
     tip_terms_checked: z.boolean().default(false),
     tip_privacy_checked: z.boolean().default(false),
     ng_words: z.array(z.string().trim().min(1).max(50)).max(100).default([]),
+    blocked_sites: z
+      .array(z.string().transform(siteHost).pipe(z.string().min(1).max(253)))
+      .max(100)
+      .default([]),
   })
   .strict();
+// "https://www.example.com/a", "example.com" -> "www.example.com" / "example.com"
+export function siteHost(input: string) {
+  const s = input.trim().toLowerCase();
+  try {
+    return new URL(s.includes("://") ? s : "https://" + s).hostname;
+  } catch {
+    return "";
+  }
+}
+// A blocked domain also covers its subdomains.
+export function isBlockedSite(url: string, blocked: string[]) {
+  const host = siteHost(url);
+  return (
+    !!host && blocked.some((d) => host === d || host.endsWith("." + d))
+  );
+}
 export const normalizeWord = (s: string) => s.normalize("NFKC").toLowerCase();
 export function hasNgWord(body: string, words: string[]) {
   const text = normalizeWord(body);

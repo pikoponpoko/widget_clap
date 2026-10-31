@@ -254,6 +254,41 @@ test.describe.serial("Phase 1 integrated flow", () => {
       await request.get("/api/owner/messages?project=" + pid, { headers })
     ).json();
     expect(messages.items[0].page_title).toBe("記事B");
+    // A blocked domain (and its subdomains) can no longer clap or show the button.
+    expect(
+      (
+        await request.put("/api/owner/projects/" + pid, {
+          headers,
+          data: {
+            title: "ページ記録の検証",
+            slug: pagesSlug,
+            blocked_sites: ["https://other.example/"],
+          },
+        })
+      ).status(),
+    ).toBe(200);
+    expect(
+      (
+        await request.post(url + "/claps", {
+          headers,
+          data: { page_url: "https://www.other.example/x", page_title: "x" },
+        })
+      ).status(),
+    ).toBe(403);
+    expect(
+      (
+        await request.get(
+          "/button/" + pagesSlug + "?parent_origin=https://other.example",
+        )
+      ).status(),
+    ).toBe(404);
+    expect(
+      (
+        await request.get(
+          "/button/" + pagesSlug + "?parent_origin=https://kazukisekiguchi.com",
+        )
+      ).status(),
+    ).toBe(200);
     await page.goto("/button/" + pagesSlug);
     const image = page
       .getByRole("button", { name: "拍手を送る", exact: true })

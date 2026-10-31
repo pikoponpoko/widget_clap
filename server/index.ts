@@ -15,6 +15,7 @@ import {
   projectSchema,
   clapSchema,
   normalizePage,
+  isBlockedSite,
   messageSchema,
   assetOrderSchema,
   replySchema,
@@ -130,6 +131,7 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   const p = await projectBy(c.env, c.req.param("slug"));
   if (!p.clap_enabled) throw new ApiError(403, "拍手は現在お休み中です。");
   const page = normalizePage(await jsonBody(c.req.raw, clapSchema, 4000));
+  assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `clap:${key}`, 60, 60);
   const dedupe = await hash(
@@ -161,6 +163,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
     throw new ApiError(403, "感想の受付は現在お休み中です。");
   const data = await jsonBody(c.req.raw, messageSchema);
   const page = normalizePage(data);
+  assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `attempt:${key}`, 40, 3600);
   const dedupe = await hash(`${p.id}:${data.request_id}`);
@@ -277,6 +280,7 @@ app.get("/api/owner/projects", async (c) => {
       ...p,
       allowed_origins: JSON.parse(p.allowed_origins as string),
       ng_words: JSON.parse((p.ng_words as string) || "[]"),
+      blocked_sites: JSON.parse((p.blocked_sites as string) || "[]"),
     })),
   );
 });
@@ -284,7 +288,7 @@ app.post("/api/owner/projects", async (c) => {
   const data = await jsonBody(c.req.raw, projectSchema);
   const keys = Object.keys(data),
     values = Object.entries(data).map(([k, v]) =>
-      k === "allowed_origins" || k === "ng_words"
+      k === "allowed_origins" || k === "ng_words" || k === "blocked_sites"
         ? JSON.stringify(v)
         : typeof v === "boolean"
           ? Number(v)
@@ -317,7 +321,7 @@ app.put("/api/owner/projects/:id", async (c) => {
   const data = await jsonBody(c.req.raw, projectSchema);
   const keys = Object.keys(data),
     values = Object.entries(data).map(([k, v]) =>
-      k === "allowed_origins" || k === "ng_words"
+      k === "allowed_origins" || k === "ng_words" || k === "blocked_sites"
         ? JSON.stringify(v)
         : typeof v === "boolean"
           ? Number(v)
@@ -766,16 +770,24 @@ app.post("/api/owner/purge", async (c) => {
 function pageCsp(ancestors: string) {
   return `default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; font-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors ${ancestors}`;
 }
+function assertSiteAllowed(p: { blocked_sites?: string }, pageUrl: string) {
+  if (isBlockedSite(pageUrl, JSON.parse(p.blocked_sites || "[]")))
+    throw new ApiError(403, "このサイトからは受け付けていません。");
+}
 async function embedPage(c: import("hono").Context<{ Bindings: Env }>) {
+  // An embedded frame must stay blank rather than show an API error as text.
+  const blank = () =>
+    c.html('<!doctype html><meta charset="utf-8">', 404, {
+      "Content-Security-Policy": pageCsp("*"),
+      "Cache-Control": "no-store",
+    });
   try {
-    await projectBy(c.env, c.req.param("slug") || "");
+    const p = await projectBy(c.env, c.req.param("slug") || "");
+    const parent = c.req.query("parent_origin") || "";
+    if (isBlockedSite(parent, JSON.parse(p.blocked_sites || "[]")))
+      return blank();
   } catch (error) {
-    // An embedded frame must stay blank rather than show an API error as text.
-    if (error instanceof ApiError && error.status === 404)
-      return c.html('<!doctype html><meta charset="utf-8">', 404, {
-        "Content-Security-Policy": pageCsp("*"),
-        "Cache-Control": "no-store",
-      });
+    if (error instanceof ApiError && error.status === 404) return blank();
     throw error;
   }
   const response = await c.env.ASSETS.fetch(

@@ -1293,15 +1293,6 @@ const blankProject = {
   tip_privacy_checked: false,
   ng_words: [] as string[],
 };
-// Accepts full page URLs too; only the origin is allowed to embed.
-function toOrigin(line: string) {
-  const s = line.trim();
-  try {
-    return s ? new URL(s).origin : "";
-  } catch {
-    return s;
-  }
-}
 function presetOf(f: {
   clap_enabled: unknown;
   message_enabled: unknown;
@@ -1354,7 +1345,6 @@ function ProjectModal({
           ng_words: project.ng_words || [],
         };
   const [form, setForm] = useState(initial),
-    [origins, setOrigins] = useState(initial.allowed_origins.join("\n")),
     [ngWords, setNgWords] = useState(initial.ng_words.join("\n")),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -1380,9 +1370,6 @@ function ProjectModal({
         project === "new" ? "/owner/projects" : "/owner/projects/" + project.id,
         {
           ...form,
-          allowed_origins: [
-            ...new Set(origins.split("\n").map(toOrigin).filter(Boolean)),
-          ],
           ng_words: [
             ...new Set(
               ngWords
@@ -1547,16 +1534,6 @@ function ProjectModal({
                 <small>半角英小文字・数字・ハイフン</small>
               </label>
             </div>
-            <label>
-              埋め込みを許可するサイト
-              <textarea
-                rows={3}
-                placeholder={"https://example.com\nhttps://www.example.com"}
-                value={origins}
-                onChange={(e) => setOrigins(e.target.value)}
-              />
-              <small>1行に1サイト。</small>
-            </label>
             <label>
               NGキーワード
               <textarea
@@ -1803,13 +1780,8 @@ function ProjectModal({
           <div className="embed-settings">
             <h3>埋め込みコード</h3>
             <p className="muted">
-              どのページにも同じコードを貼ります。押されたページのURLとタイトルが記録されます。設置先のオリジンは基本設定で許可してください。
+              どのページにも同じコードを貼ります。押されたページのURLとタイトルが記録されます。
             </p>
-            {!origins.trim() && (
-              <ErrorText>
-                埋め込みを許可するサイトが未設定のため、設置してもボタンは表示されません。
-              </ErrorText>
-            )}
             <label className="check-label">
               <input
                 type="checkbox"

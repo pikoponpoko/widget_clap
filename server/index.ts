@@ -15,7 +15,6 @@ import {
   projectSchema,
   clapSchema,
   normalizePage,
-  embedOrigins,
   messageSchema,
   assetOrderSchema,
   replySchema,
@@ -130,10 +129,7 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   assertSameOrigin(c.req.raw);
   const p = await projectBy(c.env, c.req.param("slug"));
   if (!p.clap_enabled) throw new ApiError(403, "拍手は現在お休み中です。");
-  const page = normalizePage(
-    await jsonBody(c.req.raw, clapSchema, 4000),
-    p.allowed_origins,
-  );
+  const page = normalizePage(await jsonBody(c.req.raw, clapSchema, 4000));
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `clap:${key}`, 60, 60);
   const dedupe = await hash(
@@ -164,7 +160,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
   if (!p.message_enabled)
     throw new ApiError(403, "感想の受付は現在お休み中です。");
   const data = await jsonBody(c.req.raw, messageSchema);
-  const page = normalizePage(data, p.allowed_origins);
+  const page = normalizePage(data);
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `attempt:${key}`, 40, 3600);
   const dedupe = await hash(`${p.id}:${data.request_id}`);
@@ -771,9 +767,8 @@ function pageCsp(ancestors: string) {
   return `default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; font-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors ${ancestors}`;
 }
 async function embedPage(c: import("hono").Context<{ Bindings: Env }>) {
-  let p: Awaited<ReturnType<typeof projectBy>>;
   try {
-    p = await projectBy(c.env, c.req.param("slug") || "");
+    await projectBy(c.env, c.req.param("slug") || "");
   } catch (error) {
     // An embedded frame must stay blank rather than show an API error as text.
     if (error instanceof ApiError && error.status === 404)
@@ -783,15 +778,12 @@ async function embedPage(c: import("hono").Context<{ Bindings: Env }>) {
       });
     throw error;
   }
-  const origins = embedOrigins(JSON.parse(p.allowed_origins));
   const response = await c.env.ASSETS.fetch(
     new Request(new URL("/", c.req.url), c.req.raw),
   );
   const out = new Response(response.body, response);
-  out.headers.set(
-    "Content-Security-Policy",
-    pageCsp(["'self'", ...origins].join(" ")),
-  );
+  // Any site may show the button; one embed code is pasted wherever the owner likes.
+  out.headers.set("Content-Security-Policy", pageCsp("*"));
   out.headers.delete("X-Frame-Options");
   out.headers.set("Cache-Control", "no-store");
   return out;

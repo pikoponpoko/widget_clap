@@ -154,35 +154,19 @@ export const clapSchema = z
     page_title: z.string().max(500).default(""),
   })
   .strict();
-// The embedding page is reported by the host script. Keep only an http(s) URL from an allowed origin.
+// The embedding page is reported by the host script. Keep only an http(s) URL.
 // A site is often reachable both with and without "www."; either may embed the button.
-export function embedOrigins(origins: string[]) {
-  const out = new Set<string>();
-  for (const o of origins) {
-    out.add(o);
-    try {
-      const u = new URL(o);
-      u.hostname = u.hostname.startsWith("www.")
-        ? u.hostname.slice(4)
-        : "www." + u.hostname;
-      out.add(u.origin);
-    } catch {}
-  }
-  return [...out];
-}
-export function normalizePage(
-  input: { page_url?: string; page_title?: string },
-  allowedOrigins: string,
-) {
+export function normalizePage(input: {
+  page_url?: string;
+  page_title?: string;
+}) {
   let page_url = "";
   try {
-    const allowed = embedOrigins(JSON.parse(allowedOrigins || "[]"));
     const u = new URL(input.page_url || "");
     if (
       ["http:", "https:"].includes(u.protocol) &&
       !u.username &&
-      !u.password &&
-      (!allowed.length || allowed.includes(u.origin))
+      !u.password
     ) {
       u.hash = "";
       if (u.href.length <= 500) page_url = u.href;

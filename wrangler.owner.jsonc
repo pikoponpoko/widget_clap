@@ -26,7 +26,7 @@
   "triggers": { "crons": ["0 18 * * *"] },
   "vars": {
     "ENVIRONMENT": "production",
-    "TIP_LINKS_ENABLED": "false",
+    "TIP_LINKS_ENABLED": "true",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAFnTOEUlIaTGKY_h",
   },
 }

@@ -1292,6 +1292,7 @@ const blankProject = {
   tip_terms_checked: false,
   tip_privacy_checked: false,
   ng_words: [] as string[],
+  blocked_sites: [] as string[],
 };
 function presetOf(f: {
   clap_enabled: unknown;
@@ -1343,9 +1344,13 @@ function ProjectModal({
           tip_terms_checked: !!project.tip_terms_checked,
           tip_privacy_checked: !!project.tip_privacy_checked,
           ng_words: project.ng_words || [],
+          blocked_sites: project.blocked_sites || [],
         };
   const [form, setForm] = useState(initial),
     [ngWords, setNgWords] = useState(initial.ng_words.join("\n")),
+    [blockedSites, setBlockedSites] = useState(
+      initial.blocked_sites.join("\n"),
+    ),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("settings"),
@@ -1373,6 +1378,14 @@ function ProjectModal({
           ng_words: [
             ...new Set(
               ngWords
+                .split("\n")
+                .map((s) => s.trim())
+                .filter(Boolean),
+            ),
+          ],
+          blocked_sites: [
+            ...new Set(
+              blockedSites
                 .split("\n")
                 .map((s) => s.trim())
                 .filter(Boolean),
@@ -1542,6 +1555,16 @@ function ProjectModal({
                 onChange={(e) => setNgWords(e.target.value)}
               />
               <small>1行に1語。含む感想は「非表示」に入ります。</small>
+            </label>
+            <label>
+              ブロックするサイト
+              <textarea
+                rows={3}
+                placeholder="example.com"
+                value={blockedSites}
+                onChange={(e) => setBlockedSites(e.target.value)}
+              />
+              <small>1行に1ドメイン。サブドメインも含めて、ボタンの表示と拍手・感想の受付を止めます。</small>
             </label>
             <div className="setting-section">
               <h3>ウィジェットの機能</h3>

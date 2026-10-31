@@ -97,6 +97,7 @@ const project = z
     tip_terms_checked: flag,
     tip_privacy_checked: flag,
     ng_words: z.string().max(8000).default("[]"),
+    blocked_sites: z.string().max(30000).default("[]"),
     created_at: timestamp,
   })
   .strict();
@@ -272,6 +273,7 @@ function validProject(p: z.infer<typeof project>) {
       ...fields,
       allowed_origins: JSON.parse(p.allowed_origins),
       ng_words: JSON.parse(p.ng_words),
+      blocked_sites: JSON.parse(p.blocked_sites),
       clap_enabled: !!p.clap_enabled,
       message_enabled: !!p.message_enabled,
       favorite_enabled: !!p.favorite_enabled,

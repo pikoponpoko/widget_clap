@@ -93,10 +93,23 @@
   dialog.append(header, content);
   shadow.append(style, frame, dialog);
   script.insertAdjacentElement("afterend", host);
+  // The thank-you page loads before the click so it opens without a wait.
+  var contentReady = false;
+  function widgetUrl() {
+    var url = new URL("/widget/" + encodeURIComponent(slug), origin);
+    url.searchParams.set("parent_origin", location.origin);
+    return withPage(url);
+  }
+  function preload() {
+    contentReady = false;
+    var url = widgetUrl();
+    url.searchParams.set("preload", "1");
+    content.src = url.href;
+  }
   function closeDialog() {
     dialog.close();
     frame.focus({ preventScroll: true });
-    content.removeAttribute("src");
+    preload();
   }
   close.addEventListener("click", closeDialog);
   dialog.addEventListener("cancel", function (e) {
@@ -116,6 +129,16 @@
     }
   });
   function receive(event) {
+    if (
+      host.isConnected &&
+      event.origin === origin &&
+      event.source === content.contentWindow &&
+      event.data &&
+      event.data.type === "creator-support:ready"
+    ) {
+      contentReady = true;
+      return;
+    }
     // The thank-you frame asks for room to show its illustration at full size.
     if (
       host.isConnected &&
@@ -147,6 +170,16 @@
       frame.height = String(
         Math.max(24, Math.min(248, Number(data.height) || 52)),
       );
+      if (!content.getAttribute("src")) preload();
+      return;
+    }
+    if (
+      data &&
+      data.type === "creator-support:close" &&
+      data.instance === instance &&
+      data.project === slug
+    ) {
+      if (dialog.open) closeDialog();
       return;
     }
     if (
@@ -157,10 +190,8 @@
       !["clap", "message", "favorite"].includes(data.reason)
     )
       return;
-    var url = new URL("/widget/" + encodeURIComponent(slug), origin);
+    var url = widgetUrl();
     url.searchParams.set("after", data.reason);
-    url.searchParams.set("parent_origin", location.origin);
-    withPage(url);
     if (typeof dialog.showModal !== "function") {
       var link = document.createElement("a");
       link.href = url.href;
@@ -171,7 +202,13 @@
       return;
     }
     dialog.style.width = "";
-    content.src = url.href;
+    if (contentReady) {
+      contentReady = false;
+      content.contentWindow.postMessage(
+        { type: "creator-support:show", reason: data.reason },
+        origin,
+      );
+    } else content.src = url.href;
     if (!dialog.open) dialog.showModal();
     close.focus();
   }

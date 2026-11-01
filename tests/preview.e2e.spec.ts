@@ -266,7 +266,7 @@ test("per-placement switches suppress disabled features, and unconnected tips ne
   await expect(page.getByLabel("返信確認URL")).toHaveCount(0);
 });
 
-test("does not open the thank-you modal or claim success if applause cannot be saved", async ({
+test("closes the thank-you modal and shows the error if applause cannot be saved", async ({
   page,
 }) => {
   await page.goto("/demo");

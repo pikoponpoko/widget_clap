@@ -2,15 +2,19 @@ import { previewMode } from "./mode";
 import { pageContext, tipLabel, tipRequested } from "./page-context";
 import { useEffect, useRef, useState } from "react";
 import { assetUrl } from "./asset-url";
-import { send, useApi } from "./api";
+import { inlineProject, send, useApi } from "./api";
 import type { Project } from "./types";
 export type EntryReason = "clap" | "message" | "favorite";
 export function ClapControl({
   project: p,
   onOpen,
+  onReady,
+  onFail,
 }: {
   project: Project;
   onOpen: (reason: EntryReason) => void;
+  onReady?: () => void;
+  onFail?: () => void;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -26,22 +30,31 @@ export function ClapControl({
     if (busy) return;
     setBusy(true);
     setError("");
+    // The thank-you opens at once; it is closed again if the clap cannot be saved.
+    const opened = !!p.clap_enabled && !!onFail;
+    if (opened) onOpen("clap");
     try {
       if (p.clap_enabled)
         await send(
           "/public/projects/" + encodeURIComponent(p.slug) + "/claps",
           pageContext,
         );
-      onOpen(
-        p.clap_enabled ? "clap" : p.message_enabled ? "message" : "favorite",
-      );
+      if (!opened)
+        onOpen(
+          p.clap_enabled ? "clap" : p.message_enabled ? "message" : "favorite",
+        );
     } catch (e) {
       setError((e as Error).message);
+      if (opened) onFail?.();
     } finally {
       setBusy(false);
     }
   }
-  if (!label && !p.tip_url)
+  const unavailable = !label && !p.tip_url;
+  useEffect(() => {
+    if (unavailable) onReady?.();
+  }, [unavailable]);
+  if (unavailable)
     return <span className="button-unavailable">受付休止中</span>;
   if (!label && p.tip_url)
     return (
@@ -52,7 +65,12 @@ export function ClapControl({
         rel="noopener noreferrer"
         aria-label="任意の支援をする"
       >
-        <img src={image ? assetUrl(image.id) : "/support-button.svg"} alt="" />
+        <img
+          src={image ? assetUrl(image.id) : "/support-button.svg"}
+          alt=""
+          onLoad={onReady}
+          onError={onReady}
+        />
       </a>
     );
   return (
@@ -76,6 +94,8 @@ export function ClapControl({
                 : "/support-button.svg"
           }
           alt=""
+          onLoad={onReady}
+          onError={onReady}
         />
         {busy && (
           <span className="mini-clap-busy" aria-hidden="true">
@@ -94,8 +114,11 @@ export function ClapControl({
 export function EmbeddedButton({ slug }: { slug: string }) {
   const { data: p, error } = useApi<Project>(
     "/public/projects/" + encodeURIComponent(slug),
+    inlineProject<Project>(slug),
   );
   const [fallback, setFallback] = useState("");
+  // Nothing is shown until the owner's own button image has loaded.
+  const [ready, setReady] = useState(false);
   const frame = useRef<HTMLSpanElement>(null);
   function postToHost(message: Record<string, unknown>) {
     const q = new URLSearchParams(location.search),
@@ -145,15 +168,23 @@ export function EmbeddedButton({ slug }: { slug: string }) {
         {error}
       </span>
     );
-  if (!p)
-    return (
-      <button className="mini-clap" disabled aria-label="読み込み中">
-        <img src="/clap-button.svg" alt="" />
-      </button>
-    );
+  if (!p) return <span className="mini-clap-frame" aria-busy="true" />;
   return (
-    <span ref={frame} className="mini-clap-frame">
-      <ClapControl project={p} onOpen={open} />
+    <span
+      ref={frame}
+      className="mini-clap-frame"
+      style={ready ? undefined : { visibility: "hidden" }}
+      aria-busy={!ready}
+    >
+      <ClapControl
+        project={p}
+        onOpen={open}
+        onReady={() => setReady(true)}
+        onFail={() => {
+          postToHost({ type: "creator-support:close" });
+          setFallback("");
+        }}
+      />
       {/* data-tip="on" pages (e.g. tool downloads) show the tip link before any click. */}
       {tipRequested &&
         (p.clap_enabled || p.message_enabled || p.favorite_enabled) &&

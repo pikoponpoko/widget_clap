@@ -101,7 +101,8 @@ app.use("*", async (c, next) => {
   c.header("Referrer-Policy", "no-referrer");
   c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   if (c.req.path.startsWith("/api/")) {
-    c.header("Cache-Control", "no-store");
+    if (!(c.req.path.startsWith("/api/public/assets/") && c.res.ok))
+      c.header("Cache-Control", "no-store");
     c.header(
       "Content-Security-Policy",
       "default-src 'none'; frame-ancestors 'none'; sandbox",
@@ -263,7 +264,8 @@ app.get("/api/public/assets/:id", async (c) => {
       "Content-Type": a.mime,
       "Content-Length": String(a.size),
       "Content-Disposition": "inline",
-      "Cache-Control": "no-store",
+      // An asset id always names the same file, so browsers may keep it.
+      "Cache-Control": "public, max-age=604800, immutable",
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
     },
@@ -781,19 +783,40 @@ async function embedPage(c: import("hono").Context<{ Bindings: Env }>) {
       "Content-Security-Policy": pageCsp("*"),
       "Cache-Control": "no-store",
     });
+  // The page is rewritten below, so a 304 from the asset store is not usable.
+  const assetHeaders = new Headers(c.req.raw.headers);
+  assetHeaders.delete("If-None-Match");
+  assetHeaders.delete("If-Modified-Since");
+  const page = c.env.ASSETS.fetch(
+    new Request(new URL("/", c.req.url), { headers: assetHeaders }),
+  );
+  let project;
   try {
     const p = await projectBy(c.env, c.req.param("slug") || "");
     const parent = c.req.query("parent_origin") || "";
     if (isBlockedSite(parent, JSON.parse(p.blocked_sites || "[]")))
       return blank();
+    project = safeProject(p, c.env, await assetList(c.env, p.id));
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return blank();
     throw error;
   }
-  const response = await c.env.ASSETS.fetch(
-    new Request(new URL("/", c.req.url), c.req.raw),
+  const response = await page;
+  // The project data and button image start loading with the page itself.
+  const button = (project.assets as { id: string; kind: string }[]).find(
+    (a) => a.kind === "button",
   );
-  const out = new Response(response.body, response);
+  const head =
+    (button && c.req.path.startsWith("/button/")
+      ? `<link rel="preload" as="image" href="/api/public/assets/${encodeURIComponent(button.id)}">`
+      : "") +
+    `<script type="application/json" id="hakushu-project">${JSON.stringify(
+      project,
+    ).replace(/</g, "\\u003c")}</script>`;
+  const html = (await response.text()).replace("</head>", head + "</head>");
+  const out = new Response(html, response);
+  out.headers.delete("Content-Length");
+  out.headers.delete("ETag");
   // Any site may show the button; one embed code is pasted wherever the owner likes.
   out.headers.set("Content-Security-Policy", pageCsp("*"));
   out.headers.delete("X-Frame-Options");

@@ -13,7 +13,7 @@ import {
   Send,
   ThumbsUp,
 } from "lucide-react";
-import { api, send, useApi } from "./api";
+import { api, inlineProject, send, useApi } from "./api";
 import type { Project } from "./types";
 declare global {
   interface Window {
@@ -85,8 +85,14 @@ export function Widget({
     data: p,
     error,
     loading,
-  } = useApi<Project>("/public/projects/" + encodeURIComponent(slug));
-  const initial = new URLSearchParams(location.search).get("after");
+  } = useApi<Project>(
+    "/public/projects/" + encodeURIComponent(slug),
+    inlineProject<Project>(slug),
+  );
+  const params = new URLSearchParams(location.search);
+  const initial = params.get("after");
+  // Loaded ahead of the click by embed.js; stays blank until the host says to show.
+  const [waiting, setWaiting] = useState(params.get("preload") === "1");
   const [stage, setStage] = useState<
     "button" | "clap" | "message" | "favorite"
   >(
@@ -126,6 +132,36 @@ export function Widget({
       setNotice("このブラウザではお気に入りを保存できません。");
     }
   }, [slug]);
+  useEffect(() => {
+    if (!waiting) return;
+    const host = params.get("parent_origin");
+    function show(event: MessageEvent) {
+      const reason = event.data?.reason;
+      if (
+        event.source !== window.parent ||
+        event.origin !== host ||
+        event.data?.type !== "creator-support:show" ||
+        !["clap", "message", "favorite"].includes(reason)
+      )
+        return;
+      open(reason);
+      setWaiting(false);
+    }
+    window.addEventListener("message", show);
+    return () => window.removeEventListener("message", show);
+  }, [waiting]);
+  // Tell the host it can show this frame without waiting for a fresh load.
+  useEffect(() => {
+    if (!waiting || !p) return;
+    const host = params.get("parent_origin");
+    if (!host || window.parent === window) return;
+    for (const a of (p.assets || []).filter((a) => a.kind === "thanks"))
+      new Image().src = assetUrl(a.id);
+    try {
+      if (new URL(host).origin === host)
+        window.parent.postMessage({ type: "creator-support:ready" }, host);
+    } catch {}
+  }, [waiting, p]);
   // Each showing advances a per-browser counter, used by the "sequential" order.
   function nextThanks() {
     const key = "hakushu-thanks:" + slug;
@@ -233,6 +269,7 @@ export function Widget({
         </button>
       </div>
     );
+  if (waiting) return null;
   if (stage === "button")
     return (
       <div className="widget-button-only">

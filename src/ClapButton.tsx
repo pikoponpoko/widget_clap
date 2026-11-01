@@ -2,17 +2,19 @@ import { previewMode } from "./mode";
 import { pageContext, tipLabel, tipRequested } from "./page-context";
 import { useEffect, useRef, useState } from "react";
 import { assetUrl } from "./asset-url";
-import { send, useApi } from "./api";
+import { inlineProject, send, useApi } from "./api";
 import type { Project } from "./types";
 export type EntryReason = "clap" | "message" | "favorite";
 export function ClapControl({
   project: p,
   onOpen,
   onReady,
+  onFail,
 }: {
   project: Project;
   onOpen: (reason: EntryReason) => void;
   onReady?: () => void;
+  onFail?: () => void;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -28,17 +30,22 @@ export function ClapControl({
     if (busy) return;
     setBusy(true);
     setError("");
+    // The thank-you opens at once; it is closed again if the clap cannot be saved.
+    const opened = !!p.clap_enabled && !!onFail;
+    if (opened) onOpen("clap");
     try {
       if (p.clap_enabled)
         await send(
           "/public/projects/" + encodeURIComponent(p.slug) + "/claps",
           pageContext,
         );
-      onOpen(
-        p.clap_enabled ? "clap" : p.message_enabled ? "message" : "favorite",
-      );
+      if (!opened)
+        onOpen(
+          p.clap_enabled ? "clap" : p.message_enabled ? "message" : "favorite",
+        );
     } catch (e) {
       setError((e as Error).message);
+      if (opened) onFail?.();
     } finally {
       setBusy(false);
     }
@@ -107,6 +114,7 @@ export function ClapControl({
 export function EmbeddedButton({ slug }: { slug: string }) {
   const { data: p, error } = useApi<Project>(
     "/public/projects/" + encodeURIComponent(slug),
+    inlineProject<Project>(slug),
   );
   const [fallback, setFallback] = useState("");
   // Nothing is shown until the owner's own button image has loaded.
@@ -168,7 +176,15 @@ export function EmbeddedButton({ slug }: { slug: string }) {
       style={ready ? undefined : { visibility: "hidden" }}
       aria-busy={!ready}
     >
-      <ClapControl project={p} onOpen={open} onReady={() => setReady(true)} />
+      <ClapControl
+        project={p}
+        onOpen={open}
+        onReady={() => setReady(true)}
+        onFail={() => {
+          postToHost({ type: "creator-support:close" });
+          setFallback("");
+        }}
+      />
       {/* data-tip="on" pages (e.g. tool downloads) show the tip link before any click. */}
       {tipRequested &&
         (p.clap_enabled || p.message_enabled || p.favorite_enabled) &&

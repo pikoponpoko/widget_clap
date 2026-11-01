@@ -31,16 +31,21 @@ export async function api<T>(
 }
 export const send = <T>(path: string, data: unknown, method = "POST") =>
   api<T>(path, { method, body: JSON.stringify(data) });
-export function useApi<T>(path: string) {
+export function useApi<T>(path: string, initial?: T | null) {
   const [state, setState] = useState<{
     path: string;
     data: T | null;
     error: string;
     loading: boolean;
-  }>({ path, data: null, error: "", loading: true });
+  }>(
+    initial
+      ? { path, data: initial, error: "", loading: false }
+      : { path, data: null, error: "", loading: true },
+  );
   const [version, setVersion] = useState(0);
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
+    if (initial && version === 0 && state.path === path && state.data) return;
     let active = true;
     setState((old) => ({
       path,
@@ -103,3 +108,13 @@ export const dateTime = (s: string) =>
     minute: "2-digit",
     timeZone: "Asia/Tokyo",
   }).format(new Date(s));
+// Embed pages carry the public project data in the HTML, saving one request.
+export function inlineProject<T extends { slug: string }>(slug: string) {
+  try {
+    const el = document.getElementById("hakushu-project");
+    const data = el && (JSON.parse(el.textContent || "") as T);
+    return data && data.slug === slug ? data : null;
+  } catch {
+    return null;
+  }
+}

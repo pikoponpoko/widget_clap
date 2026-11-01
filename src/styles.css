@@ -558,13 +558,17 @@ small {
   height: 6px;
   border-radius: 2px;
 }
-.legend-clap,
-.bar-clap {
+.legend-clap {
   background: #adadad;
 }
-.legend-message,
-.bar-message {
+.legend-message {
   background: #4a4a4a;
+}
+.bar-clap {
+  --c: #adadad;
+}
+.bar-message {
+  --c: #4a4a4a;
 }
 .activity-heading {
   flex-wrap: wrap;
@@ -628,8 +632,25 @@ small {
 .bar-clap,
 .bar-message {
   display: block;
-  border-radius: 2px 2px 0 0;
   min-width: 1px;
+  background: repeating-linear-gradient(
+    to top,
+    var(--c) 0 calc(var(--block) - 1px),
+    transparent calc(var(--block) - 1px) var(--block)
+  );
+  transform-origin: bottom;
+  animation: stack-up 0.35s ease-out;
+}
+@keyframes stack-up {
+  from {
+    transform: scaleY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar-clap,
+  .bar-message {
+    animation: none;
+  }
 }
 .chart-tick {
   position: absolute;
@@ -643,6 +664,11 @@ small {
 .chart-column:last-child .chart-tick {
   left: auto;
   right: 0;
+}
+.chart-column .chart-tick.centered {
+  left: 0;
+  right: 0;
+  text-align: center;
 }
 .chart-loading {
   height: 190px;
@@ -2784,10 +2810,10 @@ html.embed-document {
   justify-content: flex-end;
 }
 .chart-column.active .bar-clap {
-  background: #4a4a4a;
+  --c: #4a4a4a;
 }
 .chart-column.active .bar-message {
-  background: #262626;
+  --c: #262626;
 }
 .hour-date {
   font-size: 11px;

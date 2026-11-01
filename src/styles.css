@@ -1598,8 +1598,8 @@ small {
 }
 .support-widget textarea,
 .support-widget .sender-name-input {
-  font-size: 11px;
-  min-height: 104px;
+  font-size: 12px;
+  min-height: 88px;
   border-color: #e6e6e6;
   background: #fdfdfd;
 }
@@ -1619,9 +1619,9 @@ small {
   margin: 14px 0 11px;
 }
 .support-widget .check-label {
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.8;
-  margin-bottom: 18px;
+  margin: 0;
 }
 .support-widget input[type="checkbox"] {
   width: 13px;
@@ -1629,8 +1629,7 @@ small {
 }
 .send-button {
   width: 100%;
-  margin-top: 3px;
-  min-height: 41px;
+  min-height: 38px;
   font-size: 11px;
 }
 .widget-footer {
@@ -1715,7 +1714,7 @@ small {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  margin-top: 22px;
+  margin-top: 16px;
 }
 .tip-link small {
   font-size: 8px;
@@ -2453,23 +2452,25 @@ small {
 .browser-preview .widget-wrap.thank-stage,
 .widget-wrap.thank-stage {
   min-height: 0;
-  padding: 24px;
+  padding: 8px 20px 20px;
 }
 .thank-stage .thank-art {
-  margin: 5px 0 20px;
+  margin: 0 0 12px;
 }
 .thank-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 22px;
+  justify-content: center;
+  margin: 0 0 16px;
 }
 .thank-actions .btn {
-  font-size: 10px;
+  min-height: 30px;
+  padding: 4px 12px;
+  gap: 6px;
+  font-size: 11px;
 }
 .thank-stage .optional-message {
   border-top: 1px solid #e6e6e6;
-  padding-top: 20px;
+  padding-top: 16px;
 }
 .preview-widget-note {
   font-size: 9px;
@@ -2910,7 +2911,7 @@ html.embed-document {
 }
 .support-widget .sender-name-input {
   min-height: 0;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 .support-widget .sender-name-input {
   width: 100%;
@@ -2930,7 +2931,8 @@ html.embed-document {
 .reply-choice {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 18px;
+  gap: 4px 16px;
+  margin: 10px 0 12px;
 }
 .widget-logo {
   font-size: 15px;

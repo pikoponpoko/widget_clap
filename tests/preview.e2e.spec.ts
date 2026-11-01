@@ -45,7 +45,7 @@ test("only the tiny button is embedded; click saves applause before optional fee
   ).toBeVisible();
   await expect(
     thanksFrame(page).getByRole("checkbox", {
-      name: "この感想の第三者公開を許可する（任意）",
+      name: "公開を許可",
     }),
   ).not.toBeChecked();
   const after = await page.locator(".demo-following-content").boundingBox();
@@ -103,7 +103,7 @@ test("mobile demo retains layout and allows closing the thank-you without a mess
     fullPage: true,
   });
 });
-test("optional message and reply remain browser-local, favorites persist, and another browser cannot read the reply", async ({
+test("optional message and reply remain browser-local, and another browser cannot read the reply", async ({
   page,
   browser,
 }) => {
@@ -115,14 +115,13 @@ test("optional message and reply remain browser-local, favorites persist, and an
   await page.goto("/widget/sample");
   await expect(page.getByRole("textbox")).toHaveCount(0);
   await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
-  await page.getByRole("button", { name: "お気に入り", exact: true }).click();
   await expect(
     page.getByRole("checkbox", {
-      name: "この感想の第三者公開を許可する（任意）",
+      name: "公開を許可",
     }),
   ).not.toBeChecked();
   await page
-    .getByRole("textbox", { name: "メッセージ（任意）" })
+    .getByRole("textbox", { name: "メッセージ" })
     .fill("体験用の感想です。使いやすい道具をありがとう。");
   await page.waitForTimeout(1600);
   await page.getByRole("button", { name: "感想を保存して試す" }).click();
@@ -130,11 +129,6 @@ test("optional message and reply remain browser-local, favorites persist, and an
     page.getByRole("heading", { name: "送信しました" }),
   ).toBeVisible();
   const url = await page.getByLabel("返信確認URL").inputValue();
-  await page.goto("/widget/sample");
-  await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "お気に入り", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
   await page.goto("/admin#inbox");
   await page
     .getByRole("button")
@@ -226,17 +220,13 @@ test("per-placement switches suppress disabled features, and unconnected tips ne
   const slug = await page.evaluate(
     (k) =>
       JSON.parse(localStorage.getItem(k)!).projects.find(
-        (p: { message_enabled: boolean; favorite_enabled: boolean }) =>
-          !p.message_enabled && !p.favorite_enabled,
+        (p: { message_enabled: boolean }) => !p.message_enabled,
       ).slug,
     storeKey,
   );
   await page.goto("/widget/" + slug);
   await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
   await expect(page.getByRole("textbox")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "お気に入り", exact: true }),
-  ).toHaveCount(0);
   await expect(page.getByAltText("作者からのお礼イラスト")).toBeVisible();
   await page.evaluate((k) => {
     const s = JSON.parse(localStorage.getItem(k)!);
@@ -256,7 +246,7 @@ test("per-placement switches suppress disabled features, and unconnected tips ne
   await expect(page.getByAltText("作者からのお礼イラスト")).toHaveCount(0);
   await expect(page.getByRole("link", { name: /任意の支援/ })).toHaveCount(0);
   await page
-    .getByRole("textbox", { name: "メッセージ（任意）" })
+    .getByRole("textbox", { name: "メッセージ" })
     .fill("返信なしの感想");
   await page.waitForTimeout(1600);
   await page.getByRole("button", { name: "感想を保存して試す" }).click();
@@ -336,7 +326,7 @@ test("one code serves many pages: claps and messages are listed per page in the 
     ).toBeVisible();
     if (n === 2) {
       await thanksFrame(page)
-        .getByRole("textbox", { name: "メッセージ（任意）" })
+        .getByRole("textbox", { name: "メッセージ" })
         .fill("ブログへの感想です。");
       await page.waitForTimeout(1600);
       await thanksFrame(page)
@@ -399,7 +389,7 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
       .getByRole("button", { name: "拍手を送る", exact: true })
       .click();
     await thanksFrame(page)
-      .getByRole("textbox", { name: "メッセージ（任意）" })
+      .getByRole("textbox", { name: "メッセージ" })
       .fill(body);
     await page.waitForTimeout(1600);
     await thanksFrame(page)

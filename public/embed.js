@@ -64,7 +64,7 @@
   var style = document.createElement("style");
   if (script.nonce) style.nonce = script.nonce;
   style.textContent =
-    ":host{display:inline-block;vertical-align:middle;max-width:100%}iframe{border:0;display:block;background:transparent}dialog{box-sizing:border-box;width:440px;max-width:calc(100vw - 24px);height:86vh;height:86dvh;max-height:900px;padding:0;border:1px solid #ddd;border-radius:12px;background:white;color:#292929;box-shadow:0 15px 60px #0003}dialog[open]{display:flex;flex-direction:column}dialog::backdrop{background:#0006}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;padding:9px 14px;font:600 15px/1.5 system-ui,sans-serif;letter-spacing:1px}header button{width:34px;height:34px;border:0;border-radius:6px;background:#f5f5f5;color:#333;font-size:23px;cursor:pointer}header button:focus-visible{outline:2px solid #444}dialog iframe{width:100%;flex:1;min-height:0}";
+    ":host{display:inline-block;vertical-align:middle;max-width:100%}iframe{border:0;display:block;background:transparent}dialog{box-sizing:border-box;width:440px;max-width:calc(100vw - 24px);height:86vh;height:86dvh;max-height:900px;padding:0;border:1px solid #ddd;border-radius:12px;background:white;color:#292929;box-shadow:0 15px 60px #0003}dialog[open]{display:flex;flex-direction:column}dialog::backdrop{background:#0006}header{display:flex;flex-shrink:0;justify-content:flex-end;padding:6px}header button{width:30px;height:30px;border:0;border-radius:6px;background:#f5f5f5;color:#333;font:20px/1 system-ui,sans-serif;cursor:pointer}header button:focus-visible{outline:2px solid #444;outline-offset:-2px}dialog iframe{width:100%;flex:1;min-height:0}";
   var frame = document.createElement("iframe");
   frame.width = "128";
   frame.height = "52";
@@ -79,13 +79,11 @@
   var dialog = document.createElement("dialog");
   dialog.setAttribute("aria-label", "拍手のお礼と任意の感想");
   var header = document.createElement("header");
-  var title = document.createElement("span");
-  title.textContent = "Hakushu";
   var close = document.createElement("button");
   close.type = "button";
   close.textContent = "×";
   close.setAttribute("aria-label", "お礼画面を閉じる");
-  header.append(title, close);
+  header.append(close);
   var content = document.createElement("iframe");
   content.title = "拍手のお礼と任意のメッセージ";
   content.referrerPolicy = "no-referrer";
@@ -152,6 +150,18 @@
       return;
     }
     if (
+      event.origin === origin &&
+      event.source === content.contentWindow &&
+      event.data &&
+      event.data.type === "creator-support:thanks-height"
+    ) {
+      var h = Math.min(4000, Math.max(0, Number(event.data.height) || 0));
+      if (h)
+        dialog.style.height =
+          "min(86dvh, 900px, " + (h + header.offsetHeight + 2) + "px)";
+      return;
+    }
+    if (
       !host.isConnected ||
       event.origin !== origin ||
       event.source !== frame.contentWindow
@@ -187,7 +197,7 @@
       data.type !== "creator-support:open" ||
       data.instance !== instance ||
       data.project !== slug ||
-      !["clap", "message", "favorite"].includes(data.reason)
+      !["clap", "message"].includes(data.reason)
     )
       return;
     var url = widgetUrl();

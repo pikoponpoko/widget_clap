@@ -466,7 +466,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
       (await (await request.get("/api/owner/backup-status")).json()).latest,
     ).toBeTruthy();
   });
-  test("uses the widget on mobile, saves a favorite and receives a reply URL", async ({
+  test("uses the widget on mobile, receives a reply URL", async ({
     page,
   }) => {
     await page.setExtraHTTPHeaders({
@@ -478,19 +478,13 @@ test.describe.serial("Phase 1 integrated flow", () => {
       page.getByRole("button", { name: "拍手を送る", exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
-    await page.getByRole("button", { name: "お気に入り", exact: true }).click();
-    await page.reload();
-    await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
-    await expect(
-      page.getByRole("button", { name: "お気に入り", exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
     await expect(
       page.getByRole("checkbox", {
-        name: "この感想の第三者公開を許可する（任意）",
+        name: "公開を許可",
       }),
     ).not.toBeChecked();
     await page
-      .getByRole("textbox", { name: "メッセージ（任意）" })
+      .getByRole("textbox", { name: "メッセージ" })
       .fill("スマートフォンからの便りです。");
     await page.waitForTimeout(1600);
     await page.getByRole("button", { name: "送信" }).click();

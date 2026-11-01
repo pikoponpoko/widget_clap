@@ -1,5 +1,5 @@
 import { previewMode } from "./mode";
-import { pageContext } from "./page-context";
+import { clapContext } from "./page-context";
 import { useEffect, useRef, useState } from "react";
 import { assetUrl } from "./asset-url";
 import { inlineProject, send, useApi } from "./api";
@@ -35,7 +35,7 @@ export function ClapControl({
       if (p.clap_enabled)
         await send(
           "/public/projects/" + encodeURIComponent(p.slug) + "/claps",
-          pageContext,
+          clapContext,
         );
       if (!opened)
         onOpen(

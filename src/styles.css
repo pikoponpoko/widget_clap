@@ -3236,3 +3236,61 @@ html.embed-document {
   border-top: 0;
   font-weight: 600;
 }
+
+.attr-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 24px;
+  padding: 0 22px 14px;
+}
+.attr-block {
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.attr-block h3 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.attr-block ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.attr-block li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  padding: 3px 0;
+}
+.attr-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attr-block li i {
+  grid-column: 1 / -1;
+  display: block;
+  height: 3px;
+  margin-top: 2px;
+  border-radius: 2px;
+  background: var(--clap-1);
+}
+.attr-more {
+  margin-top: 4px;
+  font-size: 11px;
+}
+@media (max-width: 960px) {
+  .attr-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .attr-grid {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0 16px 12px;
+  }
+}

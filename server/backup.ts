@@ -174,6 +174,7 @@ const schema = z
             visitor: z.string().max(64).default(""),
             page_url: z.string().max(500).default(""),
             page_title: z.string().max(200).default(""),
+            attrs: z.string().max(2000).default(""),
           })
           .strict(),
       )

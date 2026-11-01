@@ -162,6 +162,12 @@ export const clapSchema = z
     page_title: z.string().max(500).default(""),
   })
   .strict();
+// Reported by the clapping browser; the server keeps only cleaned values.
+export const clapBodySchema = clapSchema.extend({
+  lang: z.string().max(40).optional(),
+  screen: z.string().max(20).optional(),
+  ref: z.string().max(260).optional(),
+});
 export const reactionSchema = clapSchema.extend({
   kind: z.enum(REACTION_KEYS),
 });

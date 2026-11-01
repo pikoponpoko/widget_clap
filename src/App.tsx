@@ -47,6 +47,7 @@ import { defaultPrint, type PrintOptions } from "./print-options";
 import { collectImages } from "./image-files";
 import { planners, type PaperSize, type PlannerId } from "./planner-sizes";
 import type { Asset, HourStats, Message, Project, Stats } from "./types";
+import { ATTR_KEYS, type AttrKey } from "./attributes";
 import type { PeriodBucket, PeriodStats, PeriodUnit } from "./periods";
 import { webclapScript } from "./webclap-script";
 import { parseImport, parseImportHtml, type ImportRow } from "./import-parse";
@@ -227,6 +228,121 @@ function PageStats({
         </li>
       ))}
     </ol>
+  );
+}
+// Who clapped: place, language, device, referrer, screen and first time or not.
+const ATTR_TITLES: Record<AttrKey, string> = {
+  region: "地域",
+  city: "市区町村",
+  lang: "言語",
+  device: "端末",
+  os: "OS",
+  browser: "ブラウザ",
+  referrer: "参照元",
+  screen: "画面サイズ",
+  repeat: "初回・リピート",
+};
+function displayName(type: "region" | "language", code: string) {
+  try {
+    return new Intl.DisplayNames(["ja"], { type }).of(code) || code;
+  } catch {
+    return code;
+  }
+}
+function referrerName(host: string) {
+  if (!host) return "直接・不明";
+  if (host === "self") return "サイト内";
+  const h = host.replace(/^(www|m|l|lm)\./, "");
+  if (/^google\./.test(h)) return "Google検索";
+  if (/(^|\.)yahoo\./.test(h)) return "Yahoo!検索";
+  if (/^bing\.com$/.test(h)) return "Bing";
+  if (/^duckduckgo\.com$/.test(h)) return "DuckDuckGo";
+  if (/^(t\.co|x\.com|twitter\.com)$/.test(h)) return "X";
+  if (/^(facebook\.com|fb\.me)$/.test(h)) return "Facebook";
+  if (/^instagram\.com$/.test(h)) return "Instagram";
+  if (/^(bsky\.app)$/.test(h)) return "Bluesky";
+  return h;
+}
+function attrLabel(k: AttrKey, v: string) {
+  if (k === "region" || k === "city") {
+    const [country, region, city] = v.split("|");
+    const nation =
+      country && country !== "JP" ? displayName("region", country) : "";
+    const parts = k === "city" ? [city, region, nation] : [nation, region];
+    return (
+      parts.filter(Boolean).join(" ") ||
+      (country ? displayName("region", country) : "不明")
+    );
+  }
+  if (k === "referrer") return referrerName(v);
+  if (!v) return "不明";
+  if (k === "lang") return displayName("language", v);
+  if (k === "device")
+    return v === "phone" ? "スマホ" : v === "tablet" ? "タブレット" : "PC";
+  if (k === "screen") return v.replace("x", "×");
+  if (k === "repeat") return v === "repeat" ? "リピート" : "初回";
+  return v;
+}
+function AttrList({
+  k,
+  rows,
+  total,
+}: {
+  k: AttrKey;
+  rows: { v: string; n: number }[];
+  total: number;
+}) {
+  const [all, setAll] = useState(false);
+  const shown = all ? rows : rows.slice(0, 5);
+  return (
+    <div className="attr-block">
+      <h3>{ATTR_TITLES[k]}</h3>
+      <ol>
+        {shown.map((r) => (
+          <li key={r.v}>
+            <span className="attr-name">
+              {k === "referrer" && r.v && r.v !== "self" ? (
+                <span title={r.v}>{attrLabel(k, r.v)}</span>
+              ) : (
+                attrLabel(k, r.v)
+              )}
+            </span>
+            <b>{r.n.toLocaleString()}</b>
+            <i style={{ width: (r.n / total) * 100 + "%" }} />
+          </li>
+        ))}
+      </ol>
+      {rows.length > 5 && (
+        <button
+          type="button"
+          className="text-button attr-more"
+          aria-expanded={all}
+          onClick={() => setAll(!all)}
+        >
+          {all ? "閉じる" : `ほか ${rows.length - 5} 件`}
+        </button>
+      )}
+    </div>
+  );
+}
+function AttrStatsPanel({ stats }: { stats: Stats | null }) {
+  if (!stats) return null;
+  const a = stats.attributes;
+  return (
+    <section className="panel activity-panel">
+      <div className="panel-heading">
+        <h2>拍手した人</h2>
+      </div>
+      {!a?.total ? (
+        <p className="reaction-empty muted">記録はまだありません</p>
+      ) : (
+        <div className="attr-grid">
+          {ATTR_KEYS.map((k) => (
+            <AttrList key={k} k={k} rows={a.lists[k] || []} total={a.total} />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 // Reactions pressed on the thank-you screen, per day or per page.
@@ -946,6 +1062,7 @@ export default function App() {
                     selected={pageUrl}
                     onSelect={setPageUrl}
                   />
+                  <AttrStatsPanel stats={stats.data} />
                   <section className="panel">
                     <div className="panel-heading">
                       <h2>

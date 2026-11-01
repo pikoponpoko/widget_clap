@@ -14,6 +14,7 @@ import {
   readBounded,
   projectSchema,
   clapSchema,
+  clapBodySchema,
   reactionSchema,
   normalizePage,
   isBlockedSite,
@@ -34,6 +35,7 @@ import {
 import { snapshot, scheduledBackup, restore } from "./backup";
 import type { Project, Message, Asset } from "./models";
 import { REACTION_KEYS } from "../src/reactions";
+import { buildAttrs, readAttrs, tallyAttrs } from "../src/attributes";
 import {
   periodKeys,
   periodStart,
@@ -158,7 +160,8 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   assertSameOrigin(c.req.raw);
   const p = await projectBy(c.env, c.req.param("slug"));
   if (!p.clap_enabled) throw new ApiError(403, "拍手は現在お休み中です。");
-  const page = normalizePage(await jsonBody(c.req.raw, clapSchema, 4000));
+  const body = await jsonBody(c.req.raw, clapBodySchema, 4000);
+  const page = normalizePage(body);
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `clap:${key}`, 60, 60);
@@ -173,10 +176,39 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   );
   // Same connection, same visitor on every day, so totals over many days stay true.
   const visitor = (await privateKey(c.req.raw, c.env, "visitor")).slice(0, 32);
-  const result = await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor) SELECT ?,?,?,?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
+  // Raw IPs are never stored: the place comes from Cloudflare, the person from the hashed visitor.
+  const cf = (c.req.raw as { cf?: Record<string, unknown> }).cf || {};
+  const seen = await c.env.DB.prepare(
+    "SELECT 1 FROM claps WHERE visitor=? LIMIT 1",
   )
-    .bind(id(), p.id, now(), dedupe, page.page_url, page.page_title, visitor)
+    .bind(visitor)
+    .first();
+  const attrs = buildAttrs({
+    country: cf.country,
+    region: cf.region,
+    regionCode: cf.regionCode,
+    city: cf.city,
+    lang: body.lang,
+    acceptLanguage: c.req.header("Accept-Language"),
+    userAgent: c.req.header("User-Agent"),
+    referrer: body.ref,
+    screen: body.screen,
+    pageUrl: page.page_url,
+    repeat: !!seen,
+  });
+  const result = await c.env.DB.prepare(
+    "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor,attrs) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
+  )
+    .bind(
+      id(),
+      p.id,
+      now(),
+      dedupe,
+      page.page_url,
+      page.page_title,
+      visitor,
+      JSON.stringify(attrs),
+    )
     .run();
   if (
     !result.meta.changes &&
@@ -788,6 +820,7 @@ app.get("/api/owner/stats", async (c) => {
     imported,
     reactionDays,
     reactionPages,
+    attrRows,
   ] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT ${day} AS day,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
@@ -817,6 +850,9 @@ app.get("/api/owner/stats", async (c) => {
     c.env.DB.prepare(
       `SELECT page_url,max(page_title) AS page_title,kind,count(*) AS count FROM reactions WHERE created_at>=? AND created_at<=?${suffix} GROUP BY page_url,kind ORDER BY page_url`,
     ).bind(...args),
+    c.env.DB.prepare(
+      `SELECT attrs FROM claps WHERE attrs<>'' AND created_at>=? AND created_at<=?${pageSuffix} LIMIT 20000`,
+    ).bind(...pageArgs),
   ]);
   const extra = imported.results as {
     day: string;
@@ -845,6 +881,9 @@ app.get("/api/owner/stats", async (c) => {
     pages: pages.results,
     reaction_days: reactionDays.results,
     reaction_pages: reactionPages.results,
+    attributes: tallyAttrs(
+      (attrRows.results as { attrs: string }[]).map((r) => readAttrs(r.attrs)),
+    ),
     from: start,
     to: end,
   });

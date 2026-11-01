@@ -159,6 +159,52 @@ test.describe.serial("Phase 1 integrated flow", () => {
       after.reaction_days.some((x: { kind: string }) => x.kind === "hundred"),
     ).toBe(false);
   });
+  test("records who clapped without storing the IP", async ({ request }) => {
+    const url = "/api/public/projects/" + slug + "/claps";
+    const ip = `2001:db8:feed:${Math.floor(Math.random() * 65535).toString(16)}::7`;
+    const clap = (page: string, ref: string) =>
+      request.post(url, {
+        headers: {
+          ...headers,
+          "CF-Connecting-IP": ip,
+          "User-Agent":
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+        },
+        data: {
+          page_url: "https://kazukisekiguchi.com/tools/" + page,
+          page_title: "記事" + page,
+          lang: "en-US",
+          screen: "390x844",
+          ref,
+        },
+      });
+    expect((await (await clap("attr1", "t.co")).json()).counted).toBe(true);
+    expect(
+      (await (await clap("attr2", "kazukisekiguchi.com")).json()).counted,
+    ).toBe(true);
+    expect((await clap("attr3", "x".repeat(300))).status()).toBe(400);
+    const stats = await (
+      await request.get("/api/owner/stats?project=" + projectId)
+    ).json();
+    const list = (k: string) =>
+      Object.fromEntries(
+        stats.attributes.lists[k].map((x: { v: string; n: number }) => [
+          x.v,
+          x.n,
+        ]),
+      );
+    expect(list("lang").en).toBe(2);
+    expect(list("device").phone).toBe(2);
+    expect(list("os").iOS).toBe(2);
+    expect(list("browser").Safari).toBe(2);
+    expect(list("screen")["390x844"]).toBe(2);
+    expect(list("referrer")["t.co"]).toBe(1);
+    expect(list("referrer").self).toBe(1);
+    expect(list("repeat").first).toBeGreaterThanOrEqual(1);
+    expect(list("repeat").repeat).toBeGreaterThanOrEqual(1);
+    const backup = await (await request.get("/api/owner/backup")).text();
+    expect(backup).not.toContain(ip);
+  });
   test("delivers private replies; revokes and rotates capability URLs", async ({
     request,
   }) => {

@@ -147,6 +147,14 @@ function StatCard({
     </div>
   );
 }
+function pagePath(url: string) {
+  try {
+    const u = new URL(url);
+    return decodeURI(u.pathname + u.search);
+  } catch {
+    return url;
+  }
+}
 // Clicking a page narrows the dashboard to it; clicking it again shows all pages.
 function PageStats({
   stats,
@@ -159,6 +167,10 @@ function PageStats({
 }) {
   if (!stats) return null;
   const pages = stats.pages || [];
+  // Pages that share a title (or have none) also show their path so each row is identifiable.
+  const titleCount = new Map<string, number>();
+  for (const p of pages)
+    titleCount.set(p.page_title, (titleCount.get(p.page_title) || 0) + 1);
   if (!pages.length)
     return <Empty title="拍手はまだありません" icon={ThumbsUp} />;
   return (
@@ -178,7 +190,10 @@ function PageStats({
                   onSelect(p.page_url === selected ? "" : p.page_url)
                 }
               >
-                {p.page_title || p.page_url}
+                {p.page_title || pagePath(p.page_url)}
+                {p.page_title && (titleCount.get(p.page_title) || 0) > 1 && (
+                  <span className="page-path">{pagePath(p.page_url)}</span>
+                )}
               </button>
               <a
                 href={p.page_url}
@@ -190,7 +205,7 @@ function PageStats({
               </a>
             </>
           ) : (
-            <span className="muted">ページ不明</span>
+            <span className="muted">プレビュー・直接表示</span>
           )}
           <b>{p.count.toLocaleString()}</b>
         </li>

@@ -1,0 +1,16 @@
+{
+  "id": "/admin",
+  "name": "Hakushu",
+  "short_name": "Hakushu",
+  "lang": "ja",
+  "start_url": "/admin",
+  "scope": "/admin",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "/icons/hakushu-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/hakushu-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/hakushu-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

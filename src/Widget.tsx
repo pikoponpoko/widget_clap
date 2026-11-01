@@ -48,6 +48,7 @@ function Turnstile({
           sitekey: siteKey,
           action: "message",
           theme: "light",
+          appearance: "interaction-only",
           callback: (s: string) => callback.current(s),
           "expired-callback": () => callback.current(""),
           "error-callback": () => callback.current(""),

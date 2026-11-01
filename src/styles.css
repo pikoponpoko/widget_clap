@@ -2864,6 +2864,10 @@ html.embed-document {
   text-align: left;
   font-size: inherit;
 }
+.page-path {
+  margin-left: 8px;
+  color: var(--muted);
+}
 .page-stats li.active .page-filter {
   font-weight: 600;
   text-decoration: underline;

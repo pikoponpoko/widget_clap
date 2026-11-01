@@ -1248,6 +1248,9 @@ app.get("*", async (c) => {
   const out = new Response(res.body, res);
   out.headers.set("Content-Security-Policy", pageCsp("'none'"));
   out.headers.set("X-Frame-Options", "DENY");
+  // Built files carry a content hash in their name, so a reload reuses them.
+  if (res.ok && c.req.path.startsWith("/assets/"))
+    out.headers.set("Cache-Control", "public, max-age=31536000, immutable");
   return out;
 });
 export { app };

@@ -2167,10 +2167,20 @@ function ImportPanel({
     [target, setTarget] = useState(""),
     [fallbackDate, setFallbackDate] = useState(""),
     [showAll, setShowAll] = useState(false),
+    [skippedOnly, setSkippedOnly] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const projectId = target || list[0]?.id || "";
-  const undated = (rows || []).some((r) => !r.created_at);
+  const chosen = (rows || []).filter((r) => !r.skip);
+  const undated = chosen.some((r) => !r.created_at);
+  const ngWords = list.find((p) => p.id === projectId)?.ng_words || [];
+  const norm = (v: string) => v.normalize("NFKC").toLowerCase();
+  // Spam usually carries links; NG keywords come from the widget settings.
+  const unwanted = (r: ImportRow) =>
+    /https?:\/\/|www\./i.test(r.body) ||
+    ngWords.some(
+      (w) => w && norm(r.sender_name + "\n" + r.body).includes(norm(w)),
+    );
   const update = (i: number, patch: Partial<ImportRow>) =>
     setRows((r) => r && r.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   function read(source: string) {
@@ -2180,7 +2190,10 @@ function ImportPanel({
       : parseImport(source);
     if (!parsed.length) setError("メッセージが見つかりません。");
     setShowAll(false);
-    setRows(parsed.length ? parsed : null);
+    setSkippedOnly(false);
+    setRows(
+      parsed.length ? parsed.map((r) => ({ ...r, skip: unwanted(r) })) : null,
+    );
   }
   async function save() {
     if (!rows) return;
@@ -2189,7 +2202,7 @@ function ImportPanel({
     let added = 0,
       skipped = 0;
     try {
-      const items = rows
+      const items = chosen
         .filter((r) => r.body.trim())
         .map((r) => ({
           created_at: r.created_at || fromJstInput(fallbackDate),
@@ -2306,46 +2319,67 @@ function ImportPanel({
           </>
         ) : (
           <>
+            <div className="inbox-tabs">
+              <button
+                className={!skippedOnly ? "active" : ""}
+                onClick={() => setSkippedOnly(false)}
+              >
+                すべて（{rows.length}）
+              </button>
+              <button
+                className={skippedOnly ? "active" : ""}
+                onClick={() => setSkippedOnly(true)}
+              >
+                除外（{rows.length - chosen.length}）
+              </button>
+            </div>
             <div className="import-rows">
-              {(showAll ? rows : rows.slice(0, 200)).map((r, i) => (
-                <div className="import-row" key={i}>
-                  <div className="import-row-meta">
-                    <input
-                      type="datetime-local"
-                      aria-label="日時"
-                      value={jstInput(r.created_at)}
-                      onChange={(e) =>
-                        update(i, { created_at: fromJstInput(e.target.value) })
-                      }
+              {(() => {
+                const shown = rows
+                  .map((r, i) => [r, i] as const)
+                  .filter(([r]) => !skippedOnly || r.skip);
+                return (showAll ? shown : shown.slice(0, 200)).map(([r, i]) => (
+                  <div
+                    className={"import-row" + (r.skip ? " skipped" : "")}
+                    key={i}
+                  >
+                    <div className="import-row-meta">
+                      <input
+                        type="checkbox"
+                        aria-label="取り込む"
+                        checked={!r.skip}
+                        onChange={(e) => update(i, { skip: !e.target.checked })}
+                      />
+                      <input
+                        type="datetime-local"
+                        aria-label="日時"
+                        value={jstInput(r.created_at)}
+                        onChange={(e) =>
+                          update(i, {
+                            created_at: fromJstInput(e.target.value),
+                          })
+                        }
+                      />
+                      <input
+                        aria-label="名前"
+                        placeholder="名前"
+                        maxLength={50}
+                        value={r.sender_name}
+                        onChange={(e) =>
+                          update(i, { sender_name: e.target.value })
+                        }
+                      />
+                    </div>
+                    <textarea
+                      aria-label="メッセージ"
+                      rows={2}
+                      maxLength={2000}
+                      value={r.body}
+                      onChange={(e) => update(i, { body: e.target.value })}
                     />
-                    <input
-                      aria-label="名前"
-                      placeholder="名前"
-                      maxLength={50}
-                      value={r.sender_name}
-                      onChange={(e) =>
-                        update(i, { sender_name: e.target.value })
-                      }
-                    />
-                    <button
-                      className="icon-button"
-                      aria-label="この行を除く"
-                      onClick={() =>
-                        setRows((x) => x && x.filter((_, j) => j !== i))
-                      }
-                    >
-                      <X size={16} />
-                    </button>
                   </div>
-                  <textarea
-                    aria-label="メッセージ"
-                    rows={2}
-                    maxLength={2000}
-                    value={r.body}
-                    onChange={(e) => update(i, { body: e.target.value })}
-                  />
-                </div>
-              ))}
+                ));
+              })()}
               {!showAll && rows.length > 200 && (
                 <button
                   className="text-button import-more"
@@ -2371,12 +2405,12 @@ function ImportPanel({
                 disabled={
                   busy ||
                   !projectId ||
-                  !rows.length ||
+                  !chosen.length ||
                   (undated && !fallbackDate)
                 }
                 onClick={save}
               >
-                {busy ? "取り込み中…" : `${rows.length} 件を取り込む`}
+                {busy ? "取り込み中…" : `${chosen.length} 件を取り込む`}
               </button>
               <button
                 className="btn"

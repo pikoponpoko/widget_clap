@@ -583,3 +583,32 @@ test("the export script walks every month of the old service and the file import
   await expect(page.locator(".message-item")).toHaveCount(3);
   await expect(page.getByText("返事不要")).toHaveCount(1);
 });
+test("messages with links start excluded and can be put back", async ({
+  page,
+}) => {
+  await page.goto("/admin#data");
+  await page
+    .getByRole("textbox", { name: "取り込むメッセージ" })
+    .fill(
+      "2015/03/02 12:34 いつも見ています\n2015/03/03 08:00 激安 https://spam.example\n2015/03/04 09:00 応援してます",
+    );
+  await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "2 件を取り込む" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "除外（1）" }).click();
+  await expect(page.getByRole("textbox", { name: "メッセージ" })).toHaveCount(
+    1,
+  );
+  await expect(page.getByRole("textbox", { name: "メッセージ" })).toHaveValue(
+    "激安 https://spam.example",
+  );
+  await page.getByRole("checkbox", { name: "取り込む" }).click();
+  await expect(
+    page.getByRole("button", { name: "3 件を取り込む" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "すべて（3）" }).click();
+  await page.getByRole("checkbox", { name: "取り込む" }).nth(1).uncheck();
+  await page.getByRole("button", { name: "2 件を取り込む" }).click();
+  await expect(page.getByText("2 件を取り込みました")).toBeVisible();
+});

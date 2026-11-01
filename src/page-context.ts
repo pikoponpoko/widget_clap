@@ -4,6 +4,12 @@ export const pageContext = {
   page_url: query.get("page") || "",
   page_title: query.get("page_title") || "",
 };
+import { browserAttrs } from "./attributes";
+// Sent with a clap only: language, screen and the host of the page the visitor came from.
+export const clapContext = {
+  ...pageContext,
+  ...browserAttrs((query.get("ref") || "").slice(0, 253)),
+};
 export const tipRequested = query.get("tip") === "1";
 export const defaultTipLabel = "任意の支援をする";
 // Label chosen by the site owner with data-tip-label; React renders it as plain text.

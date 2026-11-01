@@ -1,5 +1,6 @@
 import type { Asset, Message, Project } from "./types";
 import { DEFAULT_REACTIONS } from "./reactions";
+import { buildAttrs, tallyAttrs, type ClapAttrs } from "./attributes";
 import {
   periodKey,
   periodKeys,
@@ -23,6 +24,7 @@ interface Store {
     visitor?: string;
     page_url?: string;
     page_title?: string;
+    attrs?: ClapAttrs;
   }[];
   assets: PreviewAsset[];
   reactions?: {
@@ -234,12 +236,22 @@ export async function previewRequest(
       const counted = !s.claps.some((c) => c.key === k);
       if (counted) {
         const created_at = new Date().toISOString();
+        const visitor = (await digest(visitorId())).slice(0, 32);
         s.claps.push({
           project_id: pr.id,
           created_at,
           key: k,
-          visitor: (await digest(visitorId())).slice(0, 32),
+          visitor,
           ...page,
+          // The browser preview has no network location, so the place stays empty.
+          attrs: buildAttrs({
+            lang: data.lang,
+            userAgent: navigator.userAgent,
+            referrer: data.ref,
+            screen: data.screen,
+            pageUrl: page.page_url,
+            repeat: s.claps.some((c) => c.visitor === visitor),
+          }),
         });
         save(s);
       }
@@ -671,6 +683,14 @@ export async function previewRequest(
         (r) => ({ page_url: r.page_url || "", page_title: r.page_title || "" }),
       ),
       imported,
+      attributes: tallyAttrs(
+        scopedClaps
+          .filter((c) => {
+            const d = jst(c.created_at).slice(0, 10);
+            return d >= from && d <= to;
+          })
+          .map((c) => c.attrs || null),
+      ),
       claps: merge(daily(scopedClaps), "claps"),
       visitors: merge(daily(scopedClaps, true), "visitors"),
       visitor_total:

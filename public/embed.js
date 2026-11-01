@@ -47,8 +47,14 @@
       .trim()
       .slice(0, 200);
   }
+  // Only the host of the previous page, never its path or search words.
+  var referrer = "";
+  try {
+    if (document.referrer) referrer = new URL(document.referrer).hostname;
+  } catch (e) {}
   function withPage(url) {
     url.searchParams.set("page", pageUrl());
+    if (referrer) url.searchParams.set("ref", referrer);
     url.searchParams.set("page_title", pageTitle());
     if (tip) url.searchParams.set("tip", "1");
     if (tip && tipLabel) url.searchParams.set("tip_label", tipLabel);

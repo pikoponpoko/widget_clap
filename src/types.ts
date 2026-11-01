@@ -1,3 +1,4 @@
+import type { AttrStats } from "./attributes";
 export interface Asset {
   id: string;
   project_id: string;
@@ -67,6 +68,7 @@ export interface Stats {
     kind: string;
     count: number;
   }[];
+  attributes?: AttrStats;
   from: string;
   to: string;
 }

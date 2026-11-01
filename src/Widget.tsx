@@ -1,6 +1,11 @@
 import { ClapControl } from "./ClapButton";
 import { previewMode } from "./mode";
-import { pageContext, tipLabel, tipRequested } from "./page-context";
+import {
+  clapContext,
+  pageContext,
+  tipLabel,
+  tipRequested,
+} from "./page-context";
 import { assetUrl } from "./asset-url";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -225,7 +230,7 @@ export function Widget({
     try {
       await send(
         "/public/projects/" + encodeURIComponent(slug) + "/claps",
-        pageContext,
+        clapContext,
       );
       setThanksIndex(nextThanks());
       setStage("clap");

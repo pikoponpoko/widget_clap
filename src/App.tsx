@@ -258,7 +258,6 @@ function displayName(type: "region" | "language", code: string) {
   }
 }
 function referrerName(host: string) {
-  if (!host) return "直接・不明";
   if (host === "self") return "サイト内";
   const h = host.replace(/^(www|m|l|lm)\./, "");
   if (/^google\./.test(h)) return "Google検索";
@@ -271,19 +270,22 @@ function referrerName(host: string) {
   if (/^(bsky\.app)$/.test(h)) return "Bluesky";
   return h;
 }
+// Unknown values are left out of the lists.
+function attrKnown(k: AttrKey, v: string) {
+  const [country, region, city] = v.split("|");
+  if (k === "region") return !!(country || region);
+  if (k === "city") return !!city;
+  return !!v;
+}
 function attrLabel(k: AttrKey, v: string) {
   if (k === "region" || k === "city") {
     const [country, region, city] = v.split("|");
     const nation =
       country && country !== "JP" ? displayName("region", country) : "";
     const parts = k === "city" ? [city, region, nation] : [nation, region];
-    return (
-      parts.filter(Boolean).join(" ") ||
-      (country ? displayName("region", country) : "不明")
-    );
+    return parts.filter(Boolean).join(" ");
   }
   if (k === "referrer") return referrerName(v);
-  if (!v) return "不明";
   if (k === "lang") return displayName("language", v);
   if (k === "device")
     return v === "phone" ? "スマホ" : v === "tablet" ? "タブレット" : "PC";
@@ -309,7 +311,7 @@ function AttrList({
         {shown.map((r) => (
           <li key={r.v}>
             <span className="attr-name">
-              {k === "referrer" && r.v && r.v !== "self" ? (
+              {k === "referrer" && r.v !== "self" ? (
                 <span title={r.v}>{attrLabel(k, r.v)}</span>
               ) : (
                 attrLabel(k, r.v)
@@ -345,9 +347,12 @@ function AttrStatsPanel({ stats }: { stats: Stats | null }) {
         <p className="reaction-empty muted">記録はまだありません</p>
       ) : (
         <div className="attr-grid">
-          {ATTR_KEYS.map((k) => (
-            <AttrList key={k} k={k} rows={a.lists[k] || []} total={a.total} />
-          ))}
+          {ATTR_KEYS.map((k) => {
+            const rows = (a.lists[k] || []).filter((r) => attrKnown(k, r.v));
+            return rows.length ? (
+              <AttrList key={k} k={k} rows={rows} total={a.total} />
+            ) : null;
+          })}
         </div>
       )}
     </section>

@@ -85,7 +85,7 @@ function safeProject(p: Project, env: Env, assets: unknown[]) {
     tip_enabled: !!p.tip_enabled,
     thanks_order: p.thanks_order,
     thanks_message: p.thanks_message,
-    tip_url: tipVisible(p as unknown as Record<string, unknown>, env)
+    tip_url: tipVisible(p as unknown as Record<string, unknown>)
       ? p.tip_url
       : null,
     assets,
@@ -135,7 +135,6 @@ app.get("/api/owner/session", (c) => {
     plan: "owner",
     billing: "exempt",
     local: local(c.req.raw, c.env),
-    tip_links_enabled: c.env.TIP_LINKS_ENABLED === "true",
   });
 });
 app.get("/api/public/projects/:slug", async (c) => {

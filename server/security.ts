@@ -13,7 +13,6 @@ export interface Env {
   SPAM_SECRET?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
-  TIP_LINKS_ENABLED?: string;
 }
 export class ApiError extends Error {
   constructor(
@@ -471,13 +470,7 @@ export function csvCell(value: unknown) {
   if (/^[\s]*[=+\-@\t\r]/.test(s)) s = "'" + s;
   return '"' + s.replace(/"/g, '""') + '"';
 }
-export function tipVisible(p: Record<string, unknown>, env: Env) {
-  return (
-    env.TIP_LINKS_ENABLED === "true" &&
-    !!p.tip_enabled &&
-    !!p.tip_url &&
-    !!p.tip_legal_checked &&
-    !!p.tip_terms_checked &&
-    !!p.tip_privacy_checked
-  );
+// The tip is only a link to an external page (OFUSE, Ko-fi, ...); Hakushu handles no money.
+export function tipVisible(p: Record<string, unknown>) {
+  return /^https:\/\//.test(String(p.tip_url || ""));
 }

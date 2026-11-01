@@ -209,7 +209,7 @@ test("cross-origin embedding works and ignores forged host messages", async ({
     );
   }
 });
-test("per-placement switches suppress disabled features, and unconnected tips never render", async ({
+test("per-placement switches suppress disabled features, and the tip link shows only on tip pages", async ({
   page,
 }) => {
   // With one site, the widget page shows its settings directly.
@@ -234,11 +234,7 @@ test("per-placement switches suppress disabled features, and unconnected tips ne
     p.thanks_enabled = false;
     p.message_enabled = true;
     p.reply_enabled = false;
-    p.tip_enabled = true;
     p.tip_url = "https://example.com";
-    p.tip_legal_checked = true;
-    p.tip_terms_checked = true;
-    p.tip_privacy_checked = true;
     localStorage.setItem(k, JSON.stringify(s));
   }, storeKey);
   await page.goto("/widget/sample");
@@ -254,6 +250,12 @@ test("per-placement switches suppress disabled features, and unconnected tips ne
     page.getByRole("heading", { name: "送信しました" }),
   ).toBeVisible();
   await expect(page.getByLabel("返信確認URL")).toHaveCount(0);
+  await page.goto("/widget/sample?tip=1");
+  await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
+  await expect(page.getByRole("link", { name: /任意の支援/ })).toHaveAttribute(
+    "href",
+    "https://example.com",
+  );
 });
 
 test("closes the thank-you modal and shows the error if applause cannot be saved", async ({
@@ -358,7 +360,7 @@ test("the tip-enabled demo page shows the unconnected tip placeholder only there
     .nth(3)
     .getByRole("button", { name: "拍手を送る", exact: true })
     .click();
-  await expect(thanksFrame(page).getByText("決済リンク未設定")).toBeVisible();
+  await expect(thanksFrame(page).getByText("投げ銭リンク未設定")).toBeVisible();
   await expect(
     thanksFrame(page).getByRole("link", { name: /任意の支援/ }),
   ).toHaveCount(0);
@@ -370,7 +372,9 @@ test("the tip-enabled demo page shows the unconnected tip placeholder only there
   await expect(
     thanksFrame(page).getByRole("img", { name: "作者からのお礼イラスト" }),
   ).toBeVisible();
-  await expect(thanksFrame(page).getByText("決済リンク未設定")).toHaveCount(0);
+  await expect(thanksFrame(page).getByText("投げ銭リンク未設定")).toHaveCount(
+    0,
+  );
 });
 test("analytics by hour and page, NG keywords, month filter and bulk actions", async ({
   page,
@@ -468,13 +472,15 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
   await page.getByRole("button", { name: "削除" }).click();
   await expect(page.locator(".message-row")).toHaveCount(1);
 });
-test("the tip-enabled page shows the tip link next to the button before any click", async ({
+test("the tip link waits for the thank-you screen, not next to the button", async ({
   page,
 }) => {
   await page.goto("/demo");
   const frames = page.frameLocator('iframe[title="拍手ボタン"]');
-  await expect(frames.nth(3).getByText("コーヒーをおごる")).toBeVisible();
-  await expect(frames.nth(0).getByText("コーヒーをおごる")).toHaveCount(0);
+  await expect(
+    frames.nth(3).getByRole("button", { name: "拍手を送る", exact: true }),
+  ).toBeVisible();
+  await expect(frames.nth(3).getByText("コーヒーをおごる")).toHaveCount(0);
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
 test("the demo code generator adds an escaped custom tip label", async ({

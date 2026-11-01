@@ -501,7 +501,6 @@ export default function App() {
   const session = useApi<{
     role: string;
     local: boolean;
-    tip_links_enabled: boolean;
   }>("/owner/session");
   const [section, setSection] = useState<Section>(() =>
     ["overview", "inbox", "projects", "print", "data"].includes(
@@ -840,7 +839,6 @@ export default function App() {
                   key={widgetTarget === "new" ? "new" : widgetTarget.id}
                   inline
                   project={widgetTarget}
-                  tipEnabled={!!session.data?.tip_links_enabled}
                   onClose={() => {
                     if (widgetTarget === "new") setEdit(null);
                     refresh();
@@ -1491,38 +1489,23 @@ const blankProject = {
   favorite_enabled: true,
   thanks_enabled: true,
   reply_enabled: true,
-  tip_enabled: false,
   thanks_order: "random" as "random" | "sequential" | "fixed",
   thanks_message: "",
   tip_url: "",
-  tip_legal_checked: false,
-  tip_terms_checked: false,
-  tip_privacy_checked: false,
   ng_words: [] as string[],
   blocked_sites: [] as string[],
 };
-function presetOf(f: {
-  clap_enabled: unknown;
-  message_enabled: unknown;
-  tip_enabled: unknown;
-}) {
-  const clap = !!f.clap_enabled,
-    message = !!f.message_enabled,
-    tip = !!f.tip_enabled;
-  if (clap && message && !tip) return "message";
-  if (clap && !message) return tip ? "clap-tip" : "clap";
-  if (!clap && !message && tip) return "tip";
-  return "";
+function presetOf(f: { clap_enabled: unknown; message_enabled: unknown }) {
+  if (!f.clap_enabled) return "";
+  return f.message_enabled ? "message" : "clap";
 }
 function ProjectModal({
   project,
-  tipEnabled,
   onClose,
   notify,
   inline = false,
 }: {
   project: Project | "new";
-  tipEnabled: boolean;
   onClose: () => void;
   notify: (s: string) => void;
   inline?: boolean;
@@ -1543,13 +1526,9 @@ function ProjectModal({
             project.thanks_enabled !== false && project.thanks_enabled !== 0,
           reply_enabled:
             project.reply_enabled !== false && project.reply_enabled !== 0,
-          tip_enabled: !!project.tip_enabled,
           thanks_order: project.thanks_order,
           thanks_message: project.thanks_message || "",
           tip_url: project.tip_url || "",
-          tip_legal_checked: !!project.tip_legal_checked,
-          tip_terms_checked: !!project.tip_terms_checked,
-          tip_privacy_checked: !!project.tip_privacy_checked,
           ng_words: project.ng_words || [],
           blocked_sites: project.blocked_sites || [],
         };
@@ -1781,8 +1760,6 @@ function ProjectModal({
                 {[
                   ["clap", "拍手のみ"],
                   ["message", "拍手＋感想"],
-                  ["clap-tip", "拍手＋投げ銭"],
-                  ["tip", "投げ銭のみ"],
                 ].map(([key, label]) => (
                   <button
                     type="button"
@@ -1794,11 +1771,10 @@ function ProjectModal({
                     onClick={() =>
                       setForm((f) => ({
                         ...f,
-                        clap_enabled: key !== "tip",
+                        clap_enabled: true,
                         message_enabled: key === "message",
                         reply_enabled: key === "message",
-                        thanks_enabled: key !== "tip",
-                        tip_enabled: key === "clap-tip" || key === "tip",
+                        thanks_enabled: true,
                       }))
                     }
                   >
@@ -1806,9 +1782,6 @@ function ProjectModal({
                   </button>
                 ))}
               </div>
-              <p className="small-text muted">
-                投げ銭は接続・確認が完了するまで公開されません。
-              </p>
               {[
                 ["clap_enabled", "拍手を受け付ける"],
                 ["message_enabled", "非公開の感想を受け付ける"],
@@ -1847,53 +1820,19 @@ function ProjectModal({
                   onChange={(e) => set("thanks_message", e.target.value)}
                 />
               </label>
-            </div>
-            <details className="tip-settings">
-              <summary>外部の支援リンク</summary>
-              <p>
-                適法性・決済事業者の規約・個人情報の表示を確認した外部リンクのみ設定できます。現在のサーバー設定：
-                {tipEnabled ? "有効化可能" : "非表示"}
-                。PayPayへの対応は未確認です。
-              </p>
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={form.tip_enabled}
-                  onChange={(e) => set("tip_enabled", e.target.checked)}
-                />
-                確認済みの外部支援リンクを表示する（初期OFF）
-              </label>
               <label>
-                確認済み外部決済ページ
+                投げ銭リンク
                 <input
                   type="url"
+                  placeholder="https://ofuse.me/…"
                   value={form.tip_url}
                   onChange={(e) => set("tip_url", e.target.value)}
                 />
+                <small>
+                  埋め込みコードで投げ銭をオンにしたページだけ、お礼の下に表示します。
+                </small>
               </label>
-              {[
-                ["tip_legal_checked", "適法性・法定表示・税務を確認した"],
-                [
-                  "tip_terms_checked",
-                  "決済事業者がこの用途を許可していることを確認した",
-                ],
-                [
-                  "tip_privacy_checked",
-                  "決済画面・明細・領収書の個人情報表示を確認した",
-                ],
-              ].map(([key, label]) => (
-                <label className="check-label" key={key}>
-                  <input
-                    type="checkbox"
-                    checked={!!form[key as keyof typeof form]}
-                    onChange={(e) =>
-                      set(key as keyof typeof form, e.target.checked)
-                    }
-                  />
-                  {label}
-                </label>
-              ))}
-            </details>
+            </div>
             <div className="modal-form-footer">
               {!inline && (
                 <button type="button" className="btn" onClick={onClose}>

@@ -344,9 +344,9 @@ function Activity({
     );
   while (tallest(per) * 4 > 88) per++;
   const blockPx = Math.min(12, Math.floor(88 / tallest(per)));
-  // Claps darken from the 5th, 10th and 20th one up, so busy times stand out.
+  // Claps change color from the 5th, 10th and 20th one up, so busy times stand out.
   const stop = (n: number) => (Math.ceil(n / per) - 1) * blockPx;
-  const tiers = `linear-gradient(to top, #adadad 0 ${stop(5)}px, #767676 ${stop(5)}px ${stop(10)}px, #4a4a4a ${stop(10)}px ${stop(20)}px, #262626 ${stop(20)}px)`;
+  const tiers = `linear-gradient(to top, var(--clap-1) 0 ${stop(5)}px, var(--clap-2) ${stop(5)}px ${stop(10)}px, var(--clap-3) ${stop(10)}px ${stop(20)}px, var(--clap-4) ${stop(20)}px)`;
   return (
     <section className="panel activity-panel">
       <div className="panel-heading activity-heading">

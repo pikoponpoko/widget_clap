@@ -475,6 +475,17 @@ export default function App() {
     const timer = setTimeout(() => setToast(""), 5000);
     return () => clearTimeout(timer);
   }, [toast]);
+  // An installed app stays open in the background, so coming back to it
+  // loads the latest numbers, or the new version when one has been deployed.
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible") return;
+      if (await hasNewVersion()) location.reload();
+      else refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
   useEffect(() => {
     const handler = () => {
       const s = location.hash.slice(1) as Section;
@@ -2828,4 +2839,20 @@ function StatsPrintModal({
       </div>
     </Modal>
   );
+}
+async function hasNewVersion() {
+  const current = document.querySelector<HTMLScriptElement>(
+    "script[type=module][src]",
+  )?.getAttribute("src");
+  if (!current) return false;
+  try {
+    const res = await fetch(location.pathname, { cache: "no-store" });
+    if (!res.ok) return false;
+    const html = await res.text();
+    const latest = html.match(/<script[^>]*type="module"[^>]*src="([^"]+)"/)?.[1];
+    return !!latest && latest !== current;
+  } catch {
+    // An expired login redirects to Cloudflare Access; the data refresh handles that.
+    return false;
+  }
 }

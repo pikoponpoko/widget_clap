@@ -31,32 +31,73 @@ export async function api<T>(
 }
 export const send = <T>(path: string, data: unknown, method = "POST") =>
   api<T>(path, { method, body: JSON.stringify(data) });
+// The "v" parameter only asks for fresh numbers, so a path that differs in it
+// alone is the same view and keeps showing what it has while it reloads.
+function viewKey(path: string) {
+  return path.replace(/([?&])v=\d+&?/, "$1").replace(/[?&]$/, "");
+}
+const CACHE_PREFIX = "hakushu-cache:";
+function readCache<T>(path: string): T | null {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + viewKey(path));
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+function writeCache(path: string, data: unknown) {
+  try {
+    localStorage.setItem(CACHE_PREFIX + viewKey(path), JSON.stringify(data));
+  } catch {}
+}
+// Removes the saved admin numbers, for when the login is no longer valid.
+export function clearCache() {
+  try {
+    for (const key of Object.keys(localStorage))
+      if (key.startsWith(CACHE_PREFIX)) localStorage.removeItem(key);
+  } catch {}
+}
 // keep: show the previous result while a new path loads, so the page does not jump.
-export function useApi<T>(path: string, initial?: T | null, keep = false) {
+// An empty path loads nothing.
+// persist: show the last result saved on this device at once, then refresh it.
+export function useApi<T>(
+  path: string,
+  initial?: T | null,
+  keep = false,
+  persist = false,
+) {
   const [state, setState] = useState<{
     path: string;
     data: T | null;
     error: string;
     loading: boolean;
-  }>(
-    initial
-      ? { path, data: initial, error: "", loading: false }
-      : { path, data: null, error: "", loading: true },
-  );
+  }>(() => {
+    if (initial) return { path, data: initial, error: "", loading: false };
+    const saved = persist && !previewMode ? readCache<T>(path) : null;
+    return { path, data: saved, error: "", loading: true };
+  });
   const [version, setVersion] = useState(0);
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
     if (initial && version === 0 && state.path === path && state.data) return;
+    if (!path) return;
     let active = true;
     setState((old) => ({
       path,
-      data: old.path === path || keep ? old.data : null,
+      data:
+        old.path === path || keep || viewKey(old.path) === viewKey(path)
+          ? old.data
+          : persist
+            ? readCache<T>(path)
+            : null,
       error: "",
       loading: true,
     }));
     api<T>(path)
       .then((data) => {
-        if (active) setState({ path, data, error: "", loading: false });
+        if (!active) return;
+        setState({ path, data, error: "", loading: false });
+        if (persist && !previewMode) writeCache(path, data);
       })
       .catch((e) => {
         if (active)
@@ -66,9 +107,14 @@ export function useApi<T>(path: string, initial?: T | null, keep = false) {
       active = false;
     };
   }, [path, version]);
-  return state.path === path
-    ? { ...state, refresh }
-    : { data: keep ? state.data : null, error: "", loading: true, refresh };
+  if (state.path === path) return { ...state, refresh };
+  const same = keep || viewKey(state.path) === viewKey(path);
+  return {
+    data: same ? state.data : persist ? readCache<T>(path) : null,
+    error: "",
+    loading: true,
+    refresh,
+  };
 }
 export function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);

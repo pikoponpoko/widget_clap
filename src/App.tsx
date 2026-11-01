@@ -42,7 +42,15 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { api, date, dateTime, downloadEndpoint, send, useApi } from "./api";
+import {
+  api,
+  clearCache,
+  date,
+  dateTime,
+  downloadEndpoint,
+  send,
+  useApi,
+} from "./api";
 import { defaultPrint, type PrintOptions } from "./print-options";
 import { collectImages } from "./image-files";
 import { planners, type PaperSize, type PlannerId } from "./planner-sizes";
@@ -544,6 +552,7 @@ function Activity({
     `/owner/stats/periods?unit=${unit}&${query}`,
     null,
     true,
+    true,
   );
   const isPeriod = mode !== "hours" && mode !== "days";
   const shift = (n: number) => {
@@ -765,7 +774,7 @@ export default function App() {
   const session = useApi<{
     role: string;
     local: boolean;
-  }>("/owner/session");
+  }>("/owner/session", null, false, true);
   const [section, setSection] = useState<Section>(() =>
     ["overview", "inbox", "projects", "print", "data"].includes(
       location.hash.slice(1),
@@ -781,7 +790,12 @@ export default function App() {
     [toast, setToast] = useState(""),
     [mobileNav, setMobileNav] = useState(false),
     [version, setVersion] = useState(0);
-  const projects = useApi<Project[]>("/owner/projects?v=" + version),
+  const projects = useApi<Project[]>(
+      "/owner/projects?v=" + version,
+      null,
+      false,
+      true,
+    ),
     stats = useApi<Stats>(
       "/owner/stats?" +
         new URLSearchParams({
@@ -791,6 +805,7 @@ export default function App() {
           to,
         }),
       null,
+      true,
       true,
     ),
     hours = useApi<HourStats>(
@@ -802,14 +817,21 @@ export default function App() {
         }),
       null,
       true,
+      true,
     ),
     // The top card counts today's claps on every page, whatever the chart shows.
-    today = useApi<HourStats>(
-      "/owner/stats/hours?" +
-        new URLSearchParams({ v: String(version), day: jstToday() }),
+    // When the chart already shows that, its numbers are used instead of a second request.
+    todayShown = !pageUrl && day === jstToday(),
+    todayOnly = useApi<HourStats>(
+      todayShown
+        ? ""
+        : "/owner/stats/hours?" +
+            new URLSearchParams({ v: String(version), day: jstToday() }),
       null,
       true,
-    );
+      !todayShown,
+    ),
+    today = todayShown ? hours : todayOnly;
   const [statsPrint, setStatsPrint] = useState(false);
   const [selected, setSelected] = useState<Message | null>(null),
     [edit, setEdit] = useState<Project | "new" | null>(null);
@@ -836,10 +858,11 @@ export default function App() {
   // An installed app stays open in the background, so coming back to it
   // loads the latest numbers, or the new version when one has been deployed.
   useEffect(() => {
-    const onVisible = async () => {
+    // The numbers start loading right away; the version check runs alongside.
+    const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      if (await hasNewVersion()) location.reload();
-      else refresh();
+      refresh();
+      hasNewVersion().then((next) => next && location.reload());
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
@@ -852,9 +875,12 @@ export default function App() {
     window.addEventListener("hashchange", handler);
     return () => window.removeEventListener("hashchange", handler);
   }, []);
+  useEffect(() => {
+    if (session.error) clearCache();
+  }, [session.error]);
   const todayClaps = today.data?.hours.reduce((a, h) => a + h.claps, 0) ?? 0,
     total = stats.data?.totals;
-  if (session.loading)
+  if (!session.data && session.loading)
     return (
       <div className="auth-page">
         <p>読み込み中…</p>
@@ -1279,6 +1305,9 @@ function InboxList({
         page: String(page),
         v: String(version),
       }),
+    null,
+    false,
+    compact,
   );
   const months = data?.months || [];
   const monthIndex = months.findIndex((x) => x.month === month);

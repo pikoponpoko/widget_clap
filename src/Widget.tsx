@@ -384,11 +384,11 @@ export function Widget({
                   />
                 </label>
               </div>
-              <p className="privacy-note">
-                {previewMode
-                  ? "体験版の感想はこのブラウザ内に保存し、作者には送信しません。"
-                  : "作者だけに届きます。作者が個人的に保存・印刷することがあります。"}
-              </p>
+              {previewMode && (
+                <p className="privacy-note">
+                  体験版の感想はこのブラウザ内に保存し、作者には送信しません。
+                </p>
+              )}
               <div className="reply-choice">
                 {(
                   [

@@ -14,6 +14,7 @@ import {
   readBounded,
   projectSchema,
   clapSchema,
+  reactionSchema,
   normalizePage,
   isBlockedSite,
   messageSchema,
@@ -32,6 +33,7 @@ import {
 } from "./security";
 import { snapshot, scheduledBackup, restore } from "./backup";
 import type { Project, Message, Asset } from "./models";
+import { REACTION_KEYS } from "../src/reactions";
 const app = new Hono<{ Bindings: Env }>();
 const audit = (env: Env, action: string, target: string | null = null) =>
   env.DB.prepare(
@@ -65,6 +67,16 @@ async function assetList(env: Env, projectId: string) {
     .all();
   return rows.results;
 }
+function reactionList(raw: string | undefined) {
+  try {
+    const list = JSON.parse(raw || "[]");
+    return Array.isArray(list)
+      ? list.filter((k) => (REACTION_KEYS as string[]).includes(k))
+      : [];
+  } catch {
+    return [];
+  }
+}
 function safeProject(p: Project, env: Env, assets: unknown[]) {
   return {
     id: p.id,
@@ -79,6 +91,7 @@ function safeProject(p: Project, env: Env, assets: unknown[]) {
     tip_enabled: !!p.tip_enabled,
     thanks_order: p.thanks_order,
     thanks_message: p.thanks_message,
+    reactions: reactionList(p.reactions),
     tip_url: tipVisible(p as unknown as Record<string, unknown>, env)
       ? p.tip_url
       : null,
@@ -170,6 +183,42 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
       503,
       "受付容量に達しています。作者の整理後にお試しください。",
     );
+  return c.json({ ok: true, counted: result.meta.changes > 0 });
+});
+app.post("/api/public/projects/:slug/reactions", async (c) => {
+  assertSameOrigin(c.req.raw);
+  const p = await projectBy(c.env, c.req.param("slug"));
+  const data = await jsonBody(c.req.raw, reactionSchema, 4000);
+  if (!reactionList(p.reactions).includes(data.kind))
+    throw new ApiError(403, "このリアクションは受け付けていません。");
+  const page = normalizePage(data);
+  assertSiteAllowed(p, page.page_url);
+  const key = await privateKey(c.req.raw, c.env);
+  await limit(c.env, `reaction:${key}`, 60, 60);
+  if (
+    (c.req.header("Cookie") || "")
+      .split(";")
+      .some((x) => x.trim() === `${OWNER_COOKIE}=1`)
+  )
+    return c.json({ ok: true, counted: false });
+  const dedupe = await hash(
+    `${key}:${p.id}:${page.page_url}:${data.kind}:${now().slice(0, 13)}`,
+  );
+  const visitor = (await privateKey(c.req.raw, c.env, "visitor")).slice(0, 32);
+  const result = await c.env.DB.prepare(
+    "INSERT OR IGNORE INTO reactions(id,project_id,kind,created_at,dedupe_key,page_url,page_title,visitor) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM reactions)<20000",
+  )
+    .bind(
+      id(),
+      p.id,
+      data.kind,
+      now(),
+      dedupe,
+      page.page_url,
+      page.page_title,
+      visitor,
+    )
+    .run();
   return c.json({ ok: true, counted: result.meta.changes > 0 });
 });
 app.post("/api/public/projects/:slug/messages", async (c) => {
@@ -298,6 +347,7 @@ app.get("/api/owner/projects", async (c) => {
       allowed_origins: JSON.parse(p.allowed_origins as string),
       ng_words: JSON.parse((p.ng_words as string) || "[]"),
       blocked_sites: JSON.parse((p.blocked_sites as string) || "[]"),
+      reactions: reactionList(p.reactions as string),
     })),
   );
 });
@@ -305,7 +355,10 @@ app.post("/api/owner/projects", async (c) => {
   const data = await jsonBody(c.req.raw, projectSchema);
   const keys = Object.keys(data),
     values = Object.entries(data).map(([k, v]) =>
-      k === "allowed_origins" || k === "ng_words" || k === "blocked_sites"
+      k === "allowed_origins" ||
+      k === "ng_words" ||
+      k === "blocked_sites" ||
+      k === "reactions"
         ? JSON.stringify(v)
         : typeof v === "boolean"
           ? Number(v)
@@ -338,7 +391,10 @@ app.put("/api/owner/projects/:id", async (c) => {
   const data = await jsonBody(c.req.raw, projectSchema);
   const keys = Object.keys(data),
     values = Object.entries(data).map(([k, v]) =>
-      k === "allowed_origins" || k === "ng_words" || k === "blocked_sites"
+      k === "allowed_origins" ||
+      k === "ng_words" ||
+      k === "blocked_sites" ||
+      k === "reactions"
         ? JSON.stringify(v)
         : typeof v === "boolean"
           ? Number(v)
@@ -641,10 +697,9 @@ async function ownVisitors(request: Request, env: Env, day: string) {
   const ids = [(await privateKey(request, env, "visitor")).slice(0, 32)];
   for (const utc of [prev, day])
     ids.push(
-      (await hash(`${await privateKey(request, env, utc)}:visitor:${day}`)).slice(
-        0,
-        32,
-      ),
+      (
+        await hash(`${await privateKey(request, env, utc)}:visitor:${day}`)
+      ).slice(0, 32),
     );
   return new Set(ids);
 }
@@ -718,31 +773,46 @@ app.get("/api/owner/stats", async (c) => {
     pageSuffix = suffix + (pageUrl ? " AND page_url=?" : ""),
     pageArgs = pageUrl ? [...args, pageUrl] : args,
     day = "strftime('%Y-%m-%d',created_at,'+9 hours')";
-  const [claps, messages, totals, pages, visitors, people, imported] =
-    await c.env.DB.batch([
-      c.env.DB.prepare(
-        `SELECT ${day} AS day,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
-      ).bind(...pageArgs),
-      c.env.DB.prepare(
-        `SELECT ${day} AS day,count(*) AS count FROM messages WHERE blocked=0 AND source='' AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
-      ).bind(...pageArgs),
-      c.env.DB.prepare(
-        `SELECT count(*) AS total,sum(read_at IS NULL) AS unread,sum(NOT EXISTS(SELECT 1 FROM replies r WHERE r.message_id=messages.id)) AS unreplied FROM messages WHERE blocked=0 AND source=''${suffix}`,
-      ).bind(...(project ? [project] : [])),
-      c.env.DB.prepare(
-        `SELECT page_url,max(page_title) AS page_title,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY page_url ORDER BY count DESC,page_url LIMIT 100`,
-      ).bind(...args),
-      c.env.DB.prepare(
-        `SELECT ${day} AS day,count(DISTINCT visitor) AS count FROM claps WHERE visitor<>'' AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
-      ).bind(...pageArgs),
-      c.env.DB.prepare(
-        `SELECT count(DISTINCT NULLIF(visitor,'')) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix}`,
-      ).bind(...pageArgs),
-      // Counts brought in from another service have no page.
-      c.env.DB.prepare(
-        `SELECT day,sum(claps) AS claps,sum(visitors) AS visitors FROM imported_clap_days WHERE day>=? AND day<=?${suffix}${pageUrl ? " AND 0" : ""} GROUP BY day ORDER BY day`,
-      ).bind(start, end, ...(project ? [project] : [])),
-    ]);
+  const [
+    claps,
+    messages,
+    totals,
+    pages,
+    visitors,
+    people,
+    imported,
+    reactionDays,
+    reactionPages,
+  ] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `SELECT ${day} AS day,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
+    ).bind(...pageArgs),
+    c.env.DB.prepare(
+      `SELECT ${day} AS day,count(*) AS count FROM messages WHERE blocked=0 AND source='' AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
+    ).bind(...pageArgs),
+    c.env.DB.prepare(
+      `SELECT count(*) AS total,sum(read_at IS NULL) AS unread,sum(NOT EXISTS(SELECT 1 FROM replies r WHERE r.message_id=messages.id)) AS unreplied FROM messages WHERE blocked=0 AND source=''${suffix}`,
+    ).bind(...(project ? [project] : [])),
+    c.env.DB.prepare(
+      `SELECT page_url,max(page_title) AS page_title,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY page_url ORDER BY count DESC,page_url LIMIT 100`,
+    ).bind(...args),
+    c.env.DB.prepare(
+      `SELECT ${day} AS day,count(DISTINCT visitor) AS count FROM claps WHERE visitor<>'' AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
+    ).bind(...pageArgs),
+    c.env.DB.prepare(
+      `SELECT count(DISTINCT NULLIF(visitor,'')) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix}`,
+    ).bind(...pageArgs),
+    // Counts brought in from another service have no page.
+    c.env.DB.prepare(
+      `SELECT day,sum(claps) AS claps,sum(visitors) AS visitors FROM imported_clap_days WHERE day>=? AND day<=?${suffix}${pageUrl ? " AND 0" : ""} GROUP BY day ORDER BY day`,
+    ).bind(start, end, ...(project ? [project] : [])),
+    c.env.DB.prepare(
+      `SELECT ${day} AS day,kind,count(*) AS count FROM reactions WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day,kind ORDER BY day`,
+    ).bind(...pageArgs),
+    c.env.DB.prepare(
+      `SELECT page_url,max(page_title) AS page_title,kind,count(*) AS count FROM reactions WHERE created_at>=? AND created_at<=?${suffix} GROUP BY page_url,kind ORDER BY page_url`,
+    ).bind(...args),
+  ]);
   const extra = imported.results as {
     day: string;
     claps: number;
@@ -768,6 +838,8 @@ app.get("/api/owner/stats", async (c) => {
     imported: extra,
     totals: totals.results[0],
     pages: pages.results,
+    reaction_days: reactionDays.results,
+    reaction_pages: reactionPages.results,
     from: start,
     to: end,
   });

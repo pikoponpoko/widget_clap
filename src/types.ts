@@ -28,6 +28,7 @@ export interface Project {
   tip_privacy_checked: boolean | number;
   ng_words?: string[];
   blocked_sites?: string[];
+  reactions?: string[];
   claps: number;
   messages: number;
   assets?: Asset[];
@@ -59,6 +60,13 @@ export interface Stats {
   imported?: { day: string; claps: number; visitors: number }[];
   totals: { total: number; unread: number; unreplied: number };
   pages?: { page_url: string; page_title: string; count: number }[];
+  reaction_days?: { day: string; kind: string; count: number }[];
+  reaction_pages?: {
+    page_url: string;
+    page_title: string;
+    kind: string;
+    count: number;
+  }[];
   from: string;
   to: string;
 }

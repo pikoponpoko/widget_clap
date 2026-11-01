@@ -9,9 +9,9 @@ import {
 } from "./security";
 import type { Asset } from "./models";
 export async function snapshot(env: Env) {
-  const [projects, claps, messages, replies, assets, clapDays] =
+  const [projects, claps, messages, replies, assets, reactions, clapDays] =
     await env.DB.batch(
-      ["projects", "claps", "messages", "replies", "assets"]
+      ["projects", "claps", "messages", "replies", "assets", "reactions"]
         .map((t) => env.DB.prepare(`SELECT * FROM ${t} ORDER BY id`))
         .concat(
           env.DB.prepare(
@@ -41,6 +41,7 @@ export async function snapshot(env: Env) {
     messages: messages.results,
     replies: replies.results,
     imported_clap_days: clapDays.results,
+    reactions: reactions.results,
     assets: images,
   };
 }
@@ -120,6 +121,7 @@ const project = z
     tip_privacy_checked: flag,
     ng_words: z.string().max(8000).default("[]"),
     blocked_sites: z.string().max(30000).default("[]"),
+    reactions: z.string().max(2000).default('["heart","fire","hundred"]'),
     created_at: timestamp,
   })
   .strict();
@@ -202,6 +204,23 @@ const schema = z
       )
       .max(20000)
       .default([]),
+    reactions: z
+      .array(
+        z
+          .object({
+            id: ident,
+            project_id: ident,
+            kind: z.string().max(20),
+            created_at: timestamp,
+            dedupe_key: hash,
+            page_url: z.string().max(500).default(""),
+            page_title: z.string().max(200).default(""),
+            visitor: z.string().max(64).default(""),
+          })
+          .strict(),
+      )
+      .max(20000)
+      .default([]),
   })
   .strict();
 export async function restore(env: Env, input: unknown) {
@@ -219,6 +238,7 @@ export async function restore(env: Env, input: unknown) {
   if (
     !distinct(d.projects, (x) => x.slug) ||
     !distinct(d.claps, (x) => x.dedupe_key) ||
+    !distinct(d.reactions, (x) => x.dedupe_key) ||
     !distinct(d.messages, (x) => x.dedupe_key) ||
     !distinct(d.messages, (x) => x.reply_token_hash) ||
     !distinct(d.replies, (x) => x.message_id) ||
@@ -226,11 +246,17 @@ export async function restore(env: Env, input: unknown) {
   )
     throw new ApiError(400, "バックアップに重複したキーがあります。");
   if (
-    ![d.projects, d.messages, d.claps, d.replies, d.assets].every(unique) ||
-    d.projects.some((p) => !validProject(p)) ||
-    [...d.messages, ...d.claps, ...d.assets, ...d.imported_clap_days].some(
-      (x) => !projectIds.has(x.project_id),
+    ![d.projects, d.messages, d.claps, d.replies, d.assets, d.reactions].every(
+      unique,
     ) ||
+    d.projects.some((p) => !validProject(p)) ||
+    [
+      ...d.messages,
+      ...d.claps,
+      ...d.assets,
+      ...d.imported_clap_days,
+      ...d.reactions,
+    ].some((x) => !projectIds.has(x.project_id)) ||
     d.replies.some((x) => !messageIds.has(x.message_id))
   )
     throw new ApiError(400, "バックアップの参照関係・設定が不正です。");
@@ -280,6 +306,7 @@ export async function restore(env: Env, input: unknown) {
     insert("messages", d.messages);
     insert("replies", d.replies);
     insert("imported_clap_days", d.imported_clap_days);
+    insert("reactions", d.reactions);
     insert(
       "assets",
       d.assets.map(({ data, ...a }) => a),
@@ -311,6 +338,7 @@ function validProject(p: z.infer<typeof project>) {
       allowed_origins: JSON.parse(p.allowed_origins),
       ng_words: JSON.parse(p.ng_words),
       blocked_sites: JSON.parse(p.blocked_sites),
+      reactions: JSON.parse(p.reactions),
       clap_enabled: !!p.clap_enabled,
       message_enabled: !!p.message_enabled,
       favorite_enabled: !!p.favorite_enabled,

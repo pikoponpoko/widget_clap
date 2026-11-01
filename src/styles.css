@@ -558,17 +558,30 @@ small {
   height: 6px;
   border-radius: 2px;
 }
-.legend-clap {
+.chart-legend .legend-clap {
+  width: auto;
+  display: flex;
+  gap: 1px;
+}
+.legend-clap b {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+}
+.legend-clap b:nth-child(1) {
   background: #adadad;
 }
-.legend-message {
+.legend-clap b:nth-child(2) {
+  background: #767676;
+}
+.legend-clap b:nth-child(3) {
   background: #4a4a4a;
 }
-.bar-clap {
-  --c: #adadad;
+.legend-clap b:nth-child(4) {
+  background: #262626;
 }
-.bar-message {
-  --c: #4a4a4a;
+.legend-message {
+  border: 1px solid #262626;
 }
 .activity-heading {
   flex-wrap: wrap;
@@ -633,13 +646,44 @@ small {
 .bar-message {
   display: block;
   min-width: 1px;
-  background: repeating-linear-gradient(
-    to top,
-    var(--c) 0 calc(var(--block) - 1px),
-    transparent calc(var(--block) - 1px) var(--block)
-  );
   transform-origin: bottom;
   animation: stack-up 0.35s ease-out;
+}
+/* A white line tops each block; under it, claps darken as the stack grows. */
+.bar-clap {
+  background:
+    repeating-linear-gradient(
+      to top,
+      transparent 0 calc(var(--block) - 1px),
+      var(--white) calc(var(--block) - 1px) var(--block)
+    ),
+    var(--tiers);
+}
+/* Comments are hollow blocks so they read apart from claps. */
+.bar-message {
+  background:
+    repeating-linear-gradient(
+      to top,
+      transparent 0 calc(var(--block) - 1px),
+      var(--white) calc(var(--block) - 1px) var(--block)
+    ),
+    repeating-linear-gradient(
+      to top,
+      #262626 0 1px,
+      transparent 1px calc(var(--block) - 2px),
+      #262626 calc(var(--block) - 2px) calc(var(--block) - 1px),
+      transparent calc(var(--block) - 1px) var(--block)
+    ),
+    linear-gradient(
+      to right,
+      #262626 0 1px,
+      transparent 1px calc(100% - 1px),
+      #262626 calc(100% - 1px)
+    );
+}
+.chart-column.active .chart-tick {
+  color: var(--ink);
+  font-weight: 700;
 }
 @keyframes stack-up {
   from {
@@ -2808,12 +2852,6 @@ html.embed-document {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-}
-.chart-column.active .bar-clap {
-  --c: #4a4a4a;
-}
-.chart-column.active .bar-message {
-  --c: #262626;
 }
 .hour-date {
   font-size: 11px;

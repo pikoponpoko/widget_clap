@@ -625,14 +625,19 @@ export async function previewRequest(
               page_url: c.page_url || "",
               page_title: c.page_title || "",
               count: 0,
+              last_at: "",
             };
             row.count++;
+            if (c.created_at > row.last_at) row.last_at = c.created_at;
             row.page_title ||= c.page_title || "";
             return map.set(row.page_url, row);
-          }, new Map<string, { page_url: string; page_title: string; count: number }>())
+          }, new Map<
+            string,
+            { page_url: string; page_title: string; count: number; last_at: string }
+          >())
           .values(),
       )
-        .sort((a, b) => b.count - a.count)
+        .sort((a, b) => b.last_at.localeCompare(a.last_at))
         .slice(0, 100),
       totals: {
         total: rows.length,

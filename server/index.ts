@@ -730,7 +730,7 @@ app.get("/api/owner/stats", async (c) => {
         `SELECT count(*) AS total,sum(read_at IS NULL) AS unread,sum(NOT EXISTS(SELECT 1 FROM replies r WHERE r.message_id=messages.id)) AS unreplied FROM messages WHERE blocked=0 AND source=''${suffix}`,
       ).bind(...(project ? [project] : [])),
       c.env.DB.prepare(
-        `SELECT page_url,max(page_title) AS page_title,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY page_url ORDER BY count DESC,page_url LIMIT 100`,
+        `SELECT page_url,max(page_title) AS page_title,count(*) AS count,max(created_at) AS last_at FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY page_url ORDER BY last_at DESC,page_url LIMIT 100`,
       ).bind(...args),
       c.env.DB.prepare(
         `SELECT ${day} AS day,count(DISTINCT visitor) AS count FROM claps WHERE visitor<>'' AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,

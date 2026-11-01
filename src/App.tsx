@@ -47,6 +47,7 @@ import { planners, type PaperSize, type PlannerId } from "./planner-sizes";
 import type { Asset, HourStats, Message, Project, Stats } from "./types";
 import { webclapScript } from "./webclap-script";
 import { parseImport, parseImportHtml, type ImportRow } from "./import-parse";
+import { clapDaysMarker, parseClapDays, type ClapDay } from "./clap-days-parse";
 const jstToday = (offsetDays = 0) =>
   new Date(Date.now() + 9 * 3600000 - offsetDays * 86400000)
     .toISOString()
@@ -225,6 +226,7 @@ type Column = {
   claps: number;
   messages: number;
   visitors: number;
+  imported?: number;
 };
 function Activity({
   stats,
@@ -258,6 +260,7 @@ function Activity({
         claps: stats.claps.find((x) => x.day === key)?.count || 0,
         messages: stats.messages.find((x) => x.day === key)?.count || 0,
         visitors: stats.visitors?.find((x) => x.day === key)?.count || 0,
+        imported: stats.imported?.find((x) => x.day === key)?.claps || 0,
       });
       cur = new Date(cur.getTime() + 86400000);
     }
@@ -354,7 +357,10 @@ function Activity({
                   type="button"
                   key={c.key}
                   className={"chart-column " + (active ? "active" : "")}
-                  title={`${c.label} 人数 ${c.visitors}・拍手 ${c.claps}・感想 ${c.messages}`}
+                  title={
+                    `${c.label} 人数 ${c.visitors}・拍手 ${c.claps}・感想 ${c.messages}` +
+                    (c.imported ? `（取り込み 拍手 ${c.imported}）` : "")
+                  }
                   aria-label={`${c.label} 拍手 ${c.claps} 件`}
                   onClick={() => {
                     if (mode === "days") {
@@ -2173,6 +2179,7 @@ function ImportPanel({
   const list = projects.data || [];
   const [text, setText] = useState(""),
     [rows, setRows] = useState<ImportRow[] | null>(null),
+    [days, setDays] = useState<ClapDay[] | null>(null),
     [target, setTarget] = useState(""),
     [fallbackDate, setFallbackDate] = useState(""),
     [showAll, setShowAll] = useState(false),
@@ -2194,6 +2201,12 @@ function ImportPanel({
     setRows((r) => r && r.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   function read(source: string) {
     setError("");
+    if (source.includes(clapDaysMarker)) {
+      const parsed = parseClapDays(source);
+      if (!parsed.length) setError("拍手数が見つかりません。");
+      setDays(parsed.length ? parsed : null);
+      return;
+    }
     const parsed = /<(table|tr)[\s>]/i.test(source)
       ? parseImportHtml(source)
       : parseImport(source);
@@ -2243,10 +2256,37 @@ function ImportPanel({
       setBusy(false);
     }
   }
+  async function saveDays() {
+    if (!days) return;
+    setBusy(true);
+    setError("");
+    let saved = 0;
+    try {
+      for (let i = 0; i < days.length; i += 500) {
+        const r = await send<{ saved: number }>("/owner/imports/clap-days", {
+          project_id: projectId,
+          items: days.slice(i, i + 500),
+        });
+        saved += r.saved;
+      }
+      notify(`${saved} 日分の拍手数を取り込みました`);
+      setDays(null);
+      refresh();
+    } catch (e) {
+      setError(
+        (saved ? `${saved} 日分を取り込んだ後に止まりました：` : "") +
+          (e as Error).message,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  const dayTotal = (k: "claps" | "visitors") =>
+    (days || []).reduce((a, d) => a + d[k], 0);
   return (
     <section className="panel">
       <div className="panel-heading">
-        <h2>過去のメッセージを取り込む</h2>
+        <h2>過去の拍手・メッセージを取り込む</h2>
         <Upload size={18} />
       </div>
       <div className="data-section import-section">
@@ -2266,7 +2306,47 @@ function ImportPanel({
             <ChevronDown size={14} />
           </div>
         )}
-        {!rows ? (
+        {days ? (
+          <>
+            <dl className="import-summary">
+              <div>
+                <dt>期間</dt>
+                <dd>
+                  {days[days.length - 1].day.replaceAll("-", "/")} –{" "}
+                  {days[0].day.replaceAll("-", "/")}
+                </dd>
+              </div>
+              <div>
+                <dt>日数</dt>
+                <dd>{days.length}</dd>
+              </div>
+              <div>
+                <dt>拍手</dt>
+                <dd>{dayTotal("claps")}</dd>
+              </div>
+              <div>
+                <dt>人数（日ごとの合計）</dt>
+                <dd>{dayTotal("visitors")}</dd>
+              </div>
+            </dl>
+            <div className="button-row">
+              <button
+                className="btn primary"
+                disabled={busy || !projectId}
+                onClick={saveDays}
+              >
+                {busy ? "取り込み中…" : `${days.length} 日分を取り込む`}
+              </button>
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => setDays(null)}
+              >
+                戻る
+              </button>
+            </div>
+          </>
+        ) : !rows ? (
           <>
             <textarea
               aria-label="取り込むメッセージ"

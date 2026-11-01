@@ -17,6 +17,12 @@ interface Store {
     page_title?: string;
   }[];
   assets: PreviewAsset[];
+  clapDays?: {
+    project_id: string;
+    day: string;
+    claps: number;
+    visitors: number;
+  }[];
 }
 const key = "hakushu-browser-preview-v3";
 function initial(): Store {
@@ -304,7 +310,11 @@ export async function previewRequest(
   if (p === "/owner/projects" && method === "GET")
     return s.projects.map((pr) => ({
       ...pr,
-      claps: s.claps.filter((c) => c.project_id === pr.id).length,
+      claps:
+        s.claps.filter((c) => c.project_id === pr.id).length +
+        (s.clapDays || [])
+          .filter((d) => d.project_id === pr.id)
+          .reduce((a, d) => a + d.claps, 0),
       messages: s.messages.filter((m) => m.project_id === pr.id && !m.blocked)
         .length,
     }));
@@ -412,6 +422,33 @@ export async function previewRequest(
     save(s);
     return { added, skipped: items.length - added };
   }
+  if (p === "/owner/imports/clap-days") {
+    const pr =
+      s.projects.find((x) => x.id === data.project_id) ||
+      fail("作品が見つかりません。");
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length || items.length > 500)
+      fail("入力内容を確認してください。");
+    const list = (s.clapDays ||= []);
+    let saved = 0;
+    for (const x of items) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(x.day))) continue;
+      const row = {
+        project_id: pr.id,
+        day: String(x.day),
+        claps: Math.max(0, Math.floor(Number(x.claps) || 0)),
+        visitors: Math.max(0, Math.floor(Number(x.visitors) || 0)),
+      };
+      const i = list.findIndex(
+        (d) => d.project_id === pr.id && d.day === row.day,
+      );
+      if (i >= 0) list[i] = row;
+      else list.push(row);
+      saved++;
+    }
+    save(s);
+    return { saved };
+  }
   if (p === "/owner/messages/bulk") {
     const ids = new Set<string>(Array.isArray(data.ids) ? data.ids : []);
     if (!ids.size) fail("感想を選んでください。");
@@ -496,19 +533,49 @@ export async function previewRequest(
     const scopedClaps = s.claps.filter(
       (c) => (!projectId || c.project_id === projectId) && onPage(c),
     );
+    const imported = Array.from(
+      (s.clapDays || [])
+        .filter(
+          (d) =>
+            !pageUrl &&
+            (!projectId || d.project_id === projectId) &&
+            d.day >= from &&
+            d.day <= to,
+        )
+        .reduce((map, d) => {
+          const row = map.get(d.day) || { day: d.day, claps: 0, visitors: 0 };
+          row.claps += d.claps;
+          row.visitors += d.visitors;
+          return map.set(d.day, row);
+        }, new Map<string, { day: string; claps: number; visitors: number }>())
+        .values(),
+    ).sort((a, b) => a.day.localeCompare(b.day));
+    const merge = (
+      rows: { day: string; count: number }[],
+      k: "claps" | "visitors",
+    ) => {
+      const map = new Map(rows.map((r) => [r.day, r.count]));
+      for (const x of imported) map.set(x.day, (map.get(x.day) || 0) + x[k]);
+      return [...map]
+        .map(([day, count]) => ({ day, count }))
+        .sort((a, b) => a.day.localeCompare(b.day));
+    };
     return {
       from,
       to,
-      claps: daily(scopedClaps),
-      visitors: daily(scopedClaps, true),
-      visitor_total: new Set(
-        scopedClaps
-          .filter((c) => {
-            const d = jst(c.created_at).slice(0, 10);
-            return c.visitor && d >= from && d <= to;
-          })
-          .map((c) => c.visitor),
-      ).size,
+      imported,
+      claps: merge(daily(scopedClaps), "claps"),
+      visitors: merge(daily(scopedClaps, true), "visitors"),
+      visitor_total:
+        imported.reduce((a, x) => a + x.visitors, 0) +
+        new Set(
+          scopedClaps
+            .filter((c) => {
+              const d = jst(c.created_at).slice(0, 10);
+              return c.visitor && d >= from && d <= to;
+            })
+            .map((c) => c.visitor),
+        ).size,
       messages: daily(rows.filter(onPage)),
       pages: Array.from(
         s.claps

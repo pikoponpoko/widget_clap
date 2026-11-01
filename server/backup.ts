@@ -44,22 +44,38 @@ export async function snapshot(env: Env) {
     assets: images,
   };
 }
+const DAY = 86400000;
+export const DAILY_DAYS = 30;
+export const MONTHLY_MONTHS = 12;
 export async function scheduledBackup(env: Env) {
   const data = await snapshot(env);
-  const key = `daily/${now().slice(0, 10)}-${id()}.json`;
-  await env.BACKUPS.put(key, JSON.stringify(data), {
-    httpMetadata: { contentType: "application/json" },
-  });
-  await env.DB.prepare(
-    "INSERT INTO backup_runs(id,storage_key,created_at,asset_count) VALUES(?,?,?,?)",
+  const body = JSON.stringify(data);
+  const today = now().slice(0, 10);
+  const record = async (key: string) => {
+    await env.BACKUPS.put(key, body, {
+      httpMetadata: { contentType: "application/json" },
+    });
+    await env.DB.prepare(
+      "INSERT INTO backup_runs(id,storage_key,created_at,asset_count) VALUES(?,?,?,?)",
+    )
+      .bind(id(), key, now(), data.assets.length)
+      .run();
+  };
+  await record(`daily/${today}-${id()}.json`);
+  const month = today.slice(0, 7);
+  const monthly = await env.DB.prepare(
+    "SELECT id FROM backup_runs WHERE storage_key LIKE ? LIMIT 1",
   )
-    .bind(id(), key, now(), data.assets.length)
-    .run();
-  const cutoff = new Date(Date.now() - 7 * 86400000).toISOString();
+    .bind(`monthly/${month}%`)
+    .first();
+  if (!monthly) await record(`monthly/${month}-${id()}.json`);
   const expired = await env.DB.prepare(
-    "SELECT id,storage_key FROM backup_runs WHERE created_at<?",
+    "SELECT id,storage_key FROM backup_runs WHERE (storage_key NOT LIKE 'monthly/%' AND created_at<?) OR (storage_key LIKE 'monthly/%' AND created_at<?)",
   )
-    .bind(cutoff)
+    .bind(
+      new Date(Date.now() - DAILY_DAYS * DAY).toISOString(),
+      new Date(Date.now() - (MONTHLY_MONTHS * 31 - 1) * DAY).toISOString(),
+    )
     .all<{ id: string; storage_key: string }>();
   for (const run of expired.results) {
     await env.BACKUPS.delete(run.storage_key);

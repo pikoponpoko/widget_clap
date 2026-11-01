@@ -41,6 +41,7 @@ import {
 import { api, date, dateTime, downloadEndpoint, send, useApi } from "./api";
 import { defaultPrint, type PrintOptions } from "./print-options";
 import { collectImages } from "./image-files";
+import { planners, type PaperSize, type PlannerId } from "./planner-sizes";
 import type { Asset, HourStats, Message, Project, Stats } from "./types";
 const jstToday = (offsetDays = 0) =>
   new Date(Date.now() + 9 * 3600000 - offsetDays * 86400000)
@@ -447,6 +448,7 @@ export default function App() {
           day,
         }),
     );
+  const [statsPrint, setStatsPrint] = useState(false);
   const [selected, setSelected] = useState<Message | null>(null),
     [edit, setEdit] = useState<Project | "new" | null>(null);
   const list = projects.data || [];
@@ -626,6 +628,14 @@ export default function App() {
                 aria-label="集計を更新"
               >
                 <RefreshCw size={15} />
+              </button>
+              <button
+                className="icon-button"
+                onClick={() => setStatsPrint(true)}
+                disabled={!stats.data}
+                aria-label="統計を印刷"
+              >
+                <Printer size={15} />
               </button>
             </div>
           )}
@@ -820,6 +830,20 @@ export default function App() {
           <Check size={16} />
           {toast}
         </div>
+      )}
+      {statsPrint && stats.data && (
+        <StatsPrintModal
+          stats={stats.data}
+          hours={hours.data}
+          pageTitle={
+            pageUrl
+              ? stats.data.pages?.find((p) => p.page_url === pageUrl)
+                  ?.page_title || pagePath(pageUrl)
+              : ""
+          }
+          notify={notify}
+          onClose={() => setStatsPrint(false)}
+        />
       )}
       {selected && (
         <MessageModal
@@ -2376,5 +2400,122 @@ function DataPanel({
         </div>
       </section>
     </div>
+  );
+}
+const sizeKey = "hakushu_stats_print";
+function loadSizes(): Partial<Record<PlannerId, PaperSize>> {
+  try {
+    return JSON.parse(localStorage.getItem(sizeKey) || "{}");
+  } catch {
+    return {};
+  }
+}
+function StatsPrintModal({
+  stats,
+  hours,
+  pageTitle,
+  notify,
+  onClose,
+}: {
+  stats: Stats;
+  hours: HourStats | null;
+  pageTitle: string;
+  notify: (s: string) => void;
+  onClose: () => void;
+}) {
+  const [planner, setPlanner] = useState<PlannerId>(planners[0].id),
+    [sizes, setSizes] = useState(loadSizes),
+    [a4, setA4] = useState(true),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const preset = planners.find((p) => p.id === planner)!,
+    size: PaperSize = sizes[planner] || {
+      w: preset.w,
+      h: preset.h,
+      bind: preset.bind,
+    };
+  function setSize(key: "w" | "h", value: number) {
+    const next = { ...sizes, [planner]: { ...size, [key]: value } };
+    setSizes(next);
+    try {
+      localStorage.setItem(sizeKey, JSON.stringify(next));
+    } catch {}
+  }
+  async function create() {
+    setBusy(true);
+    setError("");
+    try {
+      const { saveStatsPdf } = await import("./stats-pdf");
+      await saveStatsPdf({ stats, hours, pageTitle, planner, size, a4 });
+      notify("印刷用PDFを作成しました");
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title="統計を印刷" onClose={onClose}>
+      <div className="modal-body print-form">
+        <label>
+          手帳
+          <select
+            value={planner}
+            onChange={(e) => setPlanner(e.target.value as PlannerId)}
+          >
+            {planners.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.group} {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="form-grid">
+          {(
+            [
+              ["w", "幅"],
+              ["h", "高さ"],
+            ] as const
+          ).map(([key, label]) => (
+            <label key={key}>
+              {label}（mm）
+              <input
+                type="number"
+                step="0.5"
+                min={15}
+                value={Number.isFinite(size[key]) ? size[key] : ""}
+                onChange={(e) =>
+                  setSize(
+                    key,
+                    e.target.value === "" ? NaN : Number(e.target.value),
+                  )
+                }
+              />
+            </label>
+          ))}
+        </div>
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={a4}
+            onChange={(e) => setA4(e.target.checked)}
+          />
+          A4に並べて裁断線を付ける
+        </label>
+        <p className="small-text muted">
+          PDFは「実際のサイズ／100%」で印刷してください。
+        </p>
+        <button
+          className="btn primary full-width"
+          disabled={busy}
+          onClick={create}
+        >
+          <Download size={15} />
+          {busy ? "PDFを作成しています…" : "印刷用PDFをダウンロード"}
+        </button>
+        <ErrorText>{error}</ErrorText>
+      </div>
+    </Modal>
   );
 }

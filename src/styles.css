@@ -1388,6 +1388,9 @@ small {
 .print-form {
   padding: 0 22px 22px;
 }
+.modal-body.print-form {
+  padding: 22px 26px 24px;
+}
 .print-form .form-grid {
   gap: 0 12px;
 }

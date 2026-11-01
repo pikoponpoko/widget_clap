@@ -633,6 +633,65 @@ app.delete("/api/owner/assets/:id", async (c) => {
   await audit(c.env, "asset.delete", a.id);
   return c.json({ ok: true });
 });
+// Visitor ids this connection had on a day, in every format used so far.
+async function ownVisitors(request: Request, env: Env, day: string) {
+  const prev = new Date(Date.parse(day + "T00:00:00Z") - 86400000)
+    .toISOString()
+    .slice(0, 10);
+  const ids = [(await privateKey(request, env, "visitor")).slice(0, 32)];
+  for (const utc of [prev, day])
+    ids.push(
+      (await hash(`${await privateKey(request, env, utc)}:visitor:${day}`)).slice(
+        0,
+        32,
+      ),
+    );
+  return new Set(ids);
+}
+app.get("/api/owner/claps", async (c) => {
+  const day = c.req.query("day") || jstDay(),
+    project = c.req.query("project");
+  if (!z.iso.date().safeParse(day).success)
+    throw new ApiError(400, "日付が正しくありません。");
+  const rows = await c.env.DB.prepare(
+    `SELECT id,created_at,page_url,page_title,visitor FROM claps WHERE created_at>=? AND created_at<=?${project ? " AND project_id=?" : ""} ORDER BY created_at DESC LIMIT 500`,
+  )
+    .bind(
+      new Date(Date.parse(day + "T00:00:00+09:00")).toISOString(),
+      new Date(Date.parse(day + "T23:59:59.999+09:00")).toISOString(),
+      ...(project ? [project] : []),
+    )
+    .all<{
+      id: string;
+      created_at: string;
+      page_url: string;
+      page_title: string;
+      visitor: string;
+    }>();
+  const mine = await ownVisitors(c.req.raw, c.env, day);
+  return c.json({
+    day,
+    items: rows.results.map(({ visitor, ...x }) => ({
+      ...x,
+      mine: !!visitor && mine.has(visitor),
+    })),
+  });
+});
+app.post("/api/owner/claps/delete", async (c) => {
+  const data = await jsonBody(
+    c.req.raw,
+    z
+      .object({ ids: z.array(z.string().min(1).max(64)).min(1).max(500) })
+      .strict(),
+  );
+  const result = await c.env.DB.prepare(
+    `DELETE FROM claps WHERE id IN (${data.ids.map(() => "?").join(",")})`,
+  )
+    .bind(...data.ids)
+    .run();
+  await audit(c.env, "claps.delete", String(result.meta.changes));
+  return c.json({ ok: true, deleted: result.meta.changes });
+});
 app.get("/api/owner/stats", async (c) => {
   const project = c.req.query("project");
   const start =

@@ -449,6 +449,41 @@ export async function previewRequest(
     save(s);
     return { saved };
   }
+  if (p === "/owner/claps" && method === "GET") {
+    const day =
+        u.searchParams.get("day") || jst(new Date().toISOString()).slice(0, 10),
+      projectId = u.searchParams.get("project");
+    const mine = new Set([
+      (await digest(visitorId())).slice(0, 32),
+      (await digest(visitorId() + day)).slice(0, 32),
+    ]);
+    return {
+      day,
+      items: s.claps
+        .filter(
+          (c) =>
+            (!projectId || c.project_id === projectId) &&
+            jst(c.created_at).startsWith(day),
+        )
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, 500)
+        .map((c) => ({
+          id: c.created_at + "|" + c.key,
+          created_at: c.created_at,
+          page_url: c.page_url || "",
+          page_title: c.page_title || "",
+          mine: !!c.visitor && mine.has(c.visitor),
+        })),
+    };
+  }
+  if (p === "/owner/claps/delete") {
+    const ids = new Set<string>(Array.isArray(data.ids) ? data.ids : []);
+    if (!ids.size) fail("拍手を選んでください。");
+    const before = s.claps.length;
+    s.claps = s.claps.filter((c) => !ids.has(c.created_at + "|" + c.key));
+    save(s);
+    return { ok: true, deleted: before - s.claps.length };
+  }
   if (p === "/owner/messages/bulk") {
     const ids = new Set<string>(Array.isArray(data.ids) ? data.ids : []);
     if (!ids.size) fail("感想を選んでください。");

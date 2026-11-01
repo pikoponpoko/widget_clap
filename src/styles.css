@@ -3027,3 +3027,8 @@ html.embed-document {
   padding: 12px;
   justify-content: center;
 }
+.import-row.skipped textarea,
+.import-row.skipped input:not([type="checkbox"]) {
+  color: var(--muted);
+  background: var(--soft);
+}

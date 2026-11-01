@@ -19,6 +19,7 @@ import {
   ExternalLink,
   FileImage,
   FileText,
+  Filter,
   FolderHeart,
   Heart,
   Inbox,
@@ -161,7 +162,7 @@ function pagePath(url: string) {
     return url;
   }
 }
-// Clicking a page narrows the dashboard to it; clicking it again shows all pages.
+// The title opens the page; the filter button narrows the dashboard to it (press again for all pages).
 function PageStats({
   stats,
   selected,
@@ -188,27 +189,32 @@ function PageStats({
         >
           {p.page_url ? (
             <>
+              <a
+                className="page-link"
+                href={p.page_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span className="page-title">
+                  {p.page_title || pagePath(p.page_url)}
+                </span>
+                {p.page_title && (titleCount.get(p.page_title) || 0) > 1 && (
+                  <span className="page-path">{pagePath(p.page_url)}</span>
+                )}
+                <ExternalLink size={13} />
+              </a>
               <button
                 type="button"
-                className="page-filter"
+                className="icon-button page-filter"
                 aria-pressed={p.page_url === selected}
+                aria-label={(p.page_title || pagePath(p.page_url)) + "で絞り込む"}
+                title="絞り込む"
                 onClick={() =>
                   onSelect(p.page_url === selected ? "" : p.page_url)
                 }
               >
-                {p.page_title || pagePath(p.page_url)}
-                {p.page_title && (titleCount.get(p.page_title) || 0) > 1 && (
-                  <span className="page-path">{pagePath(p.page_url)}</span>
-                )}
+                <Filter size={14} />
               </button>
-              <a
-                href={p.page_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={(p.page_title || p.page_url) + "を開く"}
-              >
-                <ExternalLink size={13} />
-              </a>
             </>
           ) : (
             <span className="muted">プレビュー・直接表示</span>
@@ -473,6 +479,8 @@ export default function App() {
           from,
           to,
         }),
+      null,
+      true,
     ),
     hours = useApi<HourStats>(
       "/owner/stats/hours?" +
@@ -481,6 +489,8 @@ export default function App() {
           v: String(version),
           day,
         }),
+      null,
+      true,
     );
   const [statsPrint, setStatsPrint] = useState(false);
   const [selected, setSelected] = useState<Message | null>(null),

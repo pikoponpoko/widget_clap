@@ -198,128 +198,193 @@ function PageStats({
     </ol>
   );
 }
-function Chart({
+type Column = {
+  key: string;
+  label: string;
+  tick: string;
+  claps: number;
+  messages: number;
+  visitors: number;
+};
+function Activity({
   stats,
-  selected,
-  onSelect,
+  hours,
+  day,
+  onDay,
 }: {
   stats: Stats | null;
-  selected: string;
-  onSelect: (day: string) => void;
+  hours: HourStats | null;
+  day: string;
+  onDay: (day: string) => void;
 }) {
-  if (!stats)
-    return <div className="chart-loading">集計を読み込んでいます…</div>;
-  const days: {
-    day: string;
-    claps: number;
-    messages: number;
-    visitors: number;
-  }[] = [];
-  let start = new Date(stats.from + "T00:00:00Z");
-  let end = new Date(stats.to + "T00:00:00Z");
-  while (start <= end && days.length < 366) {
-    const day = start.toISOString().slice(0, 10);
-    days.push({
-      day,
-      claps: stats.claps.find((x) => x.day === day)?.count || 0,
-      messages: stats.messages.find((x) => x.day === day)?.count || 0,
-      visitors: stats.visitors?.find((x) => x.day === day)?.count || 0,
-    });
-    start = new Date(start.getTime() + 86400000);
+  const [mode, setMode] = useState<"days" | "hours">("days");
+  const [hour, setHour] = useState<number | null>(null);
+  const shift = (n: number) => {
+    const d = new Date(day + "T00:00:00Z");
+    onDay(new Date(d.getTime() + n * 86400000).toISOString().slice(0, 10));
+    setHour(null);
+  };
+  let columns: Column[] | null = null;
+  if (mode === "days" && stats) {
+    columns = [];
+    let cur = new Date(stats.from + "T00:00:00Z");
+    const end = new Date(stats.to + "T00:00:00Z");
+    while (cur <= end && columns.length < 366) {
+      const key = cur.toISOString().slice(0, 10);
+      columns.push({
+        key,
+        label: key.replaceAll("-", "/"),
+        tick: "",
+        claps: stats.claps.find((x) => x.day === key)?.count || 0,
+        messages: stats.messages.find((x) => x.day === key)?.count || 0,
+        visitors: stats.visitors?.find((x) => x.day === key)?.count || 0,
+      });
+      cur = new Date(cur.getTime() + 86400000);
+    }
+    if (columns.length) {
+      columns[0].tick = stats.from.slice(5).replace("-", "/");
+      columns[columns.length - 1].tick = stats.to.slice(5).replace("-", "/");
+    }
   }
-  // An even maximum keeps the middle grid label distinct from the top one.
-  let max = Math.max(2, ...days.map((d) => d.claps + d.messages));
-  if (max % 2) max++;
-  return (
-    <div className="activity-chart">
-      <div className="chart-grid">
-        <span>{max}</span>
-        <span>{max / 2}</span>
-        <span>0</span>
-      </div>
-      <div className="chart-bars">
-        {days.map((d) => (
-          <button
-            type="button"
-            className={"chart-column " + (d.day === selected ? "active" : "")}
-            key={d.day}
-            title={`${d.day} 人数 ${d.visitors}・拍手 ${d.claps}・感想 ${d.messages}`}
-            aria-label={`${d.day} 拍手 ${d.claps} 件`}
-            onClick={() => onSelect(d.day)}
-          >
-            <div className="chart-stack">
-              <div
-                className="bar-message"
-                style={{ height: `${(d.messages / max) * 115}px` }}
-              />
-              <div
-                className="bar-clap"
-                style={{ height: `${(d.claps / max) * 115}px` }}
-              />
-            </div>
-          </button>
-        ))}
-      </div>
-      <div className="chart-axis">
-        <span>{stats.from.replaceAll("-", " / ")}</span>
-        <span>{stats.to.replaceAll("-", " / ")}</span>
-      </div>
-    </div>
-  );
-}
-function HourTable({ data }: { data: HourStats | null }) {
-  if (!data)
-    return <div className="chart-loading">集計を読み込んでいます…</div>;
-  const max = Math.max(1, ...data.hours.map((h) => h.claps));
+  if (mode === "hours" && hours)
+    columns = hours.hours.map((h) => ({
+      key: String(h.hour),
+      label: `${h.hour}時`,
+      tick: h.hour % 6 ? "" : String(h.hour),
+      ...h,
+    }));
+  const picked =
+    mode === "hours" ? columns?.find((c) => c.key === String(hour)) : null;
   const sum = (k: "claps" | "visitors" | "messages") =>
-    data.hours.reduce((a, h) => a + h[k], 0);
-  const half = (rows: HourStats["hours"]) => (
-    <table className="hour-table">
-      <thead>
-        <tr>
-          <th>時</th>
-          <th>人数</th>
-          <th>拍手</th>
-          <th>感想</th>
-          <th aria-hidden="true" />
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((h) => (
-          <tr key={h.hour} className={h.claps ? "" : "zero"}>
-            <td>{h.hour}</td>
-            <td>{h.visitors}</td>
-            <td>{h.claps}</td>
-            <td>{h.messages}</td>
-            <td className="hour-bar-cell">
-              <span
-                className="hour-bar"
-                style={{ width: `${(h.claps / max) * 100}%` }}
-              />
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
+    picked ? picked[k] : (columns || []).reduce((a, c) => a + c[k], 0);
+  const max = Math.max(1, ...(columns || []).map((c) => c.claps + c.messages));
   return (
-    <>
-      <div className="hour-tables">
-        {half(data.hours.slice(0, 12))}
-        {half(data.hours.slice(12))}
+    <section className="panel activity-panel">
+      <div className="panel-heading activity-heading">
+        <div className="mode-switch" role="tablist">
+          {(
+            [
+              ["days", "日別"],
+              ["hours", "時間別"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
+              className={mode === m ? "active" : ""}
+              onClick={() => {
+                setMode(m);
+                setHour(null);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {mode === "hours" && (
+          <div className="day-step">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="前の日"
+              onClick={() => shift(-1)}
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <input
+              type="date"
+              className="hour-date"
+              aria-label="時間別の日付"
+              value={day}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                onDay(e.target.value);
+                setHour(null);
+              }}
+            />
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="次の日"
+              onClick={() => shift(1)}
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
       </div>
-      <div className="hour-total">
-        <span>
-          人数 <b>{sum("visitors")}</b>
-        </span>
-        <span>
-          拍手 <b>{sum("claps")}</b>
-        </span>
-        <span>
-          感想 <b>{sum("messages")}</b>
-        </span>
-      </div>
-    </>
+      {!columns ? (
+        <div className="chart-loading">集計を読み込んでいます…</div>
+      ) : (
+        <>
+          <div className="activity-bars">
+            {columns.map((c) => {
+              const active =
+                mode === "days" ? c.key === day : c.key === String(hour);
+              return (
+                <button
+                  type="button"
+                  key={c.key}
+                  className={"chart-column " + (active ? "active" : "")}
+                  title={`${c.label} 人数 ${c.visitors}・拍手 ${c.claps}・感想 ${c.messages}`}
+                  aria-label={`${c.label} 拍手 ${c.claps} 件`}
+                  onClick={() => {
+                    if (mode === "days") {
+                      onDay(c.key);
+                      setMode("hours");
+                    } else setHour(active ? null : Number(c.key));
+                  }}
+                >
+                  <span className="chart-stack">
+                    <span
+                      className="bar-message"
+                      style={{ height: `${(c.messages / max) * 100}%` }}
+                    />
+                    <span
+                      className="bar-clap"
+                      style={{ height: `${(c.claps / max) * 100}%` }}
+                    />
+                  </span>
+                  <span className="chart-tick">{c.tick}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="hour-total">
+            <span className="chart-legend">
+              <span>
+                <i className="legend-clap" />
+                拍手
+              </span>
+              <span>
+                <i className="legend-message" />
+                感想
+              </span>
+            </span>
+            {picked && (
+              <button
+                type="button"
+                className="hour-picked"
+                onClick={() => setHour(null)}
+              >
+                {picked.label} ×
+              </button>
+            )}
+            <span>
+              人数 <b>{sum("visitors")}</b>
+            </span>
+            <span>
+              拍手 <b>{sum("claps")}</b>
+            </span>
+            <span>
+              感想 <b>{sum("messages")}</b>
+            </span>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 export default function App() {
@@ -567,43 +632,13 @@ export default function App() {
               </div>
               <div className="dashboard-single">
                 <div className="dashboard-main">
-                  <section className="panel activity-panel">
-                    <div className="panel-heading">
-                      <h2>日別の拍手</h2>
-                      <span className="muted small-text">日本時間</span>
-                    </div>
-                    <div className="chart-legend">
-                      <span>
-                        <i className="legend-clap" />
-                        拍手
-                      </span>
-                      <span>
-                        <i className="legend-message" />
-                        感想
-                      </span>
-                    </div>
-                    <Chart
-                      stats={stats.data}
-                      selected={day}
-                      onSelect={setDay}
-                    />
-                  </section>
-                  <section className="panel activity-panel">
-                    <div className="panel-heading">
-                      <h2>時間別</h2>
-                      <input
-                        type="date"
-                        className="hour-date"
-                        aria-label="時間別の日付"
-                        value={day}
-                        onChange={(e) =>
-                          e.target.value && setDay(e.target.value)
-                        }
-                      />
-                    </div>
-                    <ErrorText>{hours.error}</ErrorText>
-                    <HourTable data={hours.data} />
-                  </section>
+                  <ErrorText>{hours.error}</ErrorText>
+                  <Activity
+                    stats={stats.data}
+                    hours={hours.data}
+                    day={day}
+                    onDay={setDay}
+                  />
                   <section className="panel activity-panel">
                     <div className="panel-heading">
                       <h2>ページ別の拍手</h2>
@@ -1564,7 +1599,9 @@ function ProjectModal({
                 value={blockedSites}
                 onChange={(e) => setBlockedSites(e.target.value)}
               />
-              <small>1行に1ドメイン。サブドメインも含めて、ボタンの表示と拍手・感想の受付を止めます。</small>
+              <small>
+                1行に1ドメイン。サブドメインも含めて、ボタンの表示と拍手・感想の受付を止めます。
+              </small>
             </label>
             <div className="setting-section">
               <h3>ウィジェットの機能</h3>

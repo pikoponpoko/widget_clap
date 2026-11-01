@@ -345,6 +345,36 @@ function ReactionStats({
     </section>
   );
 }
+// Year/month/day hour:minute in Japan time, e.g. 2026/11/01 16:07.
+const clapTime = (iso: string) => {
+  const t = new Date(Date.parse(iso) + 9 * 3600000).toISOString();
+  return `${t.slice(0, 10).replaceAll("-", "/")} ${t.slice(11, 16)}`;
+};
+function ClapTimes({
+  hours,
+  hour,
+}: {
+  hours: HourStats | null;
+  hour: string | null;
+}) {
+  const list = (hours?.claps || []).filter(
+    (c) =>
+      hour === null || Number(clapTime(c.at).slice(11, 13)) === Number(hour),
+  );
+  if (!list.length) return null;
+  return (
+    <ol className="clap-times" aria-label="拍手の時刻">
+      {list.map((c, i) => (
+        <li key={c.at + i}>
+          <time dateTime={c.at}>{clapTime(c.at)}</time>
+          <span className="page-title">
+            {c.page_title || (c.page_url ? pagePath(c.page_url) : "")}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 type Column = {
   key: string;
   label: string;
@@ -461,9 +491,9 @@ function Activity({
     );
   while (tallest(per) * 4 > 88) per++;
   const blockPx = Math.min(12, Math.floor(88 / tallest(per)));
-  // Claps darken from the 5th, 10th and 20th one up, so busy times stand out.
+  // Claps change color from the 5th, 10th and 20th one up, so busy times stand out.
   const stop = (n: number) => (Math.ceil(n / per) - 1) * blockPx;
-  const tiers = `linear-gradient(to top, #adadad 0 ${stop(5)}px, #767676 ${stop(5)}px ${stop(10)}px, #4a4a4a ${stop(10)}px ${stop(20)}px, #262626 ${stop(20)}px)`;
+  const tiers = `linear-gradient(to top, var(--clap-1) 0 ${stop(5)}px, var(--clap-2) ${stop(5)}px ${stop(10)}px, var(--clap-3) ${stop(10)}px ${stop(20)}px, var(--clap-4) ${stop(20)}px)`;
   return (
     <section className="panel activity-panel">
       <div className="panel-heading activity-heading">
@@ -609,6 +639,7 @@ function Activity({
               感想 <b>{sum("messages")}</b>
             </span>
           </div>
+          {mode === "hours" && <ClapTimes hours={hours} hour={pick} />}
         </>
       )}
     </section>

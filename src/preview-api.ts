@@ -796,6 +796,13 @@ export async function previewRequest(
             .length,
         };
       }),
+      claps: claps
+        .map((c) => ({
+          at: c.created_at,
+          page_url: c.page_url || "",
+          page_title: c.page_title || "",
+        }))
+        .sort((a, b) => b.at.localeCompare(a.at)),
     };
   }
   m = p.match(/^\/owner\/projects\/([^/]+)\/assets\/order$/);

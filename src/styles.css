@@ -17,6 +17,10 @@
   --line: #ebebeb;
   --soft: #f6f6f6;
   --white: #fff;
+  --clap-1: #38bdf8;
+  --clap-2: #22c55e;
+  --clap-3: #f59e0b;
+  --clap-4: #ef4444;
 }
 * {
   box-sizing: border-box;
@@ -569,16 +573,16 @@ small {
   border-radius: 2px;
 }
 .legend-clap b:nth-child(1) {
-  background: #adadad;
+  background: var(--clap-1);
 }
 .legend-clap b:nth-child(2) {
-  background: #767676;
+  background: var(--clap-2);
 }
 .legend-clap b:nth-child(3) {
-  background: #4a4a4a;
+  background: var(--clap-3);
 }
 .legend-clap b:nth-child(4) {
-  background: #262626;
+  background: var(--clap-4);
 }
 .legend-message {
   border: 1px solid #262626;
@@ -649,7 +653,7 @@ small {
   transform-origin: bottom;
   animation: stack-up 0.35s ease-out;
 }
-/* A white line tops each block; under it, claps darken as the stack grows. */
+/* A white line tops each block; under it, claps change color as the stack grows. */
 .bar-clap {
   background:
     repeating-linear-gradient(
@@ -2869,6 +2873,27 @@ html.embed-document {
   color: var(--ink);
   font-size: 10px;
   padding: 1px 8px;
+}
+.clap-times {
+  list-style: none;
+  margin: 0;
+  padding: 0 22px 12px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.clap-times li {
+  display: flex;
+  gap: 16px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+.clap-times time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.clap-times .page-title {
+  color: var(--muted);
 }
 .hour-total b {
   color: var(--ink);

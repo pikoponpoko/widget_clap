@@ -391,12 +391,9 @@ test.describe.serial("Phase 1 integrated flow", () => {
     const stats = await (
       await request.get("/api/owner/stats?project=" + pid, { headers })
     ).json();
-    expect(stats.pages).toHaveLength(1);
-    expect(stats.pages[0]).toMatchObject({
-      page_url: article,
-      page_title: "記事C",
-      count: 1,
-    });
+    expect(stats.pages).toMatchObject([
+      { page_url: article, page_title: "記事C", count: 1 },
+    ]);
     const csv = await (
       await request.get("/api/owner/export?format=csv&project=" + pid, {
         headers,

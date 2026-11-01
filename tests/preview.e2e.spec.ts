@@ -416,10 +416,16 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
   await expect(total).toContainText("感想 1");
   // The chart opens on hours; tapping a day switches it to that day's hours.
   await expect(page.locator(".activity-bars .chart-column")).toHaveCount(24);
-  await page.getByRole("tab", { name: "日別" }).first().click();
   const today = await page.evaluate(() =>
     new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10),
   );
+  // Each clap of the day is listed with its minute in Japan time.
+  const times = page.locator(".clap-times li");
+  await expect(times).toHaveCount(2);
+  await expect(times.first().locator("time")).toHaveText(
+    new RegExp(`^${today.replaceAll("-", "/")} \\d{2}:\\d{2}$`),
+  );
+  await page.getByRole("tab", { name: "日別" }).first().click();
   await page
     .locator(".activity-bars")
     .getByRole("button", { name: today.replaceAll("-", "/") + " " })

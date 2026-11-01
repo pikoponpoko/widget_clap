@@ -37,6 +37,7 @@ export interface Message {
   page_title: string;
   sender_name: string;
   reply_wanted: number | null;
+  source: "" | "import";
 }
 export interface Asset {
   id: string;

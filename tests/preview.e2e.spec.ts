@@ -495,3 +495,42 @@ test("the demo code generator adds an escaped custom tip label", async ({
     page.getByRole("textbox", { name: "小型ボタンの埋め込みコード" }),
   ).toHaveValue(/data-tip="on" data-tip-label="コーヒー&quot;b" defer/);
 });
+test("old messages can be pasted in and are kept apart from Hakushu messages", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/admin#data");
+  await page
+    .getByRole("textbox", { name: "取り込むメッセージ" })
+    .fill(
+      "2015/03/02 12:34\n名前：みどり\nいつも見ています\n\n2015/03/03 08:00 更新ありがとう",
+    );
+  await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "メッセージ" })).toHaveCount(
+    2,
+  );
+  await expect(page.getByRole("textbox", { name: "名前" }).first()).toHaveValue(
+    "みどり",
+  );
+  await page.screenshot({
+    path: "test-results/import-preview.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "2 件を取り込む" }).click();
+  await expect(page.getByText("2 件を取り込みました")).toBeVisible();
+  // Importing the same text again adds nothing.
+  await page
+    .getByRole("textbox", { name: "取り込むメッセージ" })
+    .fill("2015/03/03 08:00 更新ありがとう");
+  await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await page.getByRole("button", { name: "1 件を取り込む" }).click();
+  await expect(
+    page.getByText("0 件を取り込みました（1 件は取り込み済み）"),
+  ).toBeVisible();
+  await page.goto("/admin#inbox");
+  await page.getByRole("button", { name: "取り込み", exact: true }).click();
+  await expect(page.locator(".message-item")).toHaveCount(2);
+  await page.getByText("いつも見ています").click();
+  await expect(page.getByRole("textbox", { name: "返信内容" })).toHaveCount(0);
+  await page.screenshot({ path: "test-results/import-detail.png" });
+});

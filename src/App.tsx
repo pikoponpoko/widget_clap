@@ -18,6 +18,7 @@ import {
   Download,
   ExternalLink,
   FileImage,
+  FileText,
   FolderHeart,
   Heart,
   Inbox,
@@ -36,6 +37,7 @@ import {
   Sparkles,
   ThumbsUp,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { api, date, dateTime, downloadEndpoint, send, useApi } from "./api";
@@ -43,6 +45,7 @@ import { defaultPrint, type PrintOptions } from "./print-options";
 import { collectImages } from "./image-files";
 import { planners, type PaperSize, type PlannerId } from "./planner-sizes";
 import type { Asset, HourStats, Message, Project, Stats } from "./types";
+import { parseImport, type ImportRow } from "./import-parse";
 const jstToday = (offsetDays = 0) =>
   new Date(Date.now() + 9 * 3600000 - offsetDays * 86400000)
     .toISOString()
@@ -935,6 +938,7 @@ function InboxList({
                 ["unread", "未読"],
                 ["unreplied", "未返信"],
                 ["replied", "返信済み"],
+                ["imported", "取り込み"],
                 ["blocked", "非表示"],
               ].map(([key, label]) => (
                 <button
@@ -1079,6 +1083,9 @@ function InboxList({
                       {m.page_title || m.project_title}
                     </span>
                     {!m.read_at && <span className="unread-dot" />}
+                    {m.source === "import" && (
+                      <span className="consent-badge">取り込み</span>
+                    )}
                     {!!m.publication_consent && (
                       <span className="consent-badge">公開許可あり</span>
                     )}
@@ -1093,16 +1100,18 @@ function InboxList({
                     <b className="sender-name">{m.sender_name}</b>
                   )}
                   <p>{m.body}</p>
-                  <span className="reply-status">
-                    {m.reply_body ? (
-                      <>
-                        <CheckCheck size={12} />
-                        返信済み
-                      </>
-                    ) : (
-                      "未返信"
-                    )}
-                  </span>
+                  {m.source !== "import" && (
+                    <span className="reply-status">
+                      {m.reply_body ? (
+                        <>
+                          <CheckCheck size={12} />
+                          返信済み
+                        </>
+                      ) : (
+                        "未返信"
+                      )}
+                    </span>
+                  )}
                 </div>
                 <ChevronRight size={15} />
               </button>
@@ -1198,6 +1207,9 @@ function MessageModal({
           <time>
             {date(m.created_at)} · {dateTime(m.created_at)}
           </time>
+          {m.source === "import" && (
+            <span className="consent-badge">取り込み</span>
+          )}
           {m.reply_wanted != null && (
             <span className="consent-badge">
               {m.reply_wanted ? "返事希望" : "返事不要"}
@@ -1263,91 +1275,95 @@ function MessageModal({
             削除
           </button>
         </div>
-        <div className="reply-editor">
-          <h3>
-            <Reply size={17} />
-            作者からの返信
-          </h3>
-          <p className="muted small-text">
-            返信確認URLを持つ相手だけが読むことができます。
-          </p>
-          <textarea
-            aria-label="返信内容"
-            rows={5}
-            maxLength={4000}
-            placeholder="返信内容"
-            value={reply}
-            onChange={(e) => setReply(e.target.value)}
-          />
-          <button
-            className="btn primary"
-            disabled={busy || !reply.trim() || !!m.blocked}
-            onClick={() =>
-              action(async () => {
-                await send(
-                  "/owner/messages/" + m.id + "/reply",
-                  { body: reply },
-                  "PUT",
-                );
-                notify("返信を保存しました");
-                onClose();
-              })
-            }
-          >
-            <Reply size={15} />
-            {busy ? "保存中…" : "返信を保存"}
-          </button>
-        </div>
-        <details className="token-settings">
-          <summary>返信確認URLの管理</summary>
-          <p>
-            現在のURL：{active ? "有効" : "無効"}
-            。再発行すると古いURLは無効になります。新しいURLはこの画面で一度だけ表示します。送り主への自動通知はありません。
-          </p>
-          <div className="button-row">
-            <button
-              className="btn"
-              disabled={busy || !active}
-              onClick={() =>
-                action(async () => {
-                  await send("/owner/messages/" + m.id + "/reply-token", {
-                    action: "revoke",
-                  });
-                  setActive(false);
-                  setNewUrl("");
-                  notify("返信確認URLを無効にしました");
-                })
-              }
-            >
-              無効化
-            </button>
-            <button
-              className="btn"
-              disabled={busy}
-              onClick={() => {
-                if (confirm("新しいURLを発行し、古いURLを無効にしますか？"))
+        {m.source !== "import" && (
+          <>
+            <div className="reply-editor">
+              <h3>
+                <Reply size={17} />
+                作者からの返信
+              </h3>
+              <p className="muted small-text">
+                返信確認URLを持つ相手だけが読むことができます。
+              </p>
+              <textarea
+                aria-label="返信内容"
+                rows={5}
+                maxLength={4000}
+                placeholder="返信内容"
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+              />
+              <button
+                className="btn primary"
+                disabled={busy || !reply.trim() || !!m.blocked}
+                onClick={() =>
                   action(async () => {
-                    const r = await send<{ token: string }>(
-                      "/owner/messages/" + m.id + "/reply-token",
-                      { action: "rotate" },
+                    await send(
+                      "/owner/messages/" + m.id + "/reply",
+                      { body: reply },
+                      "PUT",
                     );
-                    setNewUrl(location.origin + "/reply#" + r.token);
-                    setActive(true);
-                  });
-              }}
-            >
-              再発行
-            </button>
-          </div>
-          {newUrl && (
-            <input
-              aria-label="再発行された返信URL"
-              value={newUrl}
-              readOnly
-              onFocus={(e) => e.target.select()}
-            />
-          )}
-        </details>
+                    notify("返信を保存しました");
+                    onClose();
+                  })
+                }
+              >
+                <Reply size={15} />
+                {busy ? "保存中…" : "返信を保存"}
+              </button>
+            </div>
+            <details className="token-settings">
+              <summary>返信確認URLの管理</summary>
+              <p>
+                現在のURL：{active ? "有効" : "無効"}
+                。再発行すると古いURLは無効になります。新しいURLはこの画面で一度だけ表示します。送り主への自動通知はありません。
+              </p>
+              <div className="button-row">
+                <button
+                  className="btn"
+                  disabled={busy || !active}
+                  onClick={() =>
+                    action(async () => {
+                      await send("/owner/messages/" + m.id + "/reply-token", {
+                        action: "revoke",
+                      });
+                      setActive(false);
+                      setNewUrl("");
+                      notify("返信確認URLを無効にしました");
+                    })
+                  }
+                >
+                  無効化
+                </button>
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => {
+                    if (confirm("新しいURLを発行し、古いURLを無効にしますか？"))
+                      action(async () => {
+                        const r = await send<{ token: string }>(
+                          "/owner/messages/" + m.id + "/reply-token",
+                          { action: "rotate" },
+                        );
+                        setNewUrl(location.origin + "/reply#" + r.token);
+                        setActive(true);
+                      });
+                  }}
+                >
+                  再発行
+                </button>
+              </div>
+              {newUrl && (
+                <input
+                  aria-label="再発行された返信URL"
+                  value={newUrl}
+                  readOnly
+                  onFocus={(e) => e.target.select()}
+                />
+              )}
+            </details>
+          </>
+        )}
         <ErrorText>{error}</ErrorText>
       </div>
     </Modal>
@@ -2123,6 +2139,220 @@ function PrintPanel({
     </div>
   );
 }
+const jstInput = (iso: string) =>
+  iso ? new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 16) : "";
+const fromJstInput = (v: string) =>
+  v ? new Date(Date.parse(v + ":00+09:00")).toISOString() : "";
+async function readTextFile(file: File) {
+  const bytes = await file.arrayBuffer();
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    // Older Japanese services often export Shift_JIS.
+    return new TextDecoder("shift_jis").decode(bytes);
+  }
+}
+function ImportPanel({
+  notify,
+  refresh,
+}: {
+  notify: (s: string) => void;
+  refresh: () => void;
+}) {
+  const projects = useApi<Project[]>("/owner/projects");
+  const list = projects.data || [];
+  const [text, setText] = useState(""),
+    [rows, setRows] = useState<ImportRow[] | null>(null),
+    [target, setTarget] = useState(""),
+    [fallbackDate, setFallbackDate] = useState(""),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const projectId = target || list[0]?.id || "";
+  const undated = (rows || []).some((r) => !r.created_at);
+  const update = (i: number, patch: Partial<ImportRow>) =>
+    setRows((r) => r && r.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  function read(source: string) {
+    setError("");
+    const parsed = parseImport(source);
+    if (!parsed.length) setError("メッセージが見つかりません。");
+    setRows(parsed.length ? parsed : null);
+  }
+  async function save() {
+    if (!rows) return;
+    setBusy(true);
+    setError("");
+    let added = 0,
+      skipped = 0;
+    try {
+      const items = rows
+        .filter((r) => r.body.trim())
+        .map((r) => ({
+          created_at: r.created_at || fromJstInput(fallbackDate),
+          sender_name: r.sender_name.trim(),
+          body: r.body.trim(),
+        }));
+      for (let i = 0; i < items.length; i += 40) {
+        const r = await send<{ added: number; skipped: number }>(
+          "/owner/imports",
+          { project_id: projectId, items: items.slice(i, i + 40) },
+        );
+        added += r.added;
+        skipped += r.skipped;
+      }
+      notify(
+        `${added} 件を取り込みました` +
+          (skipped ? `（${skipped} 件は取り込み済み）` : ""),
+      );
+      setRows(null);
+      setText("");
+      refresh();
+    } catch (e) {
+      setError(
+        (added ? `${added} 件を取り込んだ後に止まりました：` : "") +
+          (e as Error).message,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <h2>過去のメッセージを取り込む</h2>
+        <Upload size={18} />
+      </div>
+      <div className="data-section import-section">
+        {list.length > 1 && (
+          <div className="select-wrap">
+            <select
+              aria-label="取り込み先のサイト"
+              value={projectId}
+              onChange={(e) => setTarget(e.target.value)}
+            >
+              {list.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} />
+          </div>
+        )}
+        {!rows ? (
+          <>
+            <textarea
+              aria-label="取り込むメッセージ"
+              rows={8}
+              placeholder={"2015/03/02 12:34\n名前：\nメッセージ"}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+            <div className="button-row">
+              <button
+                className="btn primary"
+                disabled={!text.trim()}
+                onClick={() => read(text)}
+              >
+                読み込む
+              </button>
+              <label className="btn">
+                <FileText size={15} />
+                ファイルから読み込む
+                <input
+                  type="file"
+                  hidden
+                  aria-label="取り込むファイル"
+                  accept=".txt,.csv,.tsv,text/plain,text/csv"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) read(await readTextFile(f));
+                  }}
+                />
+              </label>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="import-rows">
+              {rows.map((r, i) => (
+                <div className="import-row" key={i}>
+                  <div className="import-row-meta">
+                    <input
+                      type="datetime-local"
+                      aria-label="日時"
+                      value={jstInput(r.created_at)}
+                      onChange={(e) =>
+                        update(i, { created_at: fromJstInput(e.target.value) })
+                      }
+                    />
+                    <input
+                      aria-label="名前"
+                      placeholder="名前"
+                      maxLength={50}
+                      value={r.sender_name}
+                      onChange={(e) =>
+                        update(i, { sender_name: e.target.value })
+                      }
+                    />
+                    <button
+                      className="icon-button"
+                      aria-label="この行を除く"
+                      onClick={() =>
+                        setRows((x) => x && x.filter((_, j) => j !== i))
+                      }
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <textarea
+                    aria-label="メッセージ"
+                    rows={2}
+                    maxLength={2000}
+                    value={r.body}
+                    onChange={(e) => update(i, { body: e.target.value })}
+                  />
+                </div>
+              ))}
+            </div>
+            {undated && (
+              <label className="import-fallback">
+                日時のないメッセージの日時
+                <input
+                  type="datetime-local"
+                  value={fallbackDate}
+                  onChange={(e) => setFallbackDate(e.target.value)}
+                />
+              </label>
+            )}
+            <div className="button-row">
+              <button
+                className="btn primary"
+                disabled={
+                  busy ||
+                  !projectId ||
+                  !rows.length ||
+                  (undated && !fallbackDate)
+                }
+                onClick={save}
+              >
+                {busy ? "取り込み中…" : `${rows.length} 件を取り込む`}
+              </button>
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => setRows(null)}
+              >
+                戻る
+              </button>
+            </div>
+          </>
+        )}
+        <ErrorText>{error || projects.error}</ErrorText>
+      </div>
+    </section>
+  );
+}
 function DataPanel({
   notify,
   refresh,
@@ -2150,68 +2380,74 @@ function DataPanel({
   }
   if (previewMode)
     return (
-      <section className="panel">
-        <div className="panel-heading">
-          <h2>体験版のデータ</h2>
-          <Database size={18} />
-        </div>
-        <div className="data-section">
-          <p>
-            このブラウザ内の体験データです。サーバーへの保存・自動バックアップはありません。
-          </p>
-          <div className="button-row">
-            <button
-              className="btn"
-              onClick={() =>
-                action(async () => {
-                  await downloadEndpoint(
-                    "/owner/export?format=csv",
-                    "体験した感想.csv",
-                  );
-                  notify("体験データを書き出しました");
-                })
-              }
-            >
-              CSVをダウンロード
-            </button>
-            <button
-              className="btn"
-              onClick={() =>
-                action(async () => {
-                  await downloadEndpoint(
-                    "/owner/export?format=json",
-                    "体験した感想.json",
-                  );
-                  notify("体験データを書き出しました");
-                })
-              }
-            >
-              JSONをダウンロード
-            </button>
-            <button
-              className="btn"
-              disabled={busy}
-              onClick={() => {
-                if (
-                  confirm("このブラウザ内の体験データを初期状態に戻しますか？")
-                )
-                  action(async () => {
-                    await send("/owner/purge", {});
-                    notify("体験データを初期化しました");
-                    refresh();
-                  });
-              }}
-            >
-              体験データを初期化
-            </button>
+      <div className="data-layout">
+        <ImportPanel notify={notify} refresh={refresh} />
+        <section className="panel">
+          <div className="panel-heading">
+            <h2>体験版のデータ</h2>
+            <Database size={18} />
           </div>
-          <ErrorText>{error}</ErrorText>
-        </div>
-      </section>
+          <div className="data-section">
+            <p>
+              このブラウザ内の体験データです。サーバーへの保存・自動バックアップはありません。
+            </p>
+            <div className="button-row">
+              <button
+                className="btn"
+                onClick={() =>
+                  action(async () => {
+                    await downloadEndpoint(
+                      "/owner/export?format=csv",
+                      "体験した感想.csv",
+                    );
+                    notify("体験データを書き出しました");
+                  })
+                }
+              >
+                CSVをダウンロード
+              </button>
+              <button
+                className="btn"
+                onClick={() =>
+                  action(async () => {
+                    await downloadEndpoint(
+                      "/owner/export?format=json",
+                      "体験した感想.json",
+                    );
+                    notify("体験データを書き出しました");
+                  })
+                }
+              >
+                JSONをダウンロード
+              </button>
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => {
+                  if (
+                    confirm(
+                      "このブラウザ内の体験データを初期状態に戻しますか？",
+                    )
+                  )
+                    action(async () => {
+                      await send("/owner/purge", {});
+                      notify("体験データを初期化しました");
+                      refresh();
+                    });
+                }}
+              >
+                体験データを初期化
+              </button>
+            </div>
+            <ErrorText>{error}</ErrorText>
+          </div>
+        </section>
+      </div>
     );
   return (
     <div className="data-layout">
       <ErrorText>{error}</ErrorText>
+      <ImportPanel notify={notify} refresh={refresh} />
       <section className="panel">
         <div className="panel-heading">
           <h2>メッセージの書き出し</h2>

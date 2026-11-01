@@ -2987,6 +2987,25 @@ html.embed-document {
   margin-left: auto;
   flex-shrink: 0;
 }
+.import-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.import-summary div {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 10px 12px;
+}
+.import-summary dt {
+  font-size: 11px;
+}
+.import-summary dd {
+  margin: 4px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+}
 .import-fallback {
   display: flex;
   flex-direction: column;

@@ -202,6 +202,23 @@ export const importSchema = z
       .max(40),
   })
   .strict();
+export const clapDaysSchema = z
+  .object({
+    project_id: z.string().min(1).max(100),
+    items: z
+      .array(
+        z
+          .object({
+            day: z.iso.date(),
+            claps: z.number().int().min(0).max(1000000),
+            visitors: z.number().int().min(0).max(1000000).default(0),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(500),
+  })
+  .strict();
 const https = z.url().refine((s) => {
   try {
     const u = new URL(s);

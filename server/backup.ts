@@ -9,11 +9,16 @@ import {
 } from "./security";
 import type { Asset } from "./models";
 export async function snapshot(env: Env) {
-  const [projects, claps, messages, replies, assets] = await env.DB.batch(
-    ["projects", "claps", "messages", "replies", "assets"].map((t) =>
-      env.DB.prepare(`SELECT * FROM ${t} ORDER BY id`),
-    ),
-  );
+  const [projects, claps, messages, replies, assets, clapDays] =
+    await env.DB.batch(
+      ["projects", "claps", "messages", "replies", "assets"]
+        .map((t) => env.DB.prepare(`SELECT * FROM ${t} ORDER BY id`))
+        .concat(
+          env.DB.prepare(
+            "SELECT * FROM imported_clap_days ORDER BY project_id,day",
+          ),
+        ),
+    );
   const images = [];
   for (const row of assets.results as unknown as Asset[]) {
     const object = await env.IMAGES.get(row.storage_key);
@@ -35,6 +40,7 @@ export async function snapshot(env: Env) {
     claps: claps.results,
     messages: messages.results,
     replies: replies.results,
+    imported_clap_days: clapDays.results,
     assets: images,
   };
 }
@@ -167,6 +173,19 @@ const schema = z
       )
       .max(10000),
     assets: z.array(asset).max(100),
+    imported_clap_days: z
+      .array(
+        z
+          .object({
+            project_id: ident,
+            day: z.iso.date(),
+            claps: z.number().int().min(0),
+            visitors: z.number().int().min(0),
+          })
+          .strict(),
+      )
+      .max(20000)
+      .default([]),
   })
   .strict();
 export async function restore(env: Env, input: unknown) {
@@ -193,7 +212,7 @@ export async function restore(env: Env, input: unknown) {
   if (
     ![d.projects, d.messages, d.claps, d.replies, d.assets].every(unique) ||
     d.projects.some((p) => !validProject(p)) ||
-    [...d.messages, ...d.claps, ...d.assets].some(
+    [...d.messages, ...d.claps, ...d.assets, ...d.imported_clap_days].some(
       (x) => !projectIds.has(x.project_id),
     ) ||
     d.replies.some((x) => !messageIds.has(x.message_id))
@@ -244,6 +263,7 @@ export async function restore(env: Env, input: unknown) {
     insert("claps", d.claps);
     insert("messages", d.messages);
     insert("replies", d.replies);
+    insert("imported_clap_days", d.imported_clap_days);
     insert(
       "assets",
       d.assets.map(({ data, ...a }) => a),

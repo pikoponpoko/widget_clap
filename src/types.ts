@@ -56,6 +56,7 @@ export interface Stats {
   messages: { day: string; count: number }[];
   visitors?: { day: string; count: number }[];
   visitor_total?: number;
+  imported?: { day: string; claps: number; visitors: number }[];
   totals: { total: number; unread: number; unreplied: number };
   pages?: { page_url: string; page_title: string; count: number }[];
   from: string;

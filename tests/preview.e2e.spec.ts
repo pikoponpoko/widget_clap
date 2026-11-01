@@ -583,3 +583,65 @@ test("the export script walks every month of the old service and the file import
   await expect(page.locator(".message-item")).toHaveCount(3);
   await expect(page.getByText("返事不要")).toHaveCount(1);
 });
+test("the export script walks the old clap log and the days add to the stats", async ({
+  page,
+}) => {
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const [y, m] = [+today.slice(0, 4), +today.slice(5, 7)];
+  const prev = m === 1 ? [y - 1, 12] : [y, m - 1];
+  const md = (d: string) => d.slice(5).replace("-", "/");
+  const before = (n: number) =>
+    new Date(Date.parse(today) - n * 86400000).toISOString().slice(0, 10);
+  const log = (
+    days: [string, number, number][],
+    newer: string,
+    older: string | null,
+  ) => `<html><head><meta charset="utf-8"></head><body>
+<table><tr><td>2026/10/29<br>サーバーメンテナンスのお知らせ</td></tr></table>
+<table><tr><td>時間</td><td>人数</td><td>拍手</td></tr><tr><td>0時</td><td>0</td><td>0</td></tr></table>
+<table><tr><th colspan="${days.length}">過去ログ</th></tr>
+<tr>${days.map(() => '<td><img src="u.gif"></td>').join("")}</tr>
+<tr>${days.map(([, c, v]) => `<td><img src="h.gif">${c}<br><img src="p.gif">${v}</td>`).join("")}</tr>
+<tr>${days.map(([d]) => `<td>${md(d)}<br><a href="analysis.html?day=1">解析</a></td>`).join("")}</tr>
+<tr><td colspan="${days.length}"><a href="?p=new">&lt;&lt; ${newer}</a> 最新14日間へ ${older ? `<a href="?p=old">${older} &gt;&gt;</a>` : ""}
+<select><option>${y}年${m}月下旬</option></select></td></tr></table></body></html>`;
+  const pages: Record<string, string> = {
+    "": log(
+      [
+        [today, 9, 9],
+        [before(1), 3, 2],
+      ],
+      `${y}年${m}月上旬`,
+      `${prev[0]}年${prev[1]}月下旬`,
+    ),
+    old: log(
+      [
+        [before(1), 3, 2],
+        [before(2), 4, 4],
+      ],
+      `${y}年${m}月上旬`,
+      null,
+    ),
+  };
+  await page.route("https://clap.test/**", (route) =>
+    route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body:
+        pages[new URL(route.request().url()).searchParams.get("p") || ""] ||
+        "<html></html>",
+    }),
+  );
+  await page.goto("https://clap.test/analysis.html");
+  const { webclapScript } = await import("../src/webclap-script");
+  const download = page.waitForEvent("download");
+  await page.evaluate(webclapScript);
+  const file = await (await download).path();
+  await page.goto("/admin#data");
+  await page.getByLabel("取り込むファイル").setInputFiles(file!);
+  await expect(page.locator(".import-summary")).toContainText("16");
+  await page.getByRole("button", { name: "3 日分を取り込む" }).click();
+  await expect(page.getByText("3 日分の拍手数を取り込みました")).toBeVisible();
+  await page.goto("/admin");
+  await expect(page.locator(".hour-total")).toContainText("拍手 16");
+  await expect(page.locator(".hour-total")).toContainText("人数 15");
+});

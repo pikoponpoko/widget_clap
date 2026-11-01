@@ -20,6 +20,7 @@ import {
   assetOrderSchema,
   replySchema,
   importSchema,
+  clapDaysSchema,
   checkSpam,
   validateImage,
   csvCell,
@@ -287,7 +288,7 @@ app.get("/api/public/assets/:id", async (c) => {
 });
 app.get("/api/owner/projects", async (c) => {
   const rows = await c.env.DB.prepare(
-    "SELECT p.*,(SELECT count(*) FROM claps c WHERE c.project_id=p.id) AS claps,(SELECT count(*) FROM messages m WHERE m.project_id=p.id AND blocked=0) AS messages FROM projects p WHERE owner_id=? ORDER BY created_at,id",
+    "SELECT p.*,(SELECT count(*) FROM claps c WHERE c.project_id=p.id)+(SELECT COALESCE(sum(i.claps),0) FROM imported_clap_days i WHERE i.project_id=p.id) AS claps,(SELECT count(*) FROM messages m WHERE m.project_id=p.id AND blocked=0) AS messages FROM projects p WHERE owner_id=? ORDER BY created_at,id",
   )
     .bind("owner")
     .all();
@@ -492,6 +493,26 @@ app.post("/api/owner/imports", async (c) => {
   await audit(c.env, "messages.import", String(added));
   return c.json({ added, skipped: data.items.length - added });
 });
+app.post("/api/owner/imports/clap-days", async (c) => {
+  const data = await jsonBody(c.req.raw, clapDaysSchema, 100 * 1024);
+  const p = await c.env.DB.prepare(
+    "SELECT id FROM projects WHERE id=? AND owner_id=?",
+  )
+    .bind(data.project_id, "owner")
+    .first<{ id: string }>();
+  if (!p) throw new ApiError(404, "作品が見つかりません。");
+  // Importing the same day again replaces its counts.
+  const statements = data.items.map((x) =>
+    c.env.DB.prepare(
+      "INSERT INTO imported_clap_days(project_id,day,claps,visitors) SELECT ?,?,?,? WHERE (SELECT count(*) FROM imported_clap_days)<20000 ON CONFLICT(project_id,day) DO UPDATE SET claps=excluded.claps,visitors=excluded.visitors",
+    ).bind(p.id, x.day, x.claps, x.visitors),
+  );
+  const results = await c.env.DB.batch(statements);
+  const saved = results.filter((r) => r.meta.changes > 0).length;
+  if (!saved) throw new ApiError(503, "取り込める日数の上限に達しています。");
+  await audit(c.env, "claps.import", String(saved));
+  return c.json({ saved });
+});
 app.post("/api/owner/messages/bulk", async (c) => {
   const data = await jsonBody(
     c.req.raw,
@@ -638,7 +659,7 @@ app.get("/api/owner/stats", async (c) => {
     pageSuffix = suffix + (pageUrl ? " AND page_url=?" : ""),
     pageArgs = pageUrl ? [...args, pageUrl] : args,
     day = "strftime('%Y-%m-%d',created_at,'+9 hours')";
-  const [claps, messages, totals, pages, visitors, people] =
+  const [claps, messages, totals, pages, visitors, people, imported] =
     await c.env.DB.batch([
       c.env.DB.prepare(
         `SELECT ${day} AS day,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
@@ -658,12 +679,34 @@ app.get("/api/owner/stats", async (c) => {
       c.env.DB.prepare(
         `SELECT count(DISTINCT NULLIF(visitor,'')) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix}`,
       ).bind(...pageArgs),
+      // Counts brought in from another service have no page.
+      c.env.DB.prepare(
+        `SELECT day,sum(claps) AS claps,sum(visitors) AS visitors FROM imported_clap_days WHERE day>=? AND day<=?${suffix}${pageUrl ? " AND 0" : ""} GROUP BY day ORDER BY day`,
+      ).bind(start, end, ...(project ? [project] : [])),
     ]);
+  const extra = imported.results as {
+    day: string;
+    claps: number;
+    visitors: number;
+  }[];
+  const merge = (rows: unknown[], k: "claps" | "visitors") => {
+    const map = new Map(
+      (rows as { day: string; count: number }[]).map((r) => [r.day, r.count]),
+    );
+    for (const x of extra) map.set(x.day, (map.get(x.day) || 0) + x[k]);
+    return [...map]
+      .map(([day, count]) => ({ day, count }))
+      .sort((a, b) => a.day.localeCompare(b.day));
+  };
   return c.json({
-    claps: claps.results,
+    claps: merge(claps.results, "claps"),
     messages: messages.results,
-    visitors: visitors.results,
-    visitor_total: (people.results[0] as { count: number }).count || 0,
+    visitors: merge(visitors.results, "visitors"),
+    // The other service counted people per day, so its days add up.
+    visitor_total:
+      ((people.results[0] as { count: number }).count || 0) +
+      extra.reduce((a, x) => a + x.visitors, 0),
+    imported: extra,
     totals: totals.results[0],
     pages: pages.results,
     from: start,

@@ -495,3 +495,91 @@ test("the demo code generator adds an escaped custom tip label", async ({
     page.getByRole("textbox", { name: "小型ボタンの埋め込みコード" }),
   ).toHaveValue(/data-tip="on" data-tip-label="コーヒー&quot;b" defer/);
 });
+test("old messages can be pasted in and are kept apart from Hakushu messages", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/admin#data");
+  await page
+    .getByRole("textbox", { name: "取り込むメッセージ" })
+    .fill(
+      "2015/03/02 12:34\n名前：みどり\nいつも見ています\n\n2015/03/03 08:00 更新ありがとう",
+    );
+  await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "メッセージ" })).toHaveCount(
+    2,
+  );
+  await expect(page.getByRole("textbox", { name: "名前" }).first()).toHaveValue(
+    "みどり",
+  );
+  await page.screenshot({
+    path: "test-results/import-preview.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "2 件を取り込む" }).click();
+  await expect(page.getByText("2 件を取り込みました")).toBeVisible();
+  // Importing the same text again adds nothing.
+  await page
+    .getByRole("textbox", { name: "取り込むメッセージ" })
+    .fill("2015/03/03 08:00 更新ありがとう");
+  await page.getByRole("button", { name: "読み込む", exact: true }).click();
+  await page.getByRole("button", { name: "1 件を取り込む" }).click();
+  await expect(
+    page.getByText("0 件を取り込みました（1 件は取り込み済み）"),
+  ).toBeVisible();
+  await page.goto("/admin#inbox");
+  await page.getByRole("button", { name: "取り込み", exact: true }).click();
+  await expect(page.locator(".message-item")).toHaveCount(2);
+  await page.getByText("いつも見ています").click();
+  await expect(page.getByRole("textbox", { name: "返信内容" })).toHaveCount(0);
+  await page.screenshot({ path: "test-results/import-detail.png" });
+});
+test("the export script walks every month of the old service and the file imports", async ({
+  page,
+}) => {
+  const month = (ym: string, older: string | null, rows: string) =>
+    `<html><head><meta charset="utf-8"></head><body>
+<table><tr><td>2026/10/29<br>サーバーメンテナンスのお知らせ</td></tr></table>
+<table><tr><td><table>
+<tr><td>${older ? "" : ""}<a href="?ym=next">&lt;&lt; 2026年11月</a></td><td>${ym}</td><td>${older ? `<a href="?ym=${older}">${older.slice(0, 4)}年${older.slice(4)}月 &gt;&gt;</a>` : ""}</td></tr>
+</table><table>${rows}</table></td></tr></table></body></html>`;
+  const pages: Record<string, string> = {
+    "202610": month(
+      "2026年10月",
+      "202609",
+      `<tr><td rowspan="2">2026/10/14</td><td><input type="checkbox"></td><td>19:48</td><td>めちゃいいですね <font color="red">レス不要</font></td></tr>
+<tr><td><input type="checkbox"></td><td>20:01</td><td>次も<br>よろしく</td></tr>`,
+    ),
+    "202609": month(
+      "2026年09月",
+      null,
+      `<tr><td>2026/09/01</td><td><input type="checkbox"></td><td>08:00</td><td>はじめまして</td></tr>`,
+    ),
+  };
+  await page.route("https://clap.test/**", (route) => {
+    const ym = new URL(route.request().url()).searchParams.get("ym") || "";
+    return route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: pages[ym] || "<html></html>",
+    });
+  });
+  await page.goto("https://clap.test/message_list.html?ym=202610");
+  const { webclapScript } = await import("../src/webclap-script");
+  const download = page.waitForEvent("download");
+  await page.evaluate(webclapScript);
+  const file = await (await download).path();
+  await page.goto("/admin#data");
+  await page.getByLabel("取り込むファイル").setInputFiles(file!);
+  await expect(page.getByRole("textbox", { name: "メッセージ" })).toHaveCount(
+    3,
+  );
+  await expect(
+    page.getByRole("textbox", { name: "メッセージ" }).nth(1),
+  ).toHaveValue("次も\nよろしく");
+  await page.getByRole("button", { name: "3 件を取り込む" }).click();
+  await expect(page.getByText("3 件を取り込みました")).toBeVisible();
+  await page.goto("/admin#inbox");
+  await page.getByRole("button", { name: "取り込み", exact: true }).click();
+  await expect(page.locator(".message-item")).toHaveCount(3);
+  await expect(page.getByText("返事不要")).toHaveCount(1);
+});

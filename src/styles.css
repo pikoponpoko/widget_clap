@@ -2944,3 +2944,67 @@ html.embed-document {
 .asset-item.dragging {
   opacity: 0.4;
 }
+.import-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.import-section .btn input[type="file"] {
+  display: none;
+}
+.import-rows {
+  display: flex;
+  flex-direction: column;
+  max-height: 520px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.import-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.import-row:last-child {
+  border-bottom: 0;
+}
+.import-row-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.import-row-meta input {
+  font-size: 12px;
+  padding: 7px 10px;
+  min-width: 0;
+}
+.import-row-meta input:not([type]) {
+  flex: 1;
+}
+.import-row-meta .icon-button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.import-fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 11px;
+}
+.import-fallback input {
+  align-self: flex-start;
+}
+@media (max-width: 600px) {
+  .import-row-meta {
+    flex-wrap: wrap;
+  }
+  .import-row-meta input[type="datetime-local"] {
+    flex: 1 1 100%;
+  }
+}
+.import-more {
+  padding: 12px;
+  justify-content: center;
+}

@@ -19,6 +19,7 @@ import {
   messageSchema,
   assetOrderSchema,
   replySchema,
+  importSchema,
   checkSpam,
   validateImage,
   csvCell,
@@ -364,7 +365,9 @@ app.get("/api/owner/messages", async (c) => {
     values.push(project);
   }
   if (status === "unread") where.push("m.read_at IS NULL AND m.blocked=0");
-  if (status === "unreplied") where.push("r.id IS NULL AND m.blocked=0");
+  if (status === "unreplied")
+    where.push("r.id IS NULL AND m.blocked=0 AND m.source=''");
+  if (status === "imported") where.push("m.source='import'");
   if (status === "replied") where.push("r.id IS NOT NULL AND m.blocked=0");
   if (status === "blocked") where.push("m.blocked=1");
   else where.push("m.blocked=0");
@@ -381,7 +384,7 @@ app.get("/api/owner/messages", async (c) => {
   const clause = where.join(" AND ");
   const [rows, total, months] = await c.env.DB.batch([
     c.env.DB.prepare(
-      `SELECT m.id,m.project_id,m.body,m.sender_name,m.reply_wanted,m.created_at,m.page_url,m.page_title,m.read_at,m.publication_consent,m.blocked,(m.reply_token_hash IS NOT NULL) AS reply_link_active,p.title AS project_title,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause} ORDER BY m.created_at DESC,m.id DESC LIMIT 50 OFFSET ?`,
+      `SELECT m.id,m.project_id,m.body,m.sender_name,m.reply_wanted,m.created_at,m.source,m.page_url,m.page_title,m.read_at,m.publication_consent,m.blocked,(m.reply_token_hash IS NOT NULL) AS reply_link_active,p.title AS project_title,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause} ORDER BY m.created_at DESC,m.id DESC LIMIT 50 OFFSET ?`,
     ).bind(...values, page * 50),
     c.env.DB.prepare(
       `SELECT count(*) AS total FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE ${clause}`,
@@ -418,6 +421,7 @@ app.patch("/api/owner/messages/:id", async (c) => {
 app.put("/api/owner/messages/:id/reply", async (c) => {
   const m = await messageBy(c.env, c.req.param("id"));
   if (m.blocked) throw new ApiError(400, "非表示の感想には返信できません。");
+  if (m.source) throw new ApiError(400, "取り込んだ感想には返信できません。");
   const data = await jsonBody(c.req.raw, replySchema);
   const results = await c.env.DB.batch([
     c.env.DB.prepare(
@@ -454,6 +458,39 @@ app.post("/api/owner/messages/:id/reply-token", async (c) => {
     .run();
   await audit(c.env, "reply-token." + data.action, m.id);
   return c.json({ token: raw });
+});
+app.post("/api/owner/imports", async (c) => {
+  const data = await jsonBody(c.req.raw, importSchema, 400 * 1024);
+  const p = await c.env.DB.prepare(
+    "SELECT id FROM projects WHERE id=? AND owner_id=?",
+  )
+    .bind(data.project_id, "owner")
+    .first<{ id: string }>();
+  if (!p) throw new ApiError(404, "作品が見つかりません。");
+  const read = now();
+  const statements = await Promise.all(
+    data.items.map(async (x) => {
+      const at = new Date(x.created_at).toISOString();
+      return c.env.DB.prepare(
+        "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,read_at,dedupe_key,sender_name,reply_wanted,source) SELECT ?,?,?,?,?,?,?,?,'import' WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
+      ).bind(
+        id(),
+        p.id,
+        x.body,
+        at,
+        read,
+        // Same text and time imported twice is stored once.
+        await hash(`import:${p.id}:${at}:${x.sender_name}:${x.body}`),
+        x.sender_name,
+        x.reply_wanted === null ? null : Number(x.reply_wanted),
+        new TextEncoder().encode(x.body).length,
+      );
+    }),
+  );
+  const results = await c.env.DB.batch(statements);
+  const added = results.filter((r) => r.meta.changes > 0).length;
+  await audit(c.env, "messages.import", String(added));
+  return c.json({ added, skipped: data.items.length - added });
 });
 app.post("/api/owner/messages/bulk", async (c) => {
   const data = await jsonBody(
@@ -601,26 +638,27 @@ app.get("/api/owner/stats", async (c) => {
     pageSuffix = suffix + (pageUrl ? " AND page_url=?" : ""),
     pageArgs = pageUrl ? [...args, pageUrl] : args,
     day = "strftime('%Y-%m-%d',created_at,'+9 hours')";
-  const [claps, messages, totals, pages, visitors, people] = await c.env.DB.batch([
-    c.env.DB.prepare(
-      `SELECT ${day} AS day,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
-    ).bind(...pageArgs),
-    c.env.DB.prepare(
-      `SELECT ${day} AS day,count(*) AS count FROM messages WHERE blocked=0 AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
-    ).bind(...pageArgs),
-    c.env.DB.prepare(
-      `SELECT count(*) AS total,sum(read_at IS NULL) AS unread,sum(NOT EXISTS(SELECT 1 FROM replies r WHERE r.message_id=messages.id)) AS unreplied FROM messages WHERE blocked=0${suffix}`,
-    ).bind(...(project ? [project] : [])),
-    c.env.DB.prepare(
-      `SELECT page_url,max(page_title) AS page_title,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY page_url ORDER BY count DESC,page_url LIMIT 100`,
-    ).bind(...args),
-    c.env.DB.prepare(
-      `SELECT ${day} AS day,count(DISTINCT visitor) AS count FROM claps WHERE visitor<>'' AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
-    ).bind(...pageArgs),
-    c.env.DB.prepare(
-      `SELECT count(DISTINCT NULLIF(visitor,'')) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix}`,
-    ).bind(...pageArgs),
-  ]);
+  const [claps, messages, totals, pages, visitors, people] =
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `SELECT ${day} AS day,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
+      ).bind(...pageArgs),
+      c.env.DB.prepare(
+        `SELECT ${day} AS day,count(*) AS count FROM messages WHERE blocked=0 AND source='' AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
+      ).bind(...pageArgs),
+      c.env.DB.prepare(
+        `SELECT count(*) AS total,sum(read_at IS NULL) AS unread,sum(NOT EXISTS(SELECT 1 FROM replies r WHERE r.message_id=messages.id)) AS unreplied FROM messages WHERE blocked=0 AND source=''${suffix}`,
+      ).bind(...(project ? [project] : [])),
+      c.env.DB.prepare(
+        `SELECT page_url,max(page_title) AS page_title,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY page_url ORDER BY count DESC,page_url LIMIT 100`,
+      ).bind(...args),
+      c.env.DB.prepare(
+        `SELECT ${day} AS day,count(DISTINCT visitor) AS count FROM claps WHERE visitor<>'' AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
+      ).bind(...pageArgs),
+      c.env.DB.prepare(
+        `SELECT count(DISTINCT NULLIF(visitor,'')) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix}`,
+      ).bind(...pageArgs),
+    ]);
   return c.json({
     claps: claps.results,
     messages: messages.results,
@@ -657,7 +695,7 @@ app.get("/api/owner/stats/hours", async (c) => {
       `SELECT ${hour} AS hour,count(*) AS claps,count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY hour`,
     ).bind(...args),
     c.env.DB.prepare(
-      `SELECT ${hour} AS hour,count(*) AS messages FROM messages WHERE blocked=0 AND created_at>=? AND created_at<=?${suffix} GROUP BY hour`,
+      `SELECT ${hour} AS hour,count(*) AS messages FROM messages WHERE blocked=0 AND source='' AND created_at>=? AND created_at<=?${suffix} GROUP BY hour`,
     ).bind(...args),
     c.env.DB.prepare(
       `SELECT count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE created_at>=? AND created_at<=?${suffix}`,
@@ -683,7 +721,7 @@ app.get("/api/owner/stats/hours", async (c) => {
 app.get("/api/owner/export", async (c) => {
   const project = c.req.query("project");
   const sql =
-    "SELECT m.id,m.project_id,p.title AS project_title,m.page_url,m.page_title,m.sender_name,m.body,m.created_at,m.reply_wanted,m.publication_consent,m.blocked,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE p.owner_id=?" +
+    "SELECT m.id,m.project_id,p.title AS project_title,m.page_url,m.page_title,m.sender_name,m.body,m.created_at,m.source,m.reply_wanted,m.publication_consent,m.blocked,r.body AS reply_body,r.created_at AS replied_at FROM messages m JOIN projects p ON p.id=m.project_id LEFT JOIN replies r ON r.message_id=m.id WHERE p.owner_id=?" +
     (project ? " AND m.project_id=?" : "") +
     " ORDER BY m.created_at,m.id";
   const rows = await c.env.DB.prepare(sql)
@@ -703,6 +741,7 @@ app.get("/api/owner/export", async (c) => {
       "sender_name",
       "body",
       "created_at",
+      "source",
       "reply_wanted",
       "publication_consent",
       "blocked",

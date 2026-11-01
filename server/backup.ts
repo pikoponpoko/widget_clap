@@ -116,6 +116,7 @@ const message = z
     page_title: z.string().max(200).default(""),
     sender_name: z.string().max(50).default(""),
     reply_wanted: flag.nullable().default(null),
+    source: z.enum(["", "import"]).default(""),
   })
   .strict();
 const asset = z

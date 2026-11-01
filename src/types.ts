@@ -49,6 +49,7 @@ export interface Message {
   reply_body: string | null;
   replied_at: string | null;
   reply_link_active?: number;
+  source?: "" | "import";
 }
 export interface Stats {
   claps: { day: string; count: number }[];

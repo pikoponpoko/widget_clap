@@ -183,6 +183,25 @@ export function normalizePage(input: {
   return { page_url, page_title };
 }
 export const replySchema = z.object({ body: text(4000) }).strict();
+export const importSchema = z
+  .object({
+    project_id: z.string().min(1).max(100),
+    items: z
+      .array(
+        z
+          .object({
+            created_at: z.iso.datetime(),
+            sender_name: z.string().trim().max(50).default(""),
+            body: text(2000),
+            reply_wanted: z.boolean().nullable().default(null),
+          })
+          .strict(),
+      )
+      .min(1)
+      // Kept small so one request stays within D1's per-request query limit.
+      .max(40),
+  })
+  .strict();
 const https = z.url().refine((s) => {
   try {
     const u = new URL(s);
@@ -240,9 +259,7 @@ export function siteHost(input: string) {
 // A blocked domain also covers its subdomains.
 export function isBlockedSite(url: string, blocked: string[]) {
   const host = siteHost(url);
-  return (
-    !!host && blocked.some((d) => host === d || host.endsWith("." + d))
-  );
+  return !!host && blocked.some((d) => host === d || host.endsWith("." + d));
 }
 export const normalizeWord = (s: string) => s.normalize("NFKC").toLowerCase();
 export function hasNgWord(body: string, words: string[]) {

@@ -213,9 +213,7 @@ export async function previewRequest(
           project_id: pr.id,
           created_at,
           key: k,
-          visitor: (
-            await digest(visitorId())
-          ).slice(0, 32),
+          visitor: (await digest(visitorId())).slice(0, 32),
           ...page,
         });
         save(s);
@@ -345,7 +343,9 @@ export async function previewRequest(
         (status === "blocked" ? x.blocked : !x.blocked),
     );
     if (status === "unread") rows = rows.filter((x) => !x.read_at);
-    if (status === "unreplied") rows = rows.filter((x) => !x.reply_body);
+    if (status === "unreplied")
+      rows = rows.filter((x) => !x.reply_body && !x.source);
+    if (status === "imported") rows = rows.filter((x) => x.source === "import");
     if (status === "replied") rows = rows.filter((x) => !!x.reply_body);
     const months = Array.from(
       rows.reduce((map, x) => {
@@ -369,6 +369,49 @@ export async function previewRequest(
         })),
     };
   }
+  if (p === "/owner/imports") {
+    const pr =
+      s.projects.find((x) => x.id === data.project_id) ||
+      fail("作品が見つかりません。");
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length || items.length > 40)
+      fail("入力内容を確認してください。");
+    let added = 0;
+    const read = new Date().toISOString();
+    for (const x of items) {
+      const body = String(x.body || "")
+          .trim()
+          .slice(0, 2000),
+        name = String(x.sender_name || "")
+          .trim()
+          .slice(0, 50),
+        at = new Date(x.created_at).toISOString();
+      if (!body) continue;
+      const dedupe = await digest(`import:${pr.id}:${at}:${name}:${body}`);
+      if (s.messages.some((m) => m.dedupe_key === dedupe)) continue;
+      s.messages.push({
+        id: crypto.randomUUID(),
+        project_id: pr.id,
+        project_title: pr.title,
+        body,
+        sender_name: name,
+        created_at: at,
+        read_at: read,
+        publication_consent: 0,
+        blocked: 0,
+        reply_body: null,
+        replied_at: null,
+        reply_token_hash: null,
+        dedupe_key: dedupe,
+        reply_wanted:
+          typeof x.reply_wanted === "boolean" ? Number(x.reply_wanted) : null,
+        source: "import",
+      });
+      added++;
+    }
+    save(s);
+    return { added, skipped: items.length - added };
+  }
   if (p === "/owner/messages/bulk") {
     const ids = new Set<string>(Array.isArray(data.ids) ? data.ids : []);
     if (!ids.size) fail("感想を選んでください。");
@@ -389,6 +432,7 @@ export async function previewRequest(
   if (m) {
     const row = message(m[1]);
     if (m[2] === "reply") {
+      if (row.source) fail("取り込んだ感想には返信できません。");
       if (
         typeof data.body !== "string" ||
         !data.body.trim() ||
@@ -425,7 +469,8 @@ export async function previewRequest(
       fail("日付の範囲は366日以内にしてください。");
     const pageUrl = u.searchParams.get("page") || "";
     const rows = s.messages.filter(
-      (m) => !m.blocked && (!projectId || m.project_id === projectId),
+      (m) =>
+        !m.blocked && !m.source && (!projectId || m.project_id === projectId),
     );
     const onPage = (x: { page_url?: string }) =>
       !pageUrl || (x.page_url || "") === pageUrl;
@@ -509,7 +554,7 @@ export async function previewRequest(
       jst(x.created_at).startsWith(day);
     const hourOf = (iso: string) => Number(jst(iso).slice(11, 13));
     const claps = s.claps.filter(match),
-      messages = s.messages.filter((x) => !x.blocked && match(x));
+      messages = s.messages.filter((x) => !x.blocked && !x.source && match(x));
     return {
       day,
       visitors: new Set(claps.map((c) => c.visitor).filter(Boolean)).size,

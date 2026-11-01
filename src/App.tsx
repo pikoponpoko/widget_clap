@@ -1686,7 +1686,6 @@ function ProjectModal({
                         ...f,
                         clap_enabled: key !== "tip",
                         message_enabled: key === "message",
-                        favorite_enabled: key === "message",
                         reply_enabled: key === "message",
                         thanks_enabled: key !== "tip",
                         tip_enabled: key === "clap-tip" || key === "tip",
@@ -1703,7 +1702,6 @@ function ProjectModal({
               {[
                 ["clap_enabled", "拍手を受け付ける"],
                 ["message_enabled", "非公開の感想を受け付ける"],
-                ["favorite_enabled", "ブラウザのお気に入りを表示"],
                 ["thanks_enabled", "お礼イラストを表示"],
                 ["reply_enabled", "非公開の返信確認を有効にする"],
               ].map(([key, label]) => (

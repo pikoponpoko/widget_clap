@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { assetUrl } from "./asset-url";
 import { inlineProject, send, useApi } from "./api";
 import type { Project } from "./types";
-export type EntryReason = "clap" | "message" | "favorite";
+export type EntryReason = "clap" | "message";
 export function ClapControl({
   project: p,
   onOpen,
@@ -23,9 +23,7 @@ export function ClapControl({
     ? "拍手を送る"
     : p.message_enabled
       ? "感想を書く"
-      : p.favorite_enabled
-        ? "お気に入りを開く"
-        : "";
+      : "";
   async function click() {
     if (busy) return;
     setBusy(true);
@@ -41,7 +39,7 @@ export function ClapControl({
         );
       if (!opened)
         onOpen(
-          p.clap_enabled ? "clap" : p.message_enabled ? "message" : "favorite",
+          p.clap_enabled ? "clap" : "message",
         );
     } catch (e) {
       setError((e as Error).message);
@@ -187,7 +185,7 @@ export function EmbeddedButton({ slug }: { slug: string }) {
       />
       {/* data-tip="on" pages (e.g. tool downloads) show the tip link before any click. */}
       {tipRequested &&
-        (p.clap_enabled || p.message_enabled || p.favorite_enabled) &&
+        (p.clap_enabled || p.message_enabled) &&
         (p.tip_url ? (
           <a
             className="tip-button mini-tip"

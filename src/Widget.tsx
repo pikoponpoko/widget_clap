@@ -9,7 +9,6 @@ import {
   Clapperboard,
   Copy,
   Heart,
-  MessageCircle,
   Send,
   ThumbsUp,
 } from "lucide-react";
@@ -94,18 +93,15 @@ export function Widget({
   const initial = params.get("after");
   // Loaded ahead of the click by embed.js; stays blank until the host says to show.
   const [waiting, setWaiting] = useState(params.get("preload") === "1");
-  const [stage, setStage] = useState<
-    "button" | "clap" | "message" | "favorite"
-  >(
-    ["clap", "message", "favorite"].includes(initial || "")
-      ? (initial as "clap" | "message" | "favorite")
+  const [stage, setStage] = useState<"button" | "clap" | "message">(
+    ["clap", "message"].includes(initial || "")
+      ? (initial as "clap" | "message")
       : "button",
   );
   const [body, setBody] = useState(""),
     [name, setName] = useState(""),
     [consent, setConsent] = useState(false),
     [replyWanted, setReplyWanted] = useState<boolean | null>(null),
-    [favorite, setFavorite] = useState(false),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
     [sent, setSent] = useState(false),
@@ -118,21 +114,9 @@ export function Widget({
       stage === "button" ? { random: 0, sequence: 0 } : nextThanks(),
     ),
     [clapBusy, setClapBusy] = useState(false);
-  // Favorites are per page when embedded, so one code can serve many works.
-  const favoriteKey =
-    "support-favorite:" +
-    slug +
-    (pageContext.page_url ? ":" + pageContext.page_url : "");
   const started = useRef(Date.now()),
     requestId = useRef(crypto.randomUUID()),
     lastBody = useRef("");
-  useEffect(() => {
-    try {
-      setFavorite(localStorage.getItem(favoriteKey) === "true");
-    } catch {
-      setNotice("このブラウザではお気に入りを保存できません。");
-    }
-  }, [slug]);
   useEffect(() => {
     if (!waiting) return;
     const host = params.get("parent_origin");
@@ -142,7 +126,7 @@ export function Widget({
         event.source !== window.parent ||
         event.origin !== host ||
         event.data?.type !== "creator-support:show" ||
-        !["clap", "message", "favorite"].includes(reason)
+        !["clap", "message"].includes(reason)
       )
         return;
       open(reason);
@@ -186,7 +170,34 @@ export function Widget({
         );
     } catch {}
   }
-  function open(reason: "clap" | "message" | "favorite") {
+  // Shrinks the host dialog to the content so no blank space is left below.
+  const wrap = useRef<HTMLDivElement>(null);
+  const showing = !waiting && stage !== "button" && !!p;
+  useEffect(() => {
+    const host = params.get("parent_origin");
+    const el = wrap.current;
+    if (!showing || !el || !host || window.parent === window) return;
+    let origin: string;
+    try {
+      origin = new URL(host).origin;
+    } catch {
+      return;
+    }
+    if (origin !== host) return;
+    const report = () =>
+      window.parent.postMessage(
+        {
+          type: "creator-support:thanks-height",
+          height: Math.ceil(el.getBoundingClientRect().height),
+        },
+        origin,
+      );
+    const observer = new ResizeObserver(report);
+    observer.observe(el);
+    report();
+    return () => observer.disconnect();
+  }, [showing]);
+  function open(reason: "clap" | "message") {
     setStage(reason);
     setThanksIndex(nextThanks());
   }
@@ -205,16 +216,6 @@ export function Widget({
       setNotice((e as Error).message);
     } finally {
       setClapBusy(false);
-    }
-  }
-  function toggleFavorite() {
-    try {
-      localStorage.setItem(favoriteKey, String(!favorite));
-      setFavorite(!favorite);
-    } catch {
-      setNotice(
-        "お気に入りを保存できません。ブラウザの保存設定をご確認ください。",
-      );
     }
   }
   async function submit(e: React.FormEvent) {
@@ -289,7 +290,10 @@ export function Widget({
     : null;
   const thanksEnabled = p.thanks_enabled !== false && p.thanks_enabled !== 0;
   return (
-    <div className={"widget-wrap thank-stage " + (embedded ? "embedded" : "")}>
+    <div
+      ref={wrap}
+      className={"widget-wrap thank-stage " + (embedded ? "embedded" : "")}
+    >
       <section className="support-widget">
         {!embedded && <div className="widget-logo">Hakushu</div>}
         {thanksEnabled && (stage === "clap" || sent) && (
@@ -312,25 +316,14 @@ export function Widget({
             体験版：このブラウザ内の保存です。作者への送信はありません。
           </p>
         )}
-        <div className="thank-actions">
-          {!!p.clap_enabled && (
+        {!!p.clap_enabled && (
+          <div className="thank-actions">
             <button className="btn" disabled={clapBusy} onClick={anotherClap}>
-              <ThumbsUp size={16} />
+              <ThumbsUp size={14} />
               {clapBusy ? "送信中…" : "もう一度"}
             </button>
-          )}
-          {!!p.favorite_enabled && (
-            <button
-              className="btn"
-              aria-label="お気に入り"
-              aria-pressed={favorite}
-              onClick={toggleFavorite}
-            >
-              <Heart size={16} fill={favorite ? "currentColor" : "none"} />
-              {favorite ? "お気に入り済み" : "お気に入り"}
-            </button>
-          )}
-        </div>
+          </div>
+        )}
         {sent ? (
           <>
             {replyUrl && (
@@ -387,30 +380,27 @@ export function Widget({
         ) : (
           !!p.message_enabled && (
             <form className="optional-message" onSubmit={submit}>
-              <label className="field-label" htmlFor="sender-name">
-                お名前（任意）
-              </label>
               <input
-                id="sender-name"
                 className="sender-name-input"
+                aria-label="お名前（任意）"
+                placeholder="お名前（任意）"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={50}
                 autoComplete="nickname"
               />
-              <label className="field-label" htmlFor="message">
-                <MessageCircle size={15} />
-                メッセージ（任意）
-              </label>
               <textarea
-                id="message"
+                aria-label="メッセージ"
+                placeholder="メッセージ"
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 maxLength={2000}
                 required
                 rows={4}
               />
-              <div className="character-count">{body.length} / 2,000</div>
+              {body.length > 1800 && (
+                <div className="character-count">{body.length} / 2,000</div>
+              )}
               <div className="honeypot" aria-hidden="true">
                 <label>
                   Website
@@ -445,15 +435,15 @@ export function Widget({
                     <span>{label}</span>
                   </label>
                 ))}
+                <label className="check-label">
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => setConsent(e.target.checked)}
+                  />
+                  <span>公開を許可</span>
+                </label>
               </div>
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(e) => setConsent(e.target.checked)}
-                />
-                <span>この感想の第三者公開を許可する（任意）</span>
-              </label>
               {p.turnstile_site_key && (
                 <Turnstile
                   siteKey={p.turnstile_site_key}
@@ -487,7 +477,6 @@ export function Widget({
             >
               {tipLabel} <ArrowUpRight size={14} />
             </a>
-            <small>支援なしでも無料で利用できます</small>
           </div>
         )}
         {previewMode && tipRequested && !p.tip_url && (

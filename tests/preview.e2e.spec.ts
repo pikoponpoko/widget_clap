@@ -425,6 +425,10 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
   await expect(times.first().locator("time")).toHaveText(
     new RegExp(`^${today.replaceAll("-", "/")} \\d{2}:\\d{2}$`),
   );
+  await expect(times.first().locator("a.page-link")).toHaveAttribute(
+    "target",
+    "_blank",
+  );
   await page.getByRole("tab", { name: "日別" }).first().click();
   await page
     .locator(".activity-bars")

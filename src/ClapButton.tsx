@@ -8,9 +8,11 @@ export type EntryReason = "clap" | "message" | "favorite";
 export function ClapControl({
   project: p,
   onOpen,
+  onReady,
 }: {
   project: Project;
   onOpen: (reason: EntryReason) => void;
+  onReady?: () => void;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -41,7 +43,11 @@ export function ClapControl({
       setBusy(false);
     }
   }
-  if (!label && !p.tip_url)
+  const unavailable = !label && !p.tip_url;
+  useEffect(() => {
+    if (unavailable) onReady?.();
+  }, [unavailable]);
+  if (unavailable)
     return <span className="button-unavailable">受付休止中</span>;
   if (!label && p.tip_url)
     return (
@@ -52,7 +58,12 @@ export function ClapControl({
         rel="noopener noreferrer"
         aria-label="任意の支援をする"
       >
-        <img src={image ? assetUrl(image.id) : "/support-button.svg"} alt="" />
+        <img
+          src={image ? assetUrl(image.id) : "/support-button.svg"}
+          alt=""
+          onLoad={onReady}
+          onError={onReady}
+        />
       </a>
     );
   return (
@@ -76,6 +87,8 @@ export function ClapControl({
                 : "/support-button.svg"
           }
           alt=""
+          onLoad={onReady}
+          onError={onReady}
         />
         {busy && (
           <span className="mini-clap-busy" aria-hidden="true">
@@ -96,6 +109,8 @@ export function EmbeddedButton({ slug }: { slug: string }) {
     "/public/projects/" + encodeURIComponent(slug),
   );
   const [fallback, setFallback] = useState("");
+  // Nothing is shown until the owner's own button image has loaded.
+  const [ready, setReady] = useState(false);
   const frame = useRef<HTMLSpanElement>(null);
   function postToHost(message: Record<string, unknown>) {
     const q = new URLSearchParams(location.search),
@@ -145,15 +160,15 @@ export function EmbeddedButton({ slug }: { slug: string }) {
         {error}
       </span>
     );
-  if (!p)
-    return (
-      <button className="mini-clap" disabled aria-label="読み込み中">
-        <img src="/clap-button.svg" alt="" />
-      </button>
-    );
+  if (!p) return <span className="mini-clap-frame" aria-busy="true" />;
   return (
-    <span ref={frame} className="mini-clap-frame">
-      <ClapControl project={p} onOpen={open} />
+    <span
+      ref={frame}
+      className="mini-clap-frame"
+      style={ready ? undefined : { visibility: "hidden" }}
+      aria-busy={!ready}
+    >
+      <ClapControl project={p} onOpen={open} onReady={() => setReady(true)} />
       {/* data-tip="on" pages (e.g. tool downloads) show the tip link before any click. */}
       {tipRequested &&
         (p.clap_enabled || p.message_enabled || p.favorite_enabled) &&

@@ -1155,21 +1155,18 @@ small {
   margin-top: 13px;
 }
 .token-settings,
-.tip-settings,
 .restore-settings {
   margin-top: 22px;
   border-top: 1px solid var(--line);
   padding-top: 16px;
 }
 .token-settings summary,
-.tip-settings summary,
 .restore-settings summary {
   cursor: pointer;
   font-size: 11px;
   color: #767676;
 }
 .token-settings p,
-.tip-settings p,
 .restore-settings p {
   font-size: 11px;
   color: #767676;
@@ -1183,7 +1180,7 @@ small {
 }
 .settings-form > label,
 .settings-form .form-grid label,
-.tip-settings label,
+.setting-section > label:not(.toggle-row),
 .print-form > label,
 .print-form .form-grid label,
 .restore-settings > label {
@@ -1262,9 +1259,6 @@ small {
 }
 .check-label input {
   margin: 2px 0 0;
-}
-.tip-settings .check-label {
-  font-size: 10px;
 }
 .modal-form-footer {
   display: flex;
@@ -2402,17 +2396,6 @@ small {
   flex-direction: column;
   align-items: flex-start;
   line-height: 0;
-}
-.mini-tip {
-  margin: 6px 4px 4px;
-  min-height: 28px;
-  padding: 3px 12px;
-  font-size: 11px;
-}
-.mini-tip.tip-preview {
-  border-color: var(--line);
-  background: var(--soft);
-  color: var(--muted);
 }
 .mini-clap-wrap {
   display: inline-flex;

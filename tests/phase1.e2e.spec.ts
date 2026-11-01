@@ -371,11 +371,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
         slug: slug + "-no-reply",
         reply_enabled: false,
         thanks_enabled: false,
-        tip_enabled: true,
         tip_url: "https://example.com",
-        tip_legal_checked: true,
-        tip_terms_checked: true,
-        tip_privacy_checked: true,
       },
     });
     expect(response.status()).toBe(201);
@@ -384,11 +380,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
     ).json();
     expect(config.reply_enabled).toBe(false);
     expect(config.thanks_enabled).toBe(false);
-    // The tip link follows the server switch (TIP_LINKS_ENABLED).
-    const session = await (await request.get("/api/owner/session")).json();
-    expect(config.tip_url).toBe(
-      session.tip_links_enabled ? "https://example.com" : null,
-    );
+    expect(config.tip_url).toBe("https://example.com");
     const message = await request.post(
       "/api/public/projects/" + slug + "-no-reply/messages",
       { headers, data: body() },

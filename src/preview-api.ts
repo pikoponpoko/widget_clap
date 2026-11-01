@@ -196,7 +196,6 @@ export async function previewRequest(
       plan: "owner",
       local: false,
       preview: true,
-      tip_links_enabled: false,
     };
   let m = p.match(/^\/public\/projects\/([^/]+)(?:\/(claps|messages))?$/);
   if (m) {
@@ -205,7 +204,7 @@ export async function previewRequest(
       return {
         ...pr,
         assets: assets(pr.id),
-        tip_url: null,
+        tip_url: /^https:\/\//.test(pr.tip_url || "") ? pr.tip_url : null,
         turnstile_site_key: null,
       };
     if (m[2] === "claps") {

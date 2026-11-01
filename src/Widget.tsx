@@ -484,7 +484,7 @@ export function Widget({
             <span className="tip-button tip-preview" aria-disabled="true">
               {tipLabel}
             </span>
-            <small>体験版：決済リンク未設定のため押せません</small>
+            <small>体験版：投げ銭リンク未設定</small>
           </div>
         )}
         {notice && (

@@ -257,6 +257,12 @@ function Activity({
     mode === "hours" ? columns?.find((c) => c.key === String(hour)) : null;
   const sum = (k: "claps" | "visitors" | "messages") =>
     picked ? picked[k] : (columns || []).reduce((a, c) => a + c[k], 0);
+  // Summing columns counts a returning visitor twice, so prefer the
+  // distinct count from the server.
+  const visitors = picked
+    ? picked.visitors
+    : ((mode === "days" ? stats?.visitor_total : hours?.visitors) ??
+      sum("visitors"));
   const max = Math.max(1, ...(columns || []).map((c) => c.claps + c.messages));
   return (
     <section className="panel activity-panel">
@@ -373,7 +379,7 @@ function Activity({
               </button>
             )}
             <span>
-              人数 <b>{sum("visitors")}</b>
+              人数 <b>{visitors}</b>
             </span>
             <span>
               拍手 <b>{sum("claps")}</b>

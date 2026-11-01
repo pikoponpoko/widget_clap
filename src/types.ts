@@ -54,6 +54,7 @@ export interface Stats {
   claps: { day: string; count: number }[];
   messages: { day: string; count: number }[];
   visitors?: { day: string; count: number }[];
+  visitor_total?: number;
   totals: { total: number; unread: number; unreplied: number };
   pages?: { page_url: string; page_title: string; count: number }[];
   from: string;
@@ -62,4 +63,5 @@ export interface Stats {
 export interface HourStats {
   day: string;
   hours: { hour: number; claps: number; visitors: number; messages: number }[];
+  visitors?: number;
 }

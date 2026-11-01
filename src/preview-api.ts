@@ -1,5 +1,12 @@
 import type { Asset, Message, Project } from "./types";
 import { DEFAULT_REACTIONS } from "./reactions";
+import {
+  periodKey,
+  periodKeys,
+  periodStart,
+  periodUnits,
+  type PeriodUnit,
+} from "./periods";
 type PreviewMessage = Message & {
   reply_token_hash: string | null;
   dedupe_key: string;
@@ -207,7 +214,6 @@ export async function previewRequest(
       plan: "owner",
       local: false,
       preview: true,
-      tip_links_enabled: false,
     };
   let m = p.match(
     /^\/public\/projects\/([^/]+)(?:\/(claps|messages|reactions))?$/,
@@ -218,7 +224,7 @@ export async function previewRequest(
       return {
         ...pr,
         assets: assets(pr.id),
-        tip_url: null,
+        tip_url: /^https:\/\//.test(pr.tip_url || "") ? pr.tip_url : null,
         turnstile_site_key: null,
       };
     if (m[2] === "claps") {
@@ -691,20 +697,74 @@ export async function previewRequest(
               page_url: c.page_url || "",
               page_title: c.page_title || "",
               count: 0,
+              last_at: "",
             };
             row.count++;
+            if (c.created_at > row.last_at) row.last_at = c.created_at;
             row.page_title ||= c.page_title || "";
             return map.set(row.page_url, row);
-          }, new Map<string, { page_url: string; page_title: string; count: number }>())
+          }, new Map<string, { page_url: string; page_title: string; count: number; last_at: string }>())
           .values(),
       )
-        .sort((a, b) => b.count - a.count)
+        .sort((a, b) => b.last_at.localeCompare(a.last_at))
         .slice(0, 100),
       totals: {
         total: rows.length,
         unread: rows.filter((m) => !m.read_at).length,
         unreplied: rows.filter((m) => !m.reply_body).length,
       },
+    };
+  }
+  if (p === "/owner/stats/periods") {
+    const unit = u.searchParams.get("unit") as PeriodUnit;
+    if (!periodUnits.includes(unit)) fail("集計の単位が正しくありません。");
+    const projectId = u.searchParams.get("project"),
+      pageUrl = u.searchParams.get("page") || "",
+      today = jst(new Date().toISOString()).slice(0, 10),
+      start = periodStart(unit, today) || "";
+    const dayOf = (iso: string) => jst(iso).slice(0, 10);
+    const match = (x: {
+      project_id: string;
+      created_at: string;
+      page_url?: string;
+    }) =>
+      (!projectId || x.project_id === projectId) &&
+      (!pageUrl || (x.page_url || "") === pageUrl) &&
+      dayOf(x.created_at) >= start;
+    const claps = s.claps.filter(match),
+      messages = s.messages.filter((x) => !x.blocked && !x.source && match(x)),
+      extra = (s.clapDays || []).filter(
+        (d) =>
+          !pageUrl &&
+          (!projectId || d.project_id === projectId) &&
+          d.day >= start,
+      );
+    const keyOf = (day: string) => periodKey(unit, day);
+    const first = [
+      ...claps.map((c) => dayOf(c.created_at)),
+      ...messages.map((m) => dayOf(m.created_at)),
+      ...extra.map((d) => d.day),
+    ]
+      .sort()
+      .map(keyOf)[0];
+    return {
+      unit,
+      buckets: periodKeys(unit, today, first).map((key) => {
+        const inKey = claps.filter((c) => keyOf(dayOf(c.created_at)) === key),
+          days = extra.filter((d) => keyOf(d.day) === key);
+        return {
+          key,
+          claps: inKey.length + days.reduce((a, d) => a + d.claps, 0),
+          messages: messages.filter((m) => keyOf(dayOf(m.created_at)) === key)
+            .length,
+          visitors:
+            new Set(inKey.map((c) => c.visitor).filter(Boolean)).size +
+            days.reduce((a, d) => a + d.visitors, 0),
+        };
+      }),
+      visitors:
+        new Set(claps.map((c) => c.visitor).filter(Boolean)).size +
+        extra.reduce((a, d) => a + d.visitors, 0),
     };
   }
   if (p === "/owner/stats/hours") {

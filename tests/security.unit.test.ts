@@ -176,22 +176,10 @@ describe("untrusted content", () => {
       }).success,
     ).toBe(false);
   });
-  it("requires server flag and all payment reviews", () => {
-    const p = {
-      tip_enabled: 1,
-      tip_url: "https://example.com",
-      tip_legal_checked: 1,
-      tip_terms_checked: 1,
-      tip_privacy_checked: 1,
-    };
-    expect(tipVisible(p, env)).toBe(false);
-    expect(tipVisible(p, { ...env, TIP_LINKS_ENABLED: "true" })).toBe(true);
-    expect(
-      tipVisible(
-        { ...p, tip_privacy_checked: 0 },
-        { ...env, TIP_LINKS_ENABLED: "true" },
-      ),
-    ).toBe(false);
+  it("shows the tip link whenever an https URL is set", () => {
+    expect(tipVisible({ tip_url: "https://ofuse.me/example" })).toBe(true);
+    expect(tipVisible({ tip_url: "" })).toBe(false);
+    expect(tipVisible({ tip_url: "http://example.com" })).toBe(false);
   });
   it("escapes spreadsheet formulas and embedded quotes", () => {
     expect(csvCell("=SUM(1,2)")).toBe('"\'=SUM(1,2)"');
@@ -331,16 +319,6 @@ describe("print geometry and text", () => {
 });
 
 describe("integrated widget feature policy", () => {
-  it("defaults tips off even when the server and provider checks are ready", () => {
-    const p = {
-      tip_enabled: 0,
-      tip_url: "https://example.com",
-      tip_legal_checked: 1,
-      tip_terms_checked: 1,
-      tip_privacy_checked: 1,
-    };
-    expect(tipVisible(p, { ...env, TIP_LINKS_ENABLED: "true" })).toBe(false);
-  });
   it("keeps thank-you and private reply available while leaving payments opt-in", () => {
     const p = projectSchema.parse({ title: "作品", slug: "work" });
     expect([p.thanks_enabled, p.reply_enabled, p.tip_enabled]).toEqual([

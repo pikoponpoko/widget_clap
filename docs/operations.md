@@ -20,7 +20,7 @@ Cron（18:00 UTC）→ 完全JSON → 非公開バックアップ専用R2
 4. Cloudflare AccessのSelf-hostedアプリで、`hakushu.kazukisekiguchi.com` のパス `admin` と `api/owner` を保護（Workerの「Protect this Worker behind Access」は公開ウィジェットも塞ぐため使いません）。Ownerの1メールアドレスだけを許可します。公開ウィジェット・画像API・投稿API・返信確認APIはAccessの対象から外します。
 5. `ENVIRONMENT=production` は設定ファイルに記載。`ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com`、`ACCESS_AUDIENCE=<AccessアプリのAUD>`、`OWNER_EMAIL=<Ownerメール>` はリポジトリに残さないよう `wrangler secret put` で登録します。`LOCAL_OWNER_ENABLED` は本番で設定しません。コードはJWTのRS256署名・issuer・audience・期限・email・subを検証します。
 6. Secrets：ランダムな32バイト以上の `SPAM_SECRET` と `TURNSTILE_SECRET_KEY`。環境変数 `TURNSTILE_SITE_KEY`。Turnstileの許可ホストにウィジェット配信ホスト `hakushu.kazukisekiguchi.com`（設置先サイトではない）を登録し、`message` actionを利用します。未設定の本番投稿は503で閉じます。
-7. `TIP_LINKS_ENABLED=true`（2026-10-31 ユーザー承認）。投げ銭リンクはサイトごとにURLと3つの確認チェックが揃った場合のみ表示されます。本サービスは決済情報・本人確認情報を保存しません。PayPay個人間送金は使いません。
+7. 投げ銭はOFUSE・Ko-fiなど外部ページへのリンク1つだけ（2026-11-01 ユーザー了承）。管理画面でURLを入れ、埋め込みコードに `data-tip="on"` を付けたページのお礼画面の下にだけ表示します。本サービスは決済情報・本人確認情報を扱いません。
 8. 設置先サイトの登録は不要です。ボタンはどのサイトにも埋め込めます（`frame-ancestors *`）。押されたページのURLはhttp(s)のみ記録します。作品設定の「ブロックするサイト」に入れたドメイン（サブドメインを含む）は、ボタン表示と拍手・感想を受け付けません。
 
 承認後に使うコマンドの例（このタスクでは実行していません）：
@@ -85,7 +85,7 @@ D1のSQL復元は、画像を同じstorage_keyで保持するR2スナップシ�
 - 各ツールページとテーマA/B/C、スマホ、Safari/iOS、キーボード操作。
 - 日本語長文PDFを100%印刷し、91×55mmの実測・余白と位置補正を確認。
 - バックアップの自動実行と失敗監視、復旧・削除演習、R2費用・容量。
-- 投げ銭は条件確認が済むまでUI非表示。
+- 投げ銭リンクはURL未設定なら表示しない。
 
 ## 大規模復旧のファイル準備
 

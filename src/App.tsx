@@ -20,6 +20,7 @@ import {
   ExternalLink,
   FileImage,
   FileText,
+  Filter,
   FolderHeart,
   Heart,
   Inbox,
@@ -46,6 +47,7 @@ import { defaultPrint, type PrintOptions } from "./print-options";
 import { collectImages } from "./image-files";
 import { planners, type PaperSize, type PlannerId } from "./planner-sizes";
 import type { Asset, HourStats, Message, Project, Stats } from "./types";
+import type { PeriodBucket, PeriodStats, PeriodUnit } from "./periods";
 import { webclapScript } from "./webclap-script";
 import { parseImport, parseImportHtml, type ImportRow } from "./import-parse";
 import { clapDaysMarker, parseClapDays, type ClapDay } from "./clap-days-parse";
@@ -162,7 +164,7 @@ function pagePath(url: string) {
     return url;
   }
 }
-// Clicking a page narrows the dashboard to it; clicking it again shows all pages.
+// The title opens the page; the filter button narrows the dashboard to it (press again for all pages).
 function PageStats({
   stats,
   selected,
@@ -189,27 +191,34 @@ function PageStats({
         >
           {p.page_url ? (
             <>
+              <a
+                className="page-link"
+                href={p.page_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span className="page-title">
+                  {p.page_title || pagePath(p.page_url)}
+                </span>
+                {p.page_title && (titleCount.get(p.page_title) || 0) > 1 && (
+                  <span className="page-path">{pagePath(p.page_url)}</span>
+                )}
+                <ExternalLink size={13} />
+              </a>
               <button
                 type="button"
-                className="page-filter"
+                className="icon-button page-filter"
                 aria-pressed={p.page_url === selected}
+                aria-label={
+                  (p.page_title || pagePath(p.page_url)) + "で絞り込む"
+                }
+                title="絞り込む"
                 onClick={() =>
                   onSelect(p.page_url === selected ? "" : p.page_url)
                 }
               >
-                {p.page_title || pagePath(p.page_url)}
-                {p.page_title && (titleCount.get(p.page_title) || 0) > 1 && (
-                  <span className="page-path">{pagePath(p.page_url)}</span>
-                )}
+                <Filter size={14} />
               </button>
-              <a
-                href={p.page_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={(p.page_title || p.page_url) + "を開く"}
-              >
-                <ExternalLink size={13} />
-              </a>
             </>
           ) : (
             <span className="muted">プレビュー・直接表示</span>
@@ -345,23 +354,56 @@ type Column = {
   visitors: number;
   imported?: number;
 };
+const modes = [
+  ["hours", "時間別"],
+  ["days", "日別"],
+  ["week", "週別"],
+  ["month", "月別"],
+  ["year", "年別"],
+] as const;
+type Mode = (typeof modes)[number][0];
+function periodColumn(unit: PeriodUnit, b: PeriodBucket): Column {
+  const [y, m, d] = b.key.split("-");
+  const label =
+    unit === "year"
+      ? `${y}年`
+      : unit === "month"
+        ? `${y}年${Number(m)}月`
+        : `${y}/${m}/${d}〜`;
+  const tick =
+    unit === "year"
+      ? y
+      : unit === "month"
+        ? `${Number(m)}月`
+        : `${Number(m)}/${Number(d)}`;
+  return { ...b, label, tick };
+}
 function Activity({
   stats,
   hours,
   day,
   onDay,
+  query,
 }: {
   stats: Stats | null;
   hours: HourStats | null;
   day: string;
   onDay: (day: string) => void;
+  query: string;
 }) {
-  const [mode, setMode] = useState<"days" | "hours">("hours");
-  const [hour, setHour] = useState<number | null>(null);
+  const [mode, setMode] = useState<Mode>("hours");
+  const [unit, setUnit] = useState<PeriodUnit>("week");
+  const [pick, setPick] = useState<string | null>(null);
+  const periods = useApi<PeriodStats>(
+    `/owner/stats/periods?unit=${unit}&${query}`,
+    null,
+    true,
+  );
+  const isPeriod = mode !== "hours" && mode !== "days";
   const shift = (n: number) => {
     const d = new Date(day + "T00:00:00Z");
     onDay(new Date(d.getTime() + n * 86400000).toISOString().slice(0, 10));
-    setHour(null);
+    setPick(null);
   };
   let columns: Column[] | null = null;
   if (mode === "days" && stats) {
@@ -393,38 +435,40 @@ function Activity({
       tick: String(h.hour),
       ...h,
     }));
-  const picked =
-    mode === "hours" ? columns?.find((c) => c.key === String(hour)) : null;
+  if (isPeriod && periods.data?.unit === mode)
+    columns = periods.data.buckets.map((b) => periodColumn(mode, b));
+  const picked = mode !== "days" ? columns?.find((c) => c.key === pick) : null;
   const sum = (k: "claps" | "visitors" | "messages") =>
     picked ? picked[k] : (columns || []).reduce((a, c) => a + c[k], 0);
   // Summing columns counts a returning visitor twice, so prefer the
   // distinct count from the server.
   const visitors = picked
     ? picked.visitors
-    : ((mode === "days" ? stats?.visitor_total : hours?.visitors) ??
-      sum("visitors"));
+    : ((mode === "days"
+        ? stats?.visitor_total
+        : mode === "hours"
+          ? hours?.visitors
+          : periods.data?.visitors) ?? sum("visitors"));
   // Each clap (and each comment) is one block stacked on the column. When a
   // busy column would make blocks thinner than 4px, one block stands for
   // several, so the tallest column still fits the 88px chart.
   const blocks = (n: number, unit: number) => Math.ceil(n / unit);
-  let unit = 1;
+  let per = 1;
   const tallest = (u: number) =>
     Math.max(
       1,
       ...(columns || []).map((c) => blocks(c.claps, u) + blocks(c.messages, u)),
     );
-  while (tallest(unit) * 4 > 88) unit++;
-  const blockPx = Math.min(12, Math.floor(88 / tallest(unit)));
+  while (tallest(per) * 4 > 88) per++;
+  const blockPx = Math.min(12, Math.floor(88 / tallest(per)));
+  // Claps darken from the 5th, 10th and 20th one up, so busy times stand out.
+  const stop = (n: number) => (Math.ceil(n / per) - 1) * blockPx;
+  const tiers = `linear-gradient(to top, #adadad 0 ${stop(5)}px, #767676 ${stop(5)}px ${stop(10)}px, #4a4a4a ${stop(10)}px ${stop(20)}px, #262626 ${stop(20)}px)`;
   return (
     <section className="panel activity-panel">
       <div className="panel-heading activity-heading">
         <div className="mode-switch" role="tablist">
-          {(
-            [
-              ["days", "日別"],
-              ["hours", "時間別"],
-            ] as const
-          ).map(([m, label]) => (
+          {modes.map(([m, label]) => (
             <button
               key={m}
               type="button"
@@ -433,7 +477,8 @@ function Activity({
               className={mode === m ? "active" : ""}
               onClick={() => {
                 setMode(m);
-                setHour(null);
+                if (m !== "hours" && m !== "days") setUnit(m);
+                setPick(null);
               }}
             >
               {label}
@@ -458,7 +503,7 @@ function Activity({
               onChange={(e) => {
                 if (!e.target.value) return;
                 onDay(e.target.value);
-                setHour(null);
+                setPick(null);
               }}
             />
             <button
@@ -478,11 +523,15 @@ function Activity({
         <>
           <div
             className="activity-bars"
-            style={{ "--block": `${blockPx}px` } as React.CSSProperties}
+            style={
+              {
+                "--block": `${blockPx}px`,
+                "--tiers": tiers,
+              } as React.CSSProperties
+            }
           >
             {columns.map((c) => {
-              const active =
-                mode === "days" ? c.key === day : c.key === String(hour);
+              const active = c.key === (mode === "days" ? day : pick);
               return (
                 <button
                   type="button"
@@ -497,26 +546,26 @@ function Activity({
                     if (mode === "days") {
                       onDay(c.key);
                       setMode("hours");
-                    } else setHour(active ? null : Number(c.key));
+                    } else setPick(active ? null : c.key);
                   }}
                 >
                   <span className="chart-stack">
                     <span
                       className="bar-message"
                       style={{
-                        height: `${blocks(c.messages, unit) * blockPx}px`,
+                        height: `${blocks(c.messages, per) * blockPx}px`,
                       }}
                     />
                     <span
                       className="bar-clap"
                       style={{
-                        height: `${blocks(c.claps, unit) * blockPx}px`,
+                        height: `${blocks(c.claps, per) * blockPx}px`,
                       }}
                     />
                   </span>
                   <span
                     className={
-                      "chart-tick " + (mode === "hours" ? "centered" : "")
+                      "chart-tick " + (mode !== "days" ? "centered" : "")
                     }
                   >
                     {c.tick}
@@ -528,7 +577,12 @@ function Activity({
           <div className="hour-total">
             <span className="chart-legend">
               <span>
-                <i className="legend-clap" />
+                <i className="legend-clap">
+                  <b />
+                  <b />
+                  <b />
+                  <b />
+                </i>
                 拍手
               </span>
               <span>
@@ -540,7 +594,7 @@ function Activity({
               <button
                 type="button"
                 className="hour-picked"
-                onClick={() => setHour(null)}
+                onClick={() => setPick(null)}
               >
                 {picked.label} ×
               </button>
@@ -564,7 +618,6 @@ export default function App() {
   const session = useApi<{
     role: string;
     local: boolean;
-    tip_links_enabled: boolean;
   }>("/owner/session");
   const [section, setSection] = useState<Section>(() =>
     ["overview", "inbox", "projects", "print", "data"].includes(
@@ -590,6 +643,8 @@ export default function App() {
           from,
           to,
         }),
+      null,
+      true,
     ),
     hours = useApi<HourStats>(
       "/owner/stats/hours?" +
@@ -598,6 +653,15 @@ export default function App() {
           v: String(version),
           day,
         }),
+      null,
+      true,
+    ),
+    // The top card counts today's claps on every page, whatever the chart shows.
+    today = useApi<HourStats>(
+      "/owner/stats/hours?" +
+        new URLSearchParams({ v: String(version), day: jstToday() }),
+      null,
+      true,
     );
   const [statsPrint, setStatsPrint] = useState(false);
   const [selected, setSelected] = useState<Message | null>(null),
@@ -641,7 +705,7 @@ export default function App() {
     window.addEventListener("hashchange", handler);
     return () => window.removeEventListener("hashchange", handler);
   }, []);
-  const countClaps = list.reduce((a, p) => a + p.claps, 0),
+  const todayClaps = today.data?.hours.reduce((a, h) => a + h.claps, 0) ?? 0,
     total = stats.data?.totals;
   if (session.loading)
     return (
@@ -807,9 +871,9 @@ export default function App() {
               <div className="stat-grid">
                 <StatCard
                   label="受け取った拍手"
-                  value={countClaps}
+                  value={todayClaps}
                   icon={ThumbsUp}
-                  note="累計"
+                  note="今日"
                 />
                 <StatCard
                   label="届いた感想"
@@ -831,6 +895,10 @@ export default function App() {
                     hours={hours.data}
                     day={day}
                     onDay={setDay}
+                    query={new URLSearchParams({
+                      ...(pageUrl ? { page: pageUrl } : {}),
+                      v: String(version),
+                    }).toString()}
                   />
                   <section className="panel activity-panel">
                     <div className="panel-heading">
@@ -893,7 +961,6 @@ export default function App() {
                   key={widgetTarget === "new" ? "new" : widgetTarget.id}
                   inline
                   project={widgetTarget}
-                  tipEnabled={!!session.data?.tip_links_enabled}
                   onClose={() => {
                     if (widgetTarget === "new") setEdit(null);
                     refresh();
@@ -1544,39 +1611,24 @@ const blankProject = {
   favorite_enabled: true,
   thanks_enabled: true,
   reply_enabled: true,
-  tip_enabled: false,
   thanks_order: "random" as "random" | "sequential" | "fixed",
   thanks_message: "",
   tip_url: "",
-  tip_legal_checked: false,
-  tip_terms_checked: false,
-  tip_privacy_checked: false,
   ng_words: [] as string[],
   blocked_sites: [] as string[],
   reactions: [...DEFAULT_REACTIONS] as string[],
 };
-function presetOf(f: {
-  clap_enabled: unknown;
-  message_enabled: unknown;
-  tip_enabled: unknown;
-}) {
-  const clap = !!f.clap_enabled,
-    message = !!f.message_enabled,
-    tip = !!f.tip_enabled;
-  if (clap && message && !tip) return "message";
-  if (clap && !message) return tip ? "clap-tip" : "clap";
-  if (!clap && !message && tip) return "tip";
-  return "";
+function presetOf(f: { clap_enabled: unknown; message_enabled: unknown }) {
+  if (!f.clap_enabled) return "";
+  return f.message_enabled ? "message" : "clap";
 }
 function ProjectModal({
   project,
-  tipEnabled,
   onClose,
   notify,
   inline = false,
 }: {
   project: Project | "new";
-  tipEnabled: boolean;
   onClose: () => void;
   notify: (s: string) => void;
   inline?: boolean;
@@ -1597,13 +1649,9 @@ function ProjectModal({
             project.thanks_enabled !== false && project.thanks_enabled !== 0,
           reply_enabled:
             project.reply_enabled !== false && project.reply_enabled !== 0,
-          tip_enabled: !!project.tip_enabled,
           thanks_order: project.thanks_order,
           thanks_message: project.thanks_message || "",
           tip_url: project.tip_url || "",
-          tip_legal_checked: !!project.tip_legal_checked,
-          tip_terms_checked: !!project.tip_terms_checked,
-          tip_privacy_checked: !!project.tip_privacy_checked,
           ng_words: project.ng_words || [],
           blocked_sites: project.blocked_sites || [],
           reactions: project.reactions || [...DEFAULT_REACTIONS],
@@ -1836,8 +1884,6 @@ function ProjectModal({
                 {[
                   ["clap", "拍手のみ"],
                   ["message", "拍手＋感想"],
-                  ["clap-tip", "拍手＋投げ銭"],
-                  ["tip", "投げ銭のみ"],
                 ].map(([key, label]) => (
                   <button
                     type="button"
@@ -1849,11 +1895,10 @@ function ProjectModal({
                     onClick={() =>
                       setForm((f) => ({
                         ...f,
-                        clap_enabled: key !== "tip",
+                        clap_enabled: true,
                         message_enabled: key === "message",
                         reply_enabled: key === "message",
-                        thanks_enabled: key !== "tip",
-                        tip_enabled: key === "clap-tip" || key === "tip",
+                        thanks_enabled: true,
                       }))
                     }
                   >
@@ -1861,9 +1906,6 @@ function ProjectModal({
                   </button>
                 ))}
               </div>
-              <p className="small-text muted">
-                投げ銭は接続・確認が完了するまで公開されません。
-              </p>
               {[
                 ["clap_enabled", "拍手を受け付ける"],
                 ["message_enabled", "非公開の感想を受け付ける"],
@@ -1934,53 +1976,19 @@ function ProjectModal({
                   })}
                 </div>
               </div>
-            </div>
-            <details className="tip-settings">
-              <summary>外部の支援リンク</summary>
-              <p>
-                適法性・決済事業者の規約・個人情報の表示を確認した外部リンクのみ設定できます。現在のサーバー設定：
-                {tipEnabled ? "有効化可能" : "非表示"}
-                。PayPayへの対応は未確認です。
-              </p>
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={form.tip_enabled}
-                  onChange={(e) => set("tip_enabled", e.target.checked)}
-                />
-                確認済みの外部支援リンクを表示する（初期OFF）
-              </label>
               <label>
-                確認済み外部決済ページ
+                投げ銭リンク
                 <input
                   type="url"
+                  placeholder="https://ofuse.me/…"
                   value={form.tip_url}
                   onChange={(e) => set("tip_url", e.target.value)}
                 />
+                <small>
+                  埋め込みコードで投げ銭をオンにしたページだけ、お礼の下に表示します。
+                </small>
               </label>
-              {[
-                ["tip_legal_checked", "適法性・法定表示・税務を確認した"],
-                [
-                  "tip_terms_checked",
-                  "決済事業者がこの用途を許可していることを確認した",
-                ],
-                [
-                  "tip_privacy_checked",
-                  "決済画面・明細・領収書の個人情報表示を確認した",
-                ],
-              ].map(([key, label]) => (
-                <label className="check-label" key={key}>
-                  <input
-                    type="checkbox"
-                    checked={!!form[key as keyof typeof form]}
-                    onChange={(e) =>
-                      set(key as keyof typeof form, e.target.checked)
-                    }
-                  />
-                  {label}
-                </label>
-              ))}
-            </details>
+            </div>
             <div className="modal-form-footer">
               {!inline && (
                 <button type="button" className="btn" onClick={onClose}>

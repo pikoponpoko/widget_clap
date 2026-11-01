@@ -1,5 +1,5 @@
 import { previewMode } from "./mode";
-import { pageContext, tipLabel, tipRequested } from "./page-context";
+import { pageContext } from "./page-context";
 import { useEffect, useRef, useState } from "react";
 import { assetUrl } from "./asset-url";
 import { inlineProject, send, useApi } from "./api";
@@ -48,29 +48,12 @@ export function ClapControl({
       setBusy(false);
     }
   }
-  const unavailable = !label && !p.tip_url;
+  const unavailable = !label;
   useEffect(() => {
     if (unavailable) onReady?.();
   }, [unavailable]);
   if (unavailable)
     return <span className="button-unavailable">受付休止中</span>;
-  if (!label && p.tip_url)
-    return (
-      <a
-        className="mini-clap"
-        href={p.tip_url}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="任意の支援をする"
-      >
-        <img
-          src={image ? assetUrl(image.id) : "/support-button.svg"}
-          alt=""
-          onLoad={onReady}
-          onError={onReady}
-        />
-      </a>
-    );
   return (
     <span className="mini-clap-wrap">
       <button
@@ -183,26 +166,6 @@ export function EmbeddedButton({ slug }: { slug: string }) {
           setFallback("");
         }}
       />
-      {/* data-tip="on" pages (e.g. tool downloads) show the tip link before any click. */}
-      {tipRequested &&
-        (p.clap_enabled || p.message_enabled) &&
-        (p.tip_url ? (
-          <a
-            className="tip-button mini-tip"
-            href={p.tip_url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {tipLabel}
-          </a>
-        ) : previewMode ? (
-          <span
-            className="tip-button mini-tip tip-preview"
-            aria-disabled="true"
-          >
-            {tipLabel}（体験版：決済リンク未設定）
-          </span>
-        ) : null)}
       {fallback && (
         <a
           className="button-fallback-link"

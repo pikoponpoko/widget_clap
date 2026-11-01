@@ -391,9 +391,12 @@ test.describe.serial("Phase 1 integrated flow", () => {
     const stats = await (
       await request.get("/api/owner/stats?project=" + pid, { headers })
     ).json();
-    expect(stats.pages).toEqual([
-      { page_url: article, page_title: "記事C", count: 1 },
-    ]);
+    expect(stats.pages).toHaveLength(1);
+    expect(stats.pages[0]).toMatchObject({
+      page_url: article,
+      page_title: "記事C",
+      count: 1,
+    });
     const csv = await (
       await request.get("/api/owner/export?format=csv&project=" + pid, {
         headers,
@@ -416,11 +419,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
         slug: slug + "-no-reply",
         reply_enabled: false,
         thanks_enabled: false,
-        tip_enabled: true,
         tip_url: "https://example.com",
-        tip_legal_checked: true,
-        tip_terms_checked: true,
-        tip_privacy_checked: true,
       },
     });
     expect(response.status()).toBe(201);
@@ -429,11 +428,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
     ).json();
     expect(config.reply_enabled).toBe(false);
     expect(config.thanks_enabled).toBe(false);
-    // The tip link follows the server switch (TIP_LINKS_ENABLED).
-    const session = await (await request.get("/api/owner/session")).json();
-    expect(config.tip_url).toBe(
-      session.tip_links_enabled ? "https://example.com" : null,
-    );
+    expect(config.tip_url).toBe("https://example.com");
     const message = await request.post(
       "/api/public/projects/" + slug + "-no-reply/messages",
       { headers, data: body() },
@@ -618,6 +613,24 @@ test.describe.serial("Phase 1 integrated flow", () => {
     await expect(
       page.getByRole("combobox", { name: "作品で絞り込む" }),
     ).toHaveCount(0);
+    // A page title opens the page itself; the filter button narrows the dashboard.
+    const pageRow = page.locator(".page-stats li").filter({
+      has: page.locator(".page-link"),
+    });
+    await expect(pageRow.first().locator(".page-link")).toHaveAttribute(
+      "href",
+      /^https?:\/\//,
+    );
+    await expect(pageRow.first().locator(".page-link")).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+    const filter = pageRow.first().locator(".page-filter");
+    await filter.click();
+    await expect(filter).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".page-stats li")).not.toHaveCount(0);
+    await filter.click();
+    await expect(filter).toHaveAttribute("aria-pressed", "false");
     await page.screenshot({
       path: "test-results/dashboard-desktop.png",
       fullPage: true,

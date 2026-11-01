@@ -2516,6 +2516,117 @@ function ImportPanel({
     </section>
   );
 }
+type ClapRecord = {
+  id: string;
+  created_at: string;
+  page_url: string;
+  page_title: string;
+  mine: boolean;
+};
+function ClapRecords({
+  notify,
+  refresh,
+}: {
+  notify: (s: string) => void;
+  refresh: () => void;
+}) {
+  const [day, setDay] = useState(() =>
+    new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10),
+  );
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const list = useApi<{ items: ClapRecord[] }>(
+    "/owner/claps?day=" + encodeURIComponent(day),
+  );
+  const items = list.data?.items || [];
+  useEffect(() => {
+    setChecked(new Set(items.filter((x) => x.mine).map((x) => x.id)));
+  }, [list.data]);
+  const toggle = (id: string) => {
+    const next = new Set(checked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setChecked(next);
+  };
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <h2>拍手の記録</h2>
+        <input
+          type="date"
+          className="hour-date"
+          aria-label="拍手の記録の日付"
+          value={day}
+          onChange={(e) => e.target.value && setDay(e.target.value)}
+        />
+      </div>
+      <div className="data-section">
+        <ErrorText>{list.error || error}</ErrorText>
+        {list.loading ? (
+          <div className="chart-loading">読み込んでいます…</div>
+        ) : !items.length ? (
+          <p>この日の拍手はありません。</p>
+        ) : (
+          <>
+            <ul className="clap-records">
+              {items.map((x) => (
+                <li key={x.id}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={checked.has(x.id)}
+                      onChange={() => toggle(x.id)}
+                    />
+                    <span className="clap-time">
+                      {dateTime(x.created_at).slice(-5)}
+                    </span>
+                    <span className="clap-page">
+                      {x.page_title || x.page_url || "ページ不明"}
+                    </span>
+                    {x.mine && <span className="clap-mine">自分の回線</span>}
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div className="button-row">
+              <button
+                className="btn"
+                disabled={busy || !checked.size}
+                onClick={async () => {
+                  if (
+                    !confirm(
+                      `${checked.size} 件の拍手を削除します。元に戻せません。`,
+                    )
+                  )
+                    return;
+                  setBusy(true);
+                  setError("");
+                  try {
+                    const r = await send<{ deleted: number }>(
+                      "/owner/claps/delete",
+                      { ids: [...checked] },
+                    );
+                    notify(`${r.deleted} 件の拍手を削除しました`);
+                    list.refresh();
+                    refresh();
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <Trash2 size={14} />
+                選択した拍手を削除（{checked.size}）
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
 function DataPanel({
   notify,
   refresh,
@@ -2545,6 +2656,7 @@ function DataPanel({
     return (
       <div className="data-layout">
         <ImportPanel notify={notify} refresh={refresh} />
+        <ClapRecords notify={notify} refresh={refresh} />
         <section className="panel">
           <div className="panel-heading">
             <h2>体験版のデータ</h2>
@@ -2611,6 +2723,7 @@ function DataPanel({
     <div className="data-layout">
       <ErrorText>{error}</ErrorText>
       <ImportPanel notify={notify} refresh={refresh} />
+        <ClapRecords notify={notify} refresh={refresh} />
       <section className="panel">
         <div className="panel-heading">
           <h2>メッセージの書き出し</h2>

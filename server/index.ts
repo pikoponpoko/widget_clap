@@ -472,7 +472,7 @@ app.post("/api/owner/imports", async (c) => {
     data.items.map(async (x) => {
       const at = new Date(x.created_at).toISOString();
       return c.env.DB.prepare(
-        "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,read_at,dedupe_key,sender_name,source) SELECT ?,?,?,?,?,?,?,'import' WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
+        "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,read_at,dedupe_key,sender_name,reply_wanted,source) SELECT ?,?,?,?,?,?,?,?,'import' WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
       ).bind(
         id(),
         p.id,
@@ -482,6 +482,7 @@ app.post("/api/owner/imports", async (c) => {
         // Same text and time imported twice is stored once.
         await hash(`import:${p.id}:${at}:${x.sender_name}:${x.body}`),
         x.sender_name,
+        x.reply_wanted === null ? null : Number(x.reply_wanted),
         new TextEncoder().encode(x.body).length,
       );
     }),

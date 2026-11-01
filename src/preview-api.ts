@@ -403,6 +403,8 @@ export async function previewRequest(
         replied_at: null,
         reply_token_hash: null,
         dedupe_key: dedupe,
+        reply_wanted:
+          typeof x.reply_wanted === "boolean" ? Number(x.reply_wanted) : null,
         source: "import",
       });
       added++;

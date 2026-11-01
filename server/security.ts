@@ -193,6 +193,7 @@ export const importSchema = z
             created_at: z.iso.datetime(),
             sender_name: z.string().trim().max(50).default(""),
             body: text(2000),
+            reply_wanted: z.boolean().nullable().default(null),
           })
           .strict(),
       )

@@ -45,7 +45,8 @@ import { defaultPrint, type PrintOptions } from "./print-options";
 import { collectImages } from "./image-files";
 import { planners, type PaperSize, type PlannerId } from "./planner-sizes";
 import type { Asset, HourStats, Message, Project, Stats } from "./types";
-import { parseImport, type ImportRow } from "./import-parse";
+import { webclapScript } from "./webclap-script";
+import { parseImport, parseImportHtml, type ImportRow } from "./import-parse";
 const jstToday = (offsetDays = 0) =>
   new Date(Date.now() + 9 * 3600000 - offsetDays * 86400000)
     .toISOString()
@@ -2165,6 +2166,7 @@ function ImportPanel({
     [rows, setRows] = useState<ImportRow[] | null>(null),
     [target, setTarget] = useState(""),
     [fallbackDate, setFallbackDate] = useState(""),
+    [showAll, setShowAll] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const projectId = target || list[0]?.id || "";
@@ -2173,8 +2175,11 @@ function ImportPanel({
     setRows((r) => r && r.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   function read(source: string) {
     setError("");
-    const parsed = parseImport(source);
+    const parsed = /<(table|tr)[\s>]/i.test(source)
+      ? parseImportHtml(source)
+      : parseImport(source);
     if (!parsed.length) setError("メッセージが見つかりません。");
+    setShowAll(false);
     setRows(parsed.length ? parsed : null);
   }
   async function save() {
@@ -2190,6 +2195,7 @@ function ImportPanel({
           created_at: r.created_at || fromJstInput(fallbackDate),
           sender_name: r.sender_name.trim(),
           body: r.body.trim(),
+          reply_wanted: r.reply_wanted ?? null,
         }));
       for (let i = 0; i < items.length; i += 40) {
         const r = await send<{ added: number; skipped: number }>(
@@ -2246,6 +2252,13 @@ function ImportPanel({
               placeholder={"2015/03/02 12:34\n名前：\nメッセージ"}
               value={text}
               onChange={(e) => setText(e.target.value)}
+              onPaste={(e) => {
+                // A page copied from a browser carries its table as HTML.
+                const html = e.clipboardData.getData("text/html");
+                if (!html || !parseImportHtml(html).length) return;
+                e.preventDefault();
+                read(html);
+              }}
             />
             <div className="button-row">
               <button
@@ -2262,7 +2275,7 @@ function ImportPanel({
                   type="file"
                   hidden
                   aria-label="取り込むファイル"
-                  accept=".txt,.csv,.tsv,text/plain,text/csv"
+                  accept=".txt,.csv,.tsv,.html,.htm,text/plain,text/csv,text/html"
                   onChange={async (e) => {
                     const f = e.target.files?.[0];
                     e.target.value = "";
@@ -2271,11 +2284,30 @@ function ImportPanel({
                 />
               </label>
             </div>
+            <details className="restore-settings">
+              <summary>web拍手から一括取得</summary>
+              <div className="button-row">
+                <button
+                  className="btn"
+                  onClick={async () => {
+                    try {
+                      await copy(webclapScript);
+                      notify("スクリプトをコピーしました");
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
+                  }}
+                >
+                  <Copy size={15} />
+                  取得用スクリプトをコピー
+                </button>
+              </div>
+            </details>
           </>
         ) : (
           <>
             <div className="import-rows">
-              {rows.map((r, i) => (
+              {(showAll ? rows : rows.slice(0, 200)).map((r, i) => (
                 <div className="import-row" key={i}>
                   <div className="import-row-meta">
                     <input
@@ -2314,6 +2346,14 @@ function ImportPanel({
                   />
                 </div>
               ))}
+              {!showAll && rows.length > 200 && (
+                <button
+                  className="text-button import-more"
+                  onClick={() => setShowAll(true)}
+                >
+                  すべて表示（{rows.length} 件）
+                </button>
+              )}
             </div>
             {undated && (
               <label className="import-fallback">

@@ -3004,3 +3004,7 @@ html.embed-document {
     flex: 1 1 100%;
   }
 }
+.import-more {
+  padding: 12px;
+  justify-content: center;
+}

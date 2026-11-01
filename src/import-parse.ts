@@ -3,6 +3,7 @@ export interface ImportRow {
   created_at: string; // ISO (UTC); "" when the source had no date
   sender_name: string;
   body: string;
+  reply_wanted?: boolean | null;
 }
 
 const datePattern =
@@ -97,6 +98,75 @@ function fromTable(text: string): ImportRow[] | null {
     .filter((r) => r.body);
 }
 
+const timeOnly = /^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$/;
+const dateOnly = (cell: string) => {
+  const d = readDate(cell);
+  return d && !d.rest.trim() ? d : null;
+};
+const dayOf = (iso: string) =>
+  new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 10);
+function at(day: string, h: string, m: string, s = "0") {
+  if (+h > 23 || +m > 59 || +s > 59) return "";
+  return new Date(
+    Date.parse(`${day}T${pad(h)}:${pad(m)}:${pad(s)}+09:00`),
+  ).toISOString();
+}
+
+/**
+ * Reads table rows copied from a clap service's message list. A row counts
+ * when one cell is a time (or date and time); a date cell spanning several
+ * rows carries over to the following rows.
+ */
+export function fromCells(rows: string[][]): ImportRow[] {
+  const out: ImportRow[] = [];
+  let day = "";
+  for (const cells of rows) {
+    let created = "",
+      used = new Set<number>();
+    cells.forEach((c, i) => {
+      const d = dateOnly(c.trim());
+      if (!d) return;
+      used.add(i);
+      day = dayOf(d.iso);
+      if (/\d{1,2}\s*[:時]\s*\d{1,2}/.test(c)) created = d.iso;
+    });
+    cells.forEach((c, i) => {
+      const t = c.match(timeOnly);
+      if (!t || created || !day) return;
+      used.add(i);
+      created = at(day, t[1], t[2], t[3]);
+    });
+    if (!created) continue;
+    const body = cells
+      .filter((c, i) => !used.has(i) && c.trim())
+      .sort((a, b) => b.trim().length - a.trim().length)[0];
+    if (body?.trim())
+      out.push({ created_at: created, sender_name: "", body: body.trim() });
+  }
+  return out;
+}
+
+/** Reads the message table out of a copied or saved web page. */
+export function parseImportHtml(html: string): ImportRow[] {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+  doc
+    .querySelectorAll("script,style,input,select,button")
+    .forEach((x) => x.remove());
+  const rows = Array.from(doc.querySelectorAll("tr"))
+    .filter((tr) => !tr.querySelector("tr"))
+    .map((tr) =>
+      Array.from(tr.children, (td) =>
+        (td.textContent || "")
+          .split("\n")
+          .map((l) => l.replace(/[ \t]+/g, " ").trim())
+          .join("\n")
+          .trim(),
+      ),
+    );
+  return finish(fromCells(rows));
+}
+
 function fromText(text: string): ImportRow[] {
   const lines = text.split("\n").map((l) => l.replace(/\r$/, ""));
   const dated = lines.some((l) => readDate(l));
@@ -111,9 +181,19 @@ function fromText(text: string): ImportRow[] {
     cur = null;
     body = [];
   };
+  let day = "";
   for (const line of lines) {
     const d = dated ? readDate(line) : null;
+    // A row copied from a table whose date cell covers several rows.
+    const t = !d && day ? line.match(/^\s*(\d{1,2}):(\d{2})\s+(\S.*)$/) : null;
+    if (t) {
+      flush();
+      cur = { created_at: at(day, t[1], t[2]), sender_name: "", body: "" };
+      body.push(t[3]);
+      continue;
+    }
     if (d) {
+      day = dayOf(d.iso);
       flush();
       cur = { created_at: d.iso, sender_name: "", body: "" };
       const rest = d.rest.trim();
@@ -142,10 +222,18 @@ function fromText(text: string): ImportRow[] {
 export function parseImport(text: string): ImportRow[] {
   const clean = text.replace(/^﻿/, "").replace(/\r\n?/g, "\n").trim();
   if (!clean) return [];
-  const rows = fromTable(clean) ?? fromText(clean);
-  return rows.map((r) => ({
-    created_at: r.created_at,
-    sender_name: r.sender_name.slice(0, 50),
-    body: r.body.slice(0, 2000),
-  }));
+  return finish(fromTable(clean) ?? fromText(clean));
+}
+
+const replyMark = /\s*(レス不要|レス希望|レス要)\s*$/;
+function finish(rows: ImportRow[]): ImportRow[] {
+  return rows.map((r) => {
+    const mark = r.body.match(replyMark);
+    return {
+      created_at: r.created_at,
+      sender_name: r.sender_name.slice(0, 50),
+      body: r.body.replace(replyMark, "").slice(0, 2000),
+      ...(mark ? { reply_wanted: mark[1] !== "レス不要" } : {}),
+    };
+  });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseImport, readDate } from "../src/import-parse";
+import { fromCells, parseImport, readDate } from "../src/import-parse";
 
 describe("parseImport", () => {
   it("reads Japan time dates", () => {
@@ -62,5 +62,53 @@ describe("parseImport", () => {
       "こんにちは、またね",
     );
     expect(parseImport("hi, there")[0].body).toBe("hi, there");
+  });
+  it("reads message-list table rows and skips page chrome", () => {
+    expect(
+      fromCells([
+        ["2026/10/29\nサーバーメンテナンスのお知らせ"],
+        ["<< 2026年11月", "2026年10月", "2026年09月 >>"],
+        ["2026/10/14", "", "19:48", "めちゃいいですね　この仕組みも最高です"],
+        ["", "20:01", "次も\nよろしく"],
+        ["2026/10/15 07:02", "", "朝から"],
+        ["06/04", "ポーカーの役判定"],
+      ]),
+    ).toEqual([
+      {
+        created_at: "2026-10-14T10:48:00.000Z",
+        sender_name: "",
+        body: "めちゃいいですね　この仕組みも最高です",
+      },
+      {
+        created_at: "2026-10-14T11:01:00.000Z",
+        sender_name: "",
+        body: "次も\nよろしく",
+      },
+      {
+        created_at: "2026-10-14T22:02:00.000Z",
+        sender_name: "",
+        body: "朝から",
+      },
+    ]);
+  });
+  it("turns the reply mark into a flag", () => {
+    expect(
+      parseImport(
+        "2026/10/14\t\t19:48\tすてき レス不要\n\t20:01\tまた レス希望",
+      ),
+    ).toEqual([
+      {
+        created_at: "2026-10-14T10:48:00.000Z",
+        sender_name: "",
+        body: "すてき",
+        reply_wanted: false,
+      },
+      {
+        created_at: "2026-10-14T11:01:00.000Z",
+        sender_name: "",
+        body: "また",
+        reply_wanted: true,
+      },
+    ]);
   });
 });

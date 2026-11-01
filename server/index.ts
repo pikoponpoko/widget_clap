@@ -823,6 +823,54 @@ app.get("/api/owner/backup-status", async (c) => {
   ).all();
   return c.json({ latest: rows.results[0] || null });
 });
+app.get("/api/owner/backups", async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT id,storage_key,created_at,asset_count FROM backup_runs ORDER BY created_at DESC",
+  ).all<{
+    id: string;
+    storage_key: string;
+    created_at: string;
+    asset_count: number;
+  }>();
+  return c.json({
+    backups: rows.results.map((r) => ({
+      id: r.id,
+      created_at: r.created_at,
+      asset_count: r.asset_count,
+      kind: r.storage_key.startsWith("monthly/") ? "monthly" : "daily",
+    })),
+  });
+});
+async function storedBackup(env: Env, backupId: string) {
+  const row = await env.DB.prepare(
+    "SELECT storage_key FROM backup_runs WHERE id=?",
+  )
+    .bind(backupId)
+    .first<{ storage_key: string }>();
+  const object = row && (await env.BACKUPS.get(row.storage_key));
+  if (!object) throw new ApiError(404, "バックアップが見つかりません。");
+  return object;
+}
+app.get("/api/owner/backups/:id", async (c) => {
+  const object = await storedBackup(c.env, c.req.param("id"));
+  await audit(c.env, "backup.download", c.req.param("id"));
+  return new Response(object.body, {
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Disposition": 'attachment; filename="support-backup.json"',
+    },
+  });
+});
+app.post("/api/owner/backups/:id/restore", async (c) => {
+  await jsonBody(
+    c.req.raw,
+    z.object({ confirmation: z.literal("復元する") }).strict(),
+  );
+  const object = await storedBackup(c.env, c.req.param("id"));
+  const result = await restore(c.env, await object.json());
+  await audit(c.env, "backup.restore", c.req.param("id"));
+  return c.json(result);
+});
 app.post("/api/owner/backup-now", async (c) => {
   await scheduledBackup(c.env);
   await audit(c.env, "backup.create");

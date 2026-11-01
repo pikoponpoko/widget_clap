@@ -465,6 +465,39 @@ test.describe.serial("Phase 1 integrated flow", () => {
     expect(
       (await (await request.get("/api/owner/backup-status")).json()).latest,
     ).toBeTruthy();
+    const { backups } = await (
+      await request.get("/api/owner/backups")
+    ).json();
+    expect(backups.map((b: { kind: string }) => b.kind).sort()).toEqual([
+      "daily",
+      "monthly",
+    ]);
+    await request.post("/api/owner/backup-now", { headers, data: {} });
+    const listed = (await (await request.get("/api/owner/backups")).json())
+      .backups;
+    expect(listed).toHaveLength(3);
+    const stored = await request.get("/api/owner/backups/" + listed[0].id);
+    expect(stored.ok()).toBeTruthy();
+    expect((await stored.json()).messages).toHaveLength(
+      (backup.messages as unknown[]).length,
+    );
+    expect(
+      (await request.get("/api/owner/backups/missing")).status(),
+    ).toBe(404);
+    expect(
+      (
+        await request.post(
+          "/api/owner/backups/" + listed[0].id + "/restore",
+          { headers, data: { confirmation: "違う" } },
+        )
+      ).status(),
+    ).toBe(400);
+    const fromCloud = await request.post(
+      "/api/owner/backups/" + listed[0].id + "/restore",
+      { headers, data: { confirmation: "復元する" } },
+    );
+    expect(fromCloud.status()).toBe(200);
+    expect((await fromCloud.json()).assets).toBeGreaterThanOrEqual(2);
   });
   test("uses the widget on mobile, receives a reply URL", async ({
     page,

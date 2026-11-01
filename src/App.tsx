@@ -1279,7 +1279,7 @@ function MessageModal({
             onClick={() => {
               if (
                 confirm(
-                  "この感想と返信を削除します。返信URLも無効になります。バックアップには最長7日残る場合があります。",
+                  "この感想と返信を削除します。返信URLも無効になります。バックアップには最長12か月残る場合があります。",
                 )
               )
                 action(async () => {
@@ -2528,8 +2528,14 @@ function DataPanel({
     [confirmation, setConfirmation] = useState(""),
     [file, setFile] = useState<File | null>(null);
   const backupStatus = useApi<{
-    latest: { created_at: string; asset_count: number } | null;
-  }>("/owner/backup-status");
+    backups: {
+      id: string;
+      created_at: string;
+      asset_count: number;
+      kind: "daily" | "monthly";
+    }[];
+  }>("/owner/backups");
+  const backups = backupStatus.data?.backups || [];
   async function action(fn: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -2665,15 +2671,65 @@ function DataPanel({
           <div className="backup-status">
             <ShieldCheck size={19} />
             <span>
-              自動バックアップ：毎日 03:00 JST・7日間保持
+              自動バックアップ：毎日 03:00 JST・毎日分30日・毎月分12か月保持
               <small>
-                {backupStatus.data?.latest
-                  ? "直近の成功：" +
-                    dateTime(backupStatus.data.latest.created_at)
+                {backups[0]
+                  ? "直近の成功：" + dateTime(backups[0].created_at)
                   : "この環境では成功記録がまだありません。ローカルでは自動実行されません。"}
               </small>
             </span>
           </div>
+          {backups.length > 0 && (
+            <details className="restore-settings cloud-backups">
+              <summary>クラウドのバックアップ（{backups.length}件）</summary>
+              <ul>
+                {backups.map((b) => (
+                  <li key={b.id}>
+                    <time>{dateTime(b.created_at)}</time>
+                    <span>{b.kind === "monthly" ? "毎月" : "毎日"}</span>
+                    <button
+                      className="btn"
+                      disabled={busy}
+                      onClick={() =>
+                        action(async () => {
+                          await downloadEndpoint(
+                            "/owner/backups/" + b.id,
+                            "hakushu_backup_" +
+                              b.created_at.slice(0, 10) +
+                              ".json",
+                          );
+                        })
+                      }
+                    >
+                      <Download size={15} />
+                      DL
+                    </button>
+                    <button
+                      className="btn"
+                      disabled={busy}
+                      onClick={() => {
+                        const input = window.prompt(
+                          dateTime(b.created_at) +
+                            " の内容で現在の作品・拍手・感想・返信・画像を置き換えます。「復元する」と入力してください。",
+                        );
+                        if (input !== "復元する") return;
+                        action(async () => {
+                          await send("/owner/backups/" + b.id + "/restore", {
+                            confirmation: input,
+                          });
+                          notify("バックアップから復元しました");
+                          refresh();
+                          backupStatus.refresh();
+                        });
+                      }}
+                    >
+                      復元
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <div className="button-row">
             <button
               className="btn"
@@ -2755,7 +2811,7 @@ function DataPanel({
         </div>
         <div className="data-section">
           <p>
-            感想の全件削除は返信も削除し、返信URLを無効にします。バックアップには最長7日残ります。全データ削除は画像・バックアップも削除します。
+            感想の全件削除は返信も削除し、返信URLを無効にします。バックアップには最長12か月残ります。全データ削除は画像・バックアップも削除します。
           </p>
           <div className="button-row">
             <button

@@ -707,6 +707,7 @@ export async function previewRequest(
     };
   }
   if (p === "/owner/backup-status") return { latest: null };
+  if (p === "/owner/backups") return { backups: [] };
   if (p === "/owner/backup") return s;
   if (p === "/owner/delete-messages") {
     s.messages = [];

@@ -50,6 +50,9 @@
 |GET /api/owner/export|format=csv/json、任意のproject|
 |GET /api/owner/backup|画像込み完全バックアップ|
 |GET /api/owner/backup-status|日次バックアップの最新成功日時|
+|GET /api/owner/backups|R2のバックアップ一覧（毎日分30日・毎月分12か月）|
+|GET /api/owner/backups/:id|R2のバックアップをダウンロード|
+|POST /api/owner/backups/:id/restore|R2のバックアップから復元。確認文字列必須|
 |POST /api/owner/backup-now|非公開R2へ即時バックアップ|
 |POST /api/owner/restore|完全JSON復元。「復元する」の確認文字列必須|
 |POST /api/owner/delete-messages|感想と返信を全削除。確認文字列必須|

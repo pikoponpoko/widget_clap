@@ -158,6 +158,16 @@ test.describe.serial("Phase 1 integrated flow", () => {
     expect(
       after.reaction_days.some((x: { kind: string }) => x.kind === "hundred"),
     ).toBe(false);
+    const own = await request.post(url + "/messages", {
+      headers,
+      data: body(),
+    });
+    expect(own.status()).toBe(201);
+    expect((await own.json()).reply_token).toBeNull();
+    const inbox = await (
+      await request.get("/api/owner/messages?project=" + projectId)
+    ).json();
+    expect(inbox.total).toBe(1);
   });
   test("records who clapped without storing the IP", async ({ request }) => {
     const url = "/api/public/projects/" + slug + "/claps";

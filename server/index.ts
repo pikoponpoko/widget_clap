@@ -138,6 +138,10 @@ app.use("/api/owner/*", async (c, next) => {
   await next();
 });
 const OWNER_COOKIE = "hakushu_owner";
+const isOwnerBrowser = (request: Request) =>
+  (request.headers.get("Cookie") || "")
+    .split(";")
+    .some((x) => x.trim() === `${OWNER_COOKIE}=1`);
 app.get("/api/owner/session", (c) => {
   // Marks this browser so its own claps are left out of the stats.
   c.header(
@@ -165,12 +169,7 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `clap:${key}`, 60, 60);
-  if (
-    (c.req.header("Cookie") || "")
-      .split(";")
-      .some((x) => x.trim() === `${OWNER_COOKIE}=1`)
-  )
-    return c.json({ ok: true, counted: false });
+  if (isOwnerBrowser(c.req.raw)) return c.json({ ok: true, counted: false });
   const dedupe = await hash(
     `${key}:${p.id}:${page.page_url}:${now().slice(0, 13)}`,
   );
@@ -232,12 +231,7 @@ app.post("/api/public/projects/:slug/reactions", async (c) => {
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `reaction:${key}`, 60, 60);
-  if (
-    (c.req.header("Cookie") || "")
-      .split(";")
-      .some((x) => x.trim() === `${OWNER_COOKIE}=1`)
-  )
-    return c.json({ ok: true, counted: false });
+  if (isOwnerBrowser(c.req.raw)) return c.json({ ok: true, counted: false });
   const dedupe = await hash(
     `${key}:${p.id}:${page.page_url}:${data.kind}:${now().slice(0, 13)}`,
   );
@@ -268,6 +262,9 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `attempt:${key}`, 40, 3600);
+  // The owner's own test messages are not saved, like their claps.
+  if (isOwnerBrowser(c.req.raw))
+    return c.json({ ok: true, reply_token: null, counted: false }, 201);
   const dedupe = await hash(`${p.id}:${data.request_id}`);
   const secret =
     c.env.SPAM_SECRET ||

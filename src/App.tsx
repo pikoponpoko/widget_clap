@@ -286,7 +286,18 @@ function Activity({
     ? picked.visitors
     : ((mode === "days" ? stats?.visitor_total : hours?.visitors) ??
       sum("visitors"));
-  const max = Math.max(1, ...(columns || []).map((c) => c.claps + c.messages));
+  // Each clap (and each comment) is one block stacked on the column. When a
+  // busy column would make blocks thinner than 4px, one block stands for
+  // several, so the tallest column still fits the 88px chart.
+  const blocks = (n: number, unit: number) => Math.ceil(n / unit);
+  let unit = 1;
+  const tallest = (u: number) =>
+    Math.max(
+      1,
+      ...(columns || []).map((c) => blocks(c.claps, u) + blocks(c.messages, u)),
+    );
+  while (tallest(unit) * 4 > 88) unit++;
+  const blockPx = Math.min(12, Math.floor(88 / tallest(unit)));
   return (
     <section className="panel activity-panel">
       <div className="panel-heading activity-heading">
@@ -348,7 +359,10 @@ function Activity({
         <div className="chart-loading">集計を読み込んでいます…</div>
       ) : (
         <>
-          <div className="activity-bars">
+          <div
+            className="activity-bars"
+            style={{ "--block": `${blockPx}px` } as React.CSSProperties}
+          >
             {columns.map((c) => {
               const active =
                 mode === "days" ? c.key === day : c.key === String(hour);
@@ -372,11 +386,15 @@ function Activity({
                   <span className="chart-stack">
                     <span
                       className="bar-message"
-                      style={{ height: `${(c.messages / max) * 100}%` }}
+                      style={{
+                        height: `${blocks(c.messages, unit) * blockPx}px`,
+                      }}
                     />
                     <span
                       className="bar-clap"
-                      style={{ height: `${(c.claps / max) * 100}%` }}
+                      style={{
+                        height: `${blocks(c.claps, unit) * blockPx}px`,
+                      }}
                     />
                   </span>
                   <span

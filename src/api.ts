@@ -31,7 +31,8 @@ export async function api<T>(
 }
 export const send = <T>(path: string, data: unknown, method = "POST") =>
   api<T>(path, { method, body: JSON.stringify(data) });
-export function useApi<T>(path: string, initial?: T | null) {
+// keep: show the previous result while a new path loads, so the page does not jump.
+export function useApi<T>(path: string, initial?: T | null, keep = false) {
   const [state, setState] = useState<{
     path: string;
     data: T | null;
@@ -49,7 +50,7 @@ export function useApi<T>(path: string, initial?: T | null) {
     let active = true;
     setState((old) => ({
       path,
-      data: old.path === path ? old.data : null,
+      data: old.path === path || keep ? old.data : null,
       error: "",
       loading: true,
     }));
@@ -67,7 +68,7 @@ export function useApi<T>(path: string, initial?: T | null) {
   }, [path, version]);
   return state.path === path
     ? { ...state, refresh }
-    : { data: null, error: "", loading: true, refresh };
+    : { data: keep ? state.data : null, error: "", loading: true, refresh };
 }
 export function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);

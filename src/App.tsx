@@ -45,6 +45,7 @@ import { defaultPrint, type PrintOptions } from "./print-options";
 import { collectImages } from "./image-files";
 import { planners, type PaperSize, type PlannerId } from "./planner-sizes";
 import type { Asset, HourStats, Message, Project, Stats } from "./types";
+import type { PeriodBucket, PeriodStats, PeriodUnit } from "./periods";
 import { webclapScript } from "./webclap-script";
 import { parseImport, parseImportHtml, type ImportRow } from "./import-parse";
 import { clapDaysMarker, parseClapDays, type ClapDay } from "./clap-days-parse";
@@ -228,23 +229,54 @@ type Column = {
   visitors: number;
   imported?: number;
 };
+const modes = [
+  ["hours", "時間別"],
+  ["days", "日別"],
+  ["week", "週別"],
+  ["month", "月別"],
+  ["year", "年別"],
+] as const;
+type Mode = (typeof modes)[number][0];
+function periodColumn(unit: PeriodUnit, b: PeriodBucket): Column {
+  const [y, m, d] = b.key.split("-");
+  const label =
+    unit === "year"
+      ? `${y}年`
+      : unit === "month"
+        ? `${y}年${Number(m)}月`
+        : `${y}/${m}/${d}〜`;
+  const tick =
+    unit === "year"
+      ? y
+      : unit === "month"
+        ? `${Number(m)}月`
+        : `${Number(m)}/${Number(d)}`;
+  return { ...b, label, tick };
+}
 function Activity({
   stats,
   hours,
   day,
   onDay,
+  query,
 }: {
   stats: Stats | null;
   hours: HourStats | null;
   day: string;
   onDay: (day: string) => void;
+  query: string;
 }) {
-  const [mode, setMode] = useState<"days" | "hours">("hours");
-  const [hour, setHour] = useState<number | null>(null);
+  const [mode, setMode] = useState<Mode>("hours");
+  const [unit, setUnit] = useState<PeriodUnit>("week");
+  const [pick, setPick] = useState<string | null>(null);
+  const periods = useApi<PeriodStats>(
+    `/owner/stats/periods?unit=${unit}&${query}`,
+  );
+  const isPeriod = mode !== "hours" && mode !== "days";
   const shift = (n: number) => {
     const d = new Date(day + "T00:00:00Z");
     onDay(new Date(d.getTime() + n * 86400000).toISOString().slice(0, 10));
-    setHour(null);
+    setPick(null);
   };
   let columns: Column[] | null = null;
   if (mode === "days" && stats) {
@@ -276,38 +308,37 @@ function Activity({
       tick: String(h.hour),
       ...h,
     }));
-  const picked =
-    mode === "hours" ? columns?.find((c) => c.key === String(hour)) : null;
+  if (isPeriod && periods.data?.unit === mode)
+    columns = periods.data.buckets.map((b) => periodColumn(mode, b));
+  const picked = mode !== "days" ? columns?.find((c) => c.key === pick) : null;
   const sum = (k: "claps" | "visitors" | "messages") =>
     picked ? picked[k] : (columns || []).reduce((a, c) => a + c[k], 0);
   // Summing columns counts a returning visitor twice, so prefer the
   // distinct count from the server.
   const visitors = picked
     ? picked.visitors
-    : ((mode === "days" ? stats?.visitor_total : hours?.visitors) ??
-      sum("visitors"));
+    : ((mode === "days"
+        ? stats?.visitor_total
+        : mode === "hours"
+          ? hours?.visitors
+          : periods.data?.visitors) ?? sum("visitors"));
   // Each clap (and each comment) is one block stacked on the column. When a
   // busy column would make blocks thinner than 4px, one block stands for
   // several, so the tallest column still fits the 88px chart.
   const blocks = (n: number, unit: number) => Math.ceil(n / unit);
-  let unit = 1;
+  let per = 1;
   const tallest = (u: number) =>
     Math.max(
       1,
       ...(columns || []).map((c) => blocks(c.claps, u) + blocks(c.messages, u)),
     );
-  while (tallest(unit) * 4 > 88) unit++;
-  const blockPx = Math.min(12, Math.floor(88 / tallest(unit)));
+  while (tallest(per) * 4 > 88) per++;
+  const blockPx = Math.min(12, Math.floor(88 / tallest(per)));
   return (
     <section className="panel activity-panel">
       <div className="panel-heading activity-heading">
         <div className="mode-switch" role="tablist">
-          {(
-            [
-              ["days", "日別"],
-              ["hours", "時間別"],
-            ] as const
-          ).map(([m, label]) => (
+          {modes.map(([m, label]) => (
             <button
               key={m}
               type="button"
@@ -316,7 +347,8 @@ function Activity({
               className={mode === m ? "active" : ""}
               onClick={() => {
                 setMode(m);
-                setHour(null);
+                if (m !== "hours" && m !== "days") setUnit(m);
+                setPick(null);
               }}
             >
               {label}
@@ -341,7 +373,7 @@ function Activity({
               onChange={(e) => {
                 if (!e.target.value) return;
                 onDay(e.target.value);
-                setHour(null);
+                setPick(null);
               }}
             />
             <button
@@ -364,8 +396,7 @@ function Activity({
             style={{ "--block": `${blockPx}px` } as React.CSSProperties}
           >
             {columns.map((c) => {
-              const active =
-                mode === "days" ? c.key === day : c.key === String(hour);
+              const active = c.key === (mode === "days" ? day : pick);
               return (
                 <button
                   type="button"
@@ -380,26 +411,26 @@ function Activity({
                     if (mode === "days") {
                       onDay(c.key);
                       setMode("hours");
-                    } else setHour(active ? null : Number(c.key));
+                    } else setPick(active ? null : c.key);
                   }}
                 >
                   <span className="chart-stack">
                     <span
                       className="bar-message"
                       style={{
-                        height: `${blocks(c.messages, unit) * blockPx}px`,
+                        height: `${blocks(c.messages, per) * blockPx}px`,
                       }}
                     />
                     <span
                       className="bar-clap"
                       style={{
-                        height: `${blocks(c.claps, unit) * blockPx}px`,
+                        height: `${blocks(c.claps, per) * blockPx}px`,
                       }}
                     />
                   </span>
                   <span
                     className={
-                      "chart-tick " + (mode === "hours" ? "centered" : "")
+                      "chart-tick " + (mode !== "days" ? "centered" : "")
                     }
                   >
                     {c.tick}
@@ -423,7 +454,7 @@ function Activity({
               <button
                 type="button"
                 className="hour-picked"
-                onClick={() => setHour(null)}
+                onClick={() => setPick(null)}
               >
                 {picked.label} ×
               </button>
@@ -481,6 +512,11 @@ export default function App() {
           v: String(version),
           day,
         }),
+    ),
+    // The top card counts today's claps on every page, whatever the chart shows.
+    today = useApi<HourStats>(
+      "/owner/stats/hours?" +
+        new URLSearchParams({ v: String(version), day: jstToday() }),
     );
   const [statsPrint, setStatsPrint] = useState(false);
   const [selected, setSelected] = useState<Message | null>(null),
@@ -524,7 +560,7 @@ export default function App() {
     window.addEventListener("hashchange", handler);
     return () => window.removeEventListener("hashchange", handler);
   }, []);
-  const countClaps = list.reduce((a, p) => a + p.claps, 0),
+  const todayClaps = today.data?.hours.reduce((a, h) => a + h.claps, 0) ?? 0,
     total = stats.data?.totals;
   if (session.loading)
     return (
@@ -690,9 +726,9 @@ export default function App() {
               <div className="stat-grid">
                 <StatCard
                   label="受け取った拍手"
-                  value={countClaps}
+                  value={todayClaps}
                   icon={ThumbsUp}
-                  note="累計"
+                  note="今日"
                 />
                 <StatCard
                   label="届いた感想"
@@ -714,6 +750,10 @@ export default function App() {
                     hours={hours.data}
                     day={day}
                     onDay={setDay}
+                    query={new URLSearchParams({
+                      ...(pageUrl ? { page: pageUrl } : {}),
+                      v: String(version),
+                    }).toString()}
                   />
                   <section className="panel activity-panel">
                     <div className="panel-heading">
@@ -2753,7 +2793,7 @@ function DataPanel({
     <div className="data-layout">
       <ErrorText>{error}</ErrorText>
       <ImportPanel notify={notify} refresh={refresh} />
-        <ClapRecords notify={notify} refresh={refresh} />
+      <ClapRecords notify={notify} refresh={refresh} />
       <section className="panel">
         <div className="panel-heading">
           <h2>メッセージの書き出し</h2>

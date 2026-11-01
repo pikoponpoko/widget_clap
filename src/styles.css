@@ -585,7 +585,7 @@ small {
   background: var(--white);
   color: var(--muted);
   font-size: 11px;
-  padding: 4px 12px;
+  padding: 4px 10px;
 }
 .mode-switch button.active {
   background: var(--ink);

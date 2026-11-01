@@ -32,6 +32,12 @@ import {
 } from "./security";
 import { snapshot, scheduledBackup, restore } from "./backup";
 import type { Project, Message, Asset } from "./models";
+import {
+  periodKeys,
+  periodStart,
+  periodUnits,
+  type PeriodUnit,
+} from "../src/periods";
 const app = new Hono<{ Bindings: Env }>();
 const audit = (env: Env, action: string, target: string | null = null) =>
   env.DB.prepare(
@@ -641,10 +647,9 @@ async function ownVisitors(request: Request, env: Env, day: string) {
   const ids = [(await privateKey(request, env, "visitor")).slice(0, 32)];
   for (const utc of [prev, day])
     ids.push(
-      (await hash(`${await privateKey(request, env, utc)}:visitor:${day}`)).slice(
-        0,
-        32,
-      ),
+      (
+        await hash(`${await privateKey(request, env, utc)}:visitor:${day}`)
+      ).slice(0, 32),
     );
   return new Set(ids);
 }
@@ -770,6 +775,89 @@ app.get("/api/owner/stats", async (c) => {
     pages: pages.results,
     from: start,
     to: end,
+  });
+});
+app.get("/api/owner/stats/periods", async (c) => {
+  const unit = c.req.query("unit") as PeriodUnit;
+  if (!periodUnits.includes(unit))
+    throw new ApiError(400, "集計の単位が正しくありません。");
+  const project = c.req.query("project"),
+    pageUrl = c.req.query("page") || "",
+    today = jstDay(),
+    start = periodStart(unit, today);
+  const day = "strftime('%Y-%m-%d',created_at,'+9 hours')";
+  const bucket = (d: string) =>
+    unit === "year"
+      ? `substr(${d},1,4)`
+      : unit === "month"
+        ? `substr(${d},1,7)`
+        : `date(${d},'weekday 0','-6 days')`;
+  const args: unknown[] = [];
+  let suffix = "";
+  if (start) {
+    suffix += " AND created_at>=?";
+    args.push(new Date(Date.parse(start + "T00:00:00+09:00")).toISOString());
+  }
+  if (project) {
+    suffix += " AND project_id=?";
+    args.push(project);
+  }
+  const pageArgs = pageUrl ? [...args, pageUrl] : args,
+    pageSuffix = suffix + (pageUrl ? " AND page_url=?" : "");
+  const importArgs: unknown[] = [];
+  let importSuffix = pageUrl ? " AND 0" : "";
+  if (start) {
+    importSuffix += " AND day>=?";
+    importArgs.push(start);
+  }
+  if (project) {
+    importSuffix += " AND project_id=?";
+    importArgs.push(project);
+  }
+  const [claps, messages, people, imported] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `SELECT ${bucket(day)} AS k,count(*) AS claps,count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE 1${pageSuffix} GROUP BY k`,
+    ).bind(...pageArgs),
+    c.env.DB.prepare(
+      `SELECT ${bucket(day)} AS k,count(*) AS messages FROM messages WHERE blocked=0 AND source=''${pageSuffix} GROUP BY k`,
+    ).bind(...pageArgs),
+    c.env.DB.prepare(
+      `SELECT count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE 1${pageSuffix}`,
+    ).bind(...pageArgs),
+    // Counts brought in from another service have no page.
+    c.env.DB.prepare(
+      `SELECT ${bucket("day")} AS k,sum(claps) AS claps,sum(visitors) AS visitors FROM imported_clap_days WHERE 1${importSuffix} GROUP BY k`,
+    ).bind(...importArgs),
+  ]);
+  type Row = {
+    k: string;
+    claps?: number;
+    messages?: number;
+    visitors?: number;
+  };
+  const rows = [claps, messages, imported].map((r) => r.results as Row[]);
+  const first = rows
+    .flat()
+    .map((r) => r.k)
+    .sort()[0];
+  const extra = rows[2];
+  return c.json({
+    unit,
+    buckets: periodKeys(unit, today, first).map((key) => {
+      const a = rows[0].find((r) => r.k === key),
+        m = rows[1].find((r) => r.k === key),
+        x = extra.find((r) => r.k === key);
+      return {
+        key,
+        claps: (a?.claps || 0) + (x?.claps || 0),
+        messages: m?.messages || 0,
+        visitors: (a?.visitors || 0) + (x?.visitors || 0),
+      };
+    }),
+    // The other service counted people per day, so its days add up.
+    visitors:
+      ((people.results[0] as { visitors: number }).visitors || 0) +
+      extra.reduce((a, x) => a + (x.visitors || 0), 0),
   });
 });
 app.get("/api/owner/stats/hours", async (c) => {

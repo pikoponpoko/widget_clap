@@ -401,6 +401,10 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
     await page.getByRole("button", { name: "お礼画面を閉じる" }).click();
   }
   await page.goto("/admin");
+  // The top card shows today's claps, not the running total.
+  await expect(
+    page.locator(".stat-card", { hasText: "受け取った拍手" }),
+  ).toContainText("今日");
   const total = page.locator(".hour-total");
   await expect(total).toContainText("人数 1");
   await expect(total).toContainText("拍手 2");
@@ -637,6 +641,13 @@ test("the export script walks the old clap log and the days add to the stats", a
   await page.getByRole("tab", { name: "日別" }).click();
   await expect(page.locator(".hour-total")).toContainText("拍手 16");
   await expect(page.locator(".hour-total")).toContainText("人数 15");
+  // Imported days add up into weeks, months and years too.
+  await page.getByRole("tab", { name: "年別" }).click();
+  await expect(page.locator(".hour-total")).toContainText("拍手 16");
+  await expect(page.locator(".hour-total")).toContainText("人数 15");
+  await page.getByRole("tab", { name: "月別" }).click();
+  await expect(page.locator(".activity-bars .chart-column")).toHaveCount(12);
+  await expect(page.locator(".hour-total")).toContainText("拍手 16");
 });
 test("messages with links start excluded and can be put back", async ({
   page,

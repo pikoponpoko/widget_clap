@@ -1,4 +1,11 @@
 import type { Asset, Message, Project } from "./types";
+import {
+  periodKey,
+  periodKeys,
+  periodStart,
+  periodUnits,
+  type PeriodUnit,
+} from "./periods";
 type PreviewMessage = Message & {
   reply_token_hash: string | null;
   dedupe_key: string;
@@ -639,6 +646,58 @@ export async function previewRequest(
         unread: rows.filter((m) => !m.read_at).length,
         unreplied: rows.filter((m) => !m.reply_body).length,
       },
+    };
+  }
+  if (p === "/owner/stats/periods") {
+    const unit = u.searchParams.get("unit") as PeriodUnit;
+    if (!periodUnits.includes(unit)) fail("集計の単位が正しくありません。");
+    const projectId = u.searchParams.get("project"),
+      pageUrl = u.searchParams.get("page") || "",
+      today = jst(new Date().toISOString()).slice(0, 10),
+      start = periodStart(unit, today) || "";
+    const dayOf = (iso: string) => jst(iso).slice(0, 10);
+    const match = (x: {
+      project_id: string;
+      created_at: string;
+      page_url?: string;
+    }) =>
+      (!projectId || x.project_id === projectId) &&
+      (!pageUrl || (x.page_url || "") === pageUrl) &&
+      dayOf(x.created_at) >= start;
+    const claps = s.claps.filter(match),
+      messages = s.messages.filter((x) => !x.blocked && !x.source && match(x)),
+      extra = (s.clapDays || []).filter(
+        (d) =>
+          !pageUrl &&
+          (!projectId || d.project_id === projectId) &&
+          d.day >= start,
+      );
+    const keyOf = (day: string) => periodKey(unit, day);
+    const first = [
+      ...claps.map((c) => dayOf(c.created_at)),
+      ...messages.map((m) => dayOf(m.created_at)),
+      ...extra.map((d) => d.day),
+    ]
+      .sort()
+      .map(keyOf)[0];
+    return {
+      unit,
+      buckets: periodKeys(unit, today, first).map((key) => {
+        const inKey = claps.filter((c) => keyOf(dayOf(c.created_at)) === key),
+          days = extra.filter((d) => keyOf(d.day) === key);
+        return {
+          key,
+          claps: inKey.length + days.reduce((a, d) => a + d.claps, 0),
+          messages: messages.filter((m) => keyOf(dayOf(m.created_at)) === key)
+            .length,
+          visitors:
+            new Set(inKey.map((c) => c.visitor).filter(Boolean)).size +
+            days.reduce((a, d) => a + d.visitors, 0),
+        };
+      }),
+      visitors:
+        new Set(claps.map((c) => c.visitor).filter(Boolean)).size +
+        extra.reduce((a, d) => a + d.visitors, 0),
     };
   }
   if (p === "/owner/stats/hours") {

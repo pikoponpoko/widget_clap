@@ -4,6 +4,7 @@ export interface ImportRow {
   sender_name: string;
   body: string;
   reply_wanted?: boolean | null;
+  skip?: boolean;
 }
 
 const datePattern =

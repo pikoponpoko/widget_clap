@@ -228,6 +228,36 @@ function PageStats({
     </ol>
   );
 }
+// Year/month/day hour:minute in Japan time, e.g. 2026/11/01 16:07.
+const clapTime = (iso: string) => {
+  const t = new Date(Date.parse(iso) + 9 * 3600000).toISOString();
+  return `${t.slice(0, 10).replaceAll("-", "/")} ${t.slice(11, 16)}`;
+};
+function ClapTimes({
+  hours,
+  hour,
+}: {
+  hours: HourStats | null;
+  hour: string | null;
+}) {
+  const list = (hours?.claps || []).filter(
+    (c) =>
+      hour === null || Number(clapTime(c.at).slice(11, 13)) === Number(hour),
+  );
+  if (!list.length) return null;
+  return (
+    <ol className="clap-times" aria-label="拍手の時刻">
+      {list.map((c, i) => (
+        <li key={c.at + i}>
+          <time dateTime={c.at}>{clapTime(c.at)}</time>
+          <span className="page-title">
+            {c.page_title || (c.page_url ? pagePath(c.page_url) : "")}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 type Column = {
   key: string;
   label: string;
@@ -492,6 +522,7 @@ function Activity({
               感想 <b>{sum("messages")}</b>
             </span>
           </div>
+          {mode === "hours" && <ClapTimes hours={hours} hour={pick} />}
         </>
       )}
     </section>

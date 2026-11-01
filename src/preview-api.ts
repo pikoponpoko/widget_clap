@@ -214,7 +214,7 @@ export async function previewRequest(
           created_at,
           key: k,
           visitor: (
-            await digest(visitorId() + jst(created_at).slice(0, 10))
+            await digest(visitorId())
           ).slice(0, 32),
           ...page,
         });
@@ -456,6 +456,14 @@ export async function previewRequest(
       to,
       claps: daily(scopedClaps),
       visitors: daily(scopedClaps, true),
+      visitor_total: new Set(
+        scopedClaps
+          .filter((c) => {
+            const d = jst(c.created_at).slice(0, 10);
+            return c.visitor && d >= from && d <= to;
+          })
+          .map((c) => c.visitor),
+      ).size,
       messages: daily(rows.filter(onPage)),
       pages: Array.from(
         s.claps
@@ -504,6 +512,7 @@ export async function previewRequest(
       messages = s.messages.filter((x) => !x.blocked && match(x));
     return {
       day,
+      visitors: new Set(claps.map((c) => c.visitor).filter(Boolean)).size,
       hours: Array.from({ length: 24 }, (_, hour) => {
         const inHour = claps.filter((c) => hourOf(c.created_at) === hour);
         return {

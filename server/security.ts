@@ -76,7 +76,11 @@ export function token() {
     .replace(/\//g, "_")
     .replace(/=/g, "");
 }
-export async function privateKey(request: Request, env: Env) {
+export async function privateKey(
+  request: Request,
+  env: Env,
+  day = now().slice(0, 10),
+) {
   const secret =
     env.SPAM_SECRET ||
     (local(request, env) ? "local-development-spam-secret" : "");
@@ -96,7 +100,7 @@ export async function privateKey(request: Request, env: Env) {
   const signature = await crypto.subtle.sign(
     "HMAC",
     key,
-    new TextEncoder().encode(`${now().slice(0, 10)}:${ip}`),
+    new TextEncoder().encode(`${day}:${ip}`),
   );
   return Array.from(new Uint8Array(signature), (b) =>
     b.toString(16).padStart(2, "0"),

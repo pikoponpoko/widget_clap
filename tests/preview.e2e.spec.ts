@@ -416,6 +416,20 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
   await expect(total).toContainText("拍手 2");
   // Only the clean message counts; the NG one was hidden on arrival.
   await expect(total).toContainText("感想 1");
+  // Tapping a day switches the same chart to that day's hours.
+  const today = await page.evaluate(() =>
+    new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10),
+  );
+  await page
+    .locator(".activity-bars")
+    .getByRole("button", { name: today.replaceAll("-", "/") + " " })
+    .click();
+  await expect(page.getByRole("tab", { name: "時間別" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.locator(".activity-bars .chart-column")).toHaveCount(24);
+  await expect(total).toContainText("拍手 2");
   await page
     .locator(".page-stats")
     .getByRole("button", { name: "ブログ記事" })

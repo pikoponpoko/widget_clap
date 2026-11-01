@@ -543,8 +543,8 @@ small {
 }
 .chart-legend {
   display: flex;
-  gap: 15px;
-  margin: -5px 22px 0;
+  gap: 12px;
+  margin-right: auto;
   font-size: 9px;
   color: #767676;
 }
@@ -566,63 +566,83 @@ small {
 .bar-message {
   background: #4a4a4a;
 }
-.activity-chart {
-  position: relative;
-  margin: 20px 22px 18px;
-  padding: 0 0 22px 24px;
-  height: 158px;
+.activity-heading {
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.chart-grid {
-  position: absolute;
-  inset: 0 0 22px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  pointer-events: none;
+.mode-switch {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
 }
-.chart-grid span {
-  font-size: 8px;
-  color: #767676;
-  position: relative;
+.mode-switch button {
+  border: 0;
+  background: var(--white);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 12px;
+}
+.mode-switch button.active {
+  background: var(--ink);
+  color: var(--white);
+}
+.day-step {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 2px;
 }
-.chart-grid span:after {
-  content: "";
-  height: 1px;
-  flex: 1;
-  background: #f2f2f2;
+.day-step .icon-button {
+  width: 28px;
+  height: 28px;
 }
-.chart-bars {
+.activity-bars {
   display: flex;
-  height: 127px;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: stretch;
+  gap: 3px;
+  height: 104px;
+  margin: 14px 22px 0;
+  padding-bottom: 16px;
   position: relative;
-  z-index: 1;
-  gap: 5px;
+}
+.activity-bars:before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 16px;
+  height: 1px;
+  background: var(--line);
 }
 .chart-column {
   flex: 1;
   min-width: 1px;
-  max-width: 20px;
+  position: relative;
 }
 .chart-stack {
+  height: 100%;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
 }
 .bar-clap,
 .bar-message {
+  display: block;
   border-radius: 2px 2px 0 0;
   min-width: 1px;
 }
-.chart-axis {
-  display: flex;
-  justify-content: space-between;
+.chart-tick {
+  position: absolute;
+  left: 0;
+  top: 100%;
   font-size: 8px;
   color: #767676;
-  margin-top: 8px;
+  white-space: nowrap;
+  line-height: 16px;
+}
+.chart-column:last-child .chart-tick {
+  left: auto;
+  right: 0;
 }
 .chart-loading {
   height: 190px;
@@ -2753,50 +2773,23 @@ html.embed-document {
   font-size: 11px;
   padding: 4px 8px;
 }
-.hour-tables {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  padding: 0 22px;
-}
-.hour-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-.hour-table th {
-  color: #767676;
-  font-weight: 400;
-  text-align: right;
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--line);
-}
-.hour-table td {
-  text-align: right;
-  padding: 3px 6px;
-  border-bottom: 1px solid #f2f2f2;
-}
-.hour-table tr.zero td {
-  color: #adadad;
-}
-.hour-table .hour-bar-cell {
-  width: 45%;
-  text-align: left;
-}
-.hour-bar {
-  display: block;
-  height: 8px;
-  border-radius: 2px;
-  background: #adadad;
-}
 .hour-total {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 18px;
-  padding: 12px 22px 16px;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 18px 22px 14px;
   font-size: 10px;
   color: #767676;
+}
+.hour-picked {
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 10px;
+  padding: 1px 8px;
 }
 .hour-total b {
   color: var(--ink);
@@ -2842,10 +2835,6 @@ html.embed-document {
   padding-left: 14px;
 }
 @media (max-width: 760px) {
-  .hour-tables {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
   .message-check {
     margin-left: 14px;
   }

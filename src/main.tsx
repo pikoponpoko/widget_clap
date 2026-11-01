@@ -20,6 +20,34 @@ if (button) {
   document.documentElement.classList.add("embed-document");
 }
 if (previewMode) document.body.classList.add("browser-preview");
+// Only the admin screen is installable; embedded frames skip this.
+// These files sit outside the Cloudflare Access paths so they load before login.
+if (path === "/admin" || path.startsWith("/admin/")) {
+  for (const [rel, href] of [
+    ["manifest", "/app.webmanifest"],
+    ["apple-touch-icon", "/icons/apple-touch-icon.png"],
+  ]) {
+    const link = document.createElement("link");
+    link.rel = rel;
+    link.href = href;
+    document.head.appendChild(link);
+  }
+  for (const [name, content] of [
+    ["theme-color", "#ffffff"],
+    ["apple-mobile-web-app-title", "Hakushu"],
+    ["mobile-web-app-capable", "yes"],
+    ["apple-mobile-web-app-capable", "yes"],
+  ]) {
+    const meta = document.createElement("meta");
+    meta.name = name;
+    meta.content = content;
+    document.head.appendChild(meta);
+  }
+  if ("serviceWorker" in navigator)
+    navigator.serviceWorker
+      .register("/app-sw.js", { scope: "/admin" })
+      .catch(() => {});
+}
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <Suspense

@@ -1,4 +1,5 @@
 import type { Asset, Message, Project } from "./types";
+import { DEFAULT_REACTIONS } from "./reactions";
 import {
   periodKey,
   periodKeys,
@@ -24,6 +25,14 @@ interface Store {
     page_title?: string;
   }[];
   assets: PreviewAsset[];
+  reactions?: {
+    project_id: string;
+    kind: string;
+    created_at: string;
+    key: string;
+    page_url?: string;
+    page_title?: string;
+  }[];
   clapDays?: {
     project_id: string;
     day: string;
@@ -57,6 +66,7 @@ function initial(): Store {
       tip_privacy_checked: false,
       ng_words: [],
       blocked_sites: [],
+      reactions: [...DEFAULT_REACTIONS],
       claps: 0,
       messages: 0,
     })),
@@ -104,6 +114,7 @@ function read(): Store {
       tip_enabled: p.tip_enabled ?? false,
       ng_words: p.ng_words ?? [],
       blocked_sites: p.blocked_sites ?? [],
+      reactions: p.reactions ?? [...DEFAULT_REACTIONS],
     }));
     return data;
   } catch {
@@ -204,7 +215,9 @@ export async function previewRequest(
       local: false,
       preview: true,
     };
-  let m = p.match(/^\/public\/projects\/([^/]+)(?:\/(claps|messages))?$/);
+  let m = p.match(
+    /^\/public\/projects\/([^/]+)(?:\/(claps|messages|reactions))?$/,
+  );
   if (m) {
     const pr = project(decodeURIComponent(m[1]));
     if (!m[2])
@@ -226,6 +239,29 @@ export async function previewRequest(
           created_at,
           key: k,
           visitor: (await digest(visitorId())).slice(0, 32),
+          ...page,
+        });
+        save(s);
+      }
+      return { ok: true, counted };
+    }
+    if (m[2] === "reactions") {
+      if (!(pr.reactions || []).includes(data.kind))
+        fail("このリアクションは受け付けていません。");
+      const page = previewPage(data);
+      const k =
+        pr.id +
+        page.page_url +
+        data.kind +
+        new Date().toISOString().slice(0, 13);
+      s.reactions ||= [];
+      const counted = !s.reactions.some((r) => r.key === k);
+      if (counted) {
+        s.reactions.push({
+          project_id: pr.id,
+          kind: data.kind,
+          created_at: new Date().toISOString(),
+          key: k,
           ...page,
         });
         save(s);
@@ -601,9 +637,39 @@ export async function previewRequest(
         .map(([day, count]) => ({ day, count }))
         .sort((a, b) => a.day.localeCompare(b.day));
     };
+    const inRange = (r: { created_at: string; project_id: string }) => {
+      const d = jst(r.created_at).slice(0, 10);
+      return (!projectId || r.project_id === projectId) && d >= from && d <= to;
+    };
+    const tally = <T extends { kind: string }>(
+      rows: T[],
+      key: (r: T) => string,
+      init: (r: T) => Record<string, unknown>,
+    ) =>
+      Array.from(
+        rows
+          .reduce((map, r) => {
+            const k = key(r) + "|" + r.kind;
+            const row = map.get(k) || { ...init(r), kind: r.kind, count: 0 };
+            row.count++;
+            return map.set(k, row);
+          }, new Map<string, Record<string, unknown> & { count: number }>())
+          .values(),
+      );
+    const reactions = (s.reactions || []).filter(inRange);
     return {
       from,
       to,
+      reaction_days: tally(
+        reactions.filter(onPage),
+        (r) => jst(r.created_at).slice(0, 10),
+        (r) => ({ day: jst(r.created_at).slice(0, 10) }),
+      ).sort((a, b) => String(a.day).localeCompare(String(b.day))),
+      reaction_pages: tally(
+        reactions,
+        (r) => r.page_url || "",
+        (r) => ({ page_url: r.page_url || "", page_title: r.page_title || "" }),
+      ),
       imported,
       claps: merge(daily(scopedClaps), "claps"),
       visitors: merge(daily(scopedClaps, true), "visitors"),
@@ -637,10 +703,7 @@ export async function previewRequest(
             if (c.created_at > row.last_at) row.last_at = c.created_at;
             row.page_title ||= c.page_title || "";
             return map.set(row.page_url, row);
-          }, new Map<
-            string,
-            { page_url: string; page_title: string; count: number; last_at: string }
-          >())
+          }, new Map<string, { page_url: string; page_title: string; count: number; last_at: string }>())
           .values(),
       )
         .sort((a, b) => b.last_at.localeCompare(a.last_at))

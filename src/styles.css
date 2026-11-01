@@ -2535,8 +2535,20 @@ small {
 }
 .thank-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  gap: 6px;
   margin: 0 0 16px;
+}
+.thank-actions .reaction-button {
+  min-width: 38px;
+  padding: 2px 8px;
+  font-size: 15px;
+  line-height: 1;
+}
+.thank-actions .reaction-button[aria-pressed="true"] {
+  border-color: #262626;
+  background: #f6f6f6;
 }
 .thank-actions .btn {
   min-height: 30px;
@@ -2993,6 +3005,31 @@ html.embed-document {
   width: auto;
   margin-left: 0;
 }
+.reaction-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.reaction-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.reaction-picker .btn {
+  min-width: 38px;
+  min-height: 32px;
+  padding: 2px 8px;
+  font-size: 15px;
+  line-height: 1;
+}
+.reaction-picker .btn[aria-pressed="false"] {
+  opacity: 0.45;
+}
+.reaction-picker .btn[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--soft);
+}
 .widget-presets .btn.active,
 .widget-presets .btn.active:hover:not(:disabled) {
   border-color: var(--ink);
@@ -3171,4 +3208,31 @@ html.embed-document {
   border-radius: 6px;
   padding: 0 6px;
   white-space: nowrap;
+}
+
+.reaction-empty {
+  margin: 0;
+  padding: 4px 22px 18px;
+}
+.reaction-stats li > span:first-child,
+.reaction-stats .page-filter {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reaction-counts {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+}
+.reaction-counts > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 40px;
+}
+.reaction-stats .reaction-total {
+  border-top: 0;
+  font-weight: 600;
 }

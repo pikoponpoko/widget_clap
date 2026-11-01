@@ -1,4 +1,5 @@
 import { embedCode } from "./embed-code";
+import { DEFAULT_REACTIONS, MAX_REACTIONS, REACTIONS } from "./reactions";
 import { cleanTipLabel, defaultTipLabel } from "./page-context";
 import { previewMode } from "./mode";
 import { assetUrl } from "./asset-url";
@@ -226,6 +227,122 @@ function PageStats({
         </li>
       ))}
     </ol>
+  );
+}
+// Reactions pressed on the thank-you screen, per day or per page.
+function ReactionStats({
+  stats,
+  selected,
+  onSelect,
+}: {
+  stats: Stats | null;
+  selected: string;
+  onSelect: (page: string) => void;
+}) {
+  const [mode, setMode] = useState<"days" | "pages">("days");
+  if (!stats) return null;
+  const days = stats.reaction_days || [],
+    pages = stats.reaction_pages || [];
+  const source = mode === "days" ? days : pages;
+  const kinds = REACTIONS.filter((r) => source.some((x) => x.kind === r.key));
+  const total = (k: string) =>
+    source.filter((x) => x.kind === k).reduce((a, x) => a + x.count, 0);
+  type Row = {
+    key: string;
+    label: string;
+    url?: string;
+    counts: Map<string, number>;
+  };
+  const rows = new Map<string, Row>();
+  for (const x of source) {
+    const key = "day" in x ? x.day : x.page_url;
+    const row = rows.get(key) || {
+      key,
+      label:
+        "day" in x
+          ? x.day.replaceAll("-", "/")
+          : x.page_title || pagePath(x.page_url),
+      url: "day" in x ? undefined : x.page_url,
+      counts: new Map(),
+    };
+    row.counts.set(x.kind, (row.counts.get(x.kind) || 0) + x.count);
+    rows.set(key, row);
+  }
+  const sum = (r: Row) => [...r.counts.values()].reduce((a, n) => a + n, 0);
+  const list = [...rows.values()].sort((a, b) =>
+    mode === "days" ? b.key.localeCompare(a.key) : sum(b) - sum(a),
+  );
+  return (
+    <section className="panel activity-panel">
+      <div className="panel-heading activity-heading">
+        <h2>リアクション</h2>
+        <div className="mode-switch" role="tablist">
+          {(
+            [
+              ["days", "日別"],
+              ["pages", "ページ別"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
+              className={mode === m ? "active" : ""}
+              onClick={() => setMode(m)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {!list.length ? (
+        <p className="reaction-empty muted">リアクションはまだありません</p>
+      ) : (
+        <ol className="page-stats reaction-stats">
+          <li className="reaction-total">
+            <span>合計</span>
+            <span className="reaction-counts">
+              {kinds.map((r) => (
+                <span key={r.key} title={r.label}>
+                  {r.emoji}
+                  <b>{total(r.key).toLocaleString()}</b>
+                </span>
+              ))}
+            </span>
+          </li>
+          {list.map((row) => (
+            <li
+              key={row.key}
+              className={selected && row.url === selected ? "active" : ""}
+            >
+              {row.url ? (
+                <button
+                  type="button"
+                  className="page-filter"
+                  aria-pressed={row.url === selected}
+                  onClick={() => onSelect(row.url === selected ? "" : row.url!)}
+                >
+                  {row.label}
+                </button>
+              ) : row.url === "" ? (
+                <span className="muted">プレビュー・直接表示</span>
+              ) : (
+                <span>{row.label}</span>
+              )}
+              <span className="reaction-counts">
+                {kinds.map((r) => (
+                  <span key={r.key} title={r.label}>
+                    {r.emoji}
+                    <b>{(row.counts.get(r.key) || 0).toLocaleString()}</b>
+                  </span>
+                ))}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   );
 }
 // Year/month/day hour:minute in Japan time, e.g. 2026/11/01 16:07.
@@ -824,6 +941,11 @@ export default function App() {
                       onSelect={setPageUrl}
                     />
                   </section>
+                  <ReactionStats
+                    stats={stats.data}
+                    selected={pageUrl}
+                    onSelect={setPageUrl}
+                  />
                   <section className="panel">
                     <div className="panel-heading">
                       <h2>
@@ -1525,6 +1647,7 @@ const blankProject = {
   tip_url: "",
   ng_words: [] as string[],
   blocked_sites: [] as string[],
+  reactions: [...DEFAULT_REACTIONS] as string[],
 };
 function presetOf(f: { clap_enabled: unknown; message_enabled: unknown }) {
   if (!f.clap_enabled) return "";
@@ -1562,6 +1685,7 @@ function ProjectModal({
           tip_url: project.tip_url || "",
           ng_words: project.ng_words || [],
           blocked_sites: project.blocked_sites || [],
+          reactions: project.reactions || [...DEFAULT_REACTIONS],
         };
   const [form, setForm] = useState(initial),
     [ngWords, setNgWords] = useState(initial.ng_words.join("\n")),
@@ -1851,6 +1975,38 @@ function ProjectModal({
                   onChange={(e) => set("thanks_message", e.target.value)}
                 />
               </label>
+              <div className="reaction-setting">
+                <span>リアクション</span>
+                <div className="reaction-picker">
+                  {REACTIONS.map((r) => {
+                    const on = form.reactions.includes(r.key);
+                    return (
+                      <button
+                        type="button"
+                        key={r.key}
+                        className="btn"
+                        aria-label={r.label}
+                        title={r.label}
+                        aria-pressed={on}
+                        disabled={!on && form.reactions.length >= MAX_REACTIONS}
+                        onClick={() =>
+                          set(
+                            "reactions",
+                            on
+                              ? form.reactions.filter((k) => k !== r.key)
+                              : REACTIONS.map((x) => x.key).filter(
+                                  (k) =>
+                                    k === r.key || form.reactions.includes(k),
+                                ),
+                          )
+                        }
+                      >
+                        {r.emoji}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <label>
                 投げ銭リンク
                 <input

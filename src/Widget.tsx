@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { api, inlineProject, send, useApi } from "./api";
 import type { Project } from "./types";
+import { reactionOf } from "./reactions";
 declare global {
   interface Window {
     turnstile?: {
@@ -113,7 +114,8 @@ export function Widget({
     [thanksIndex, setThanksIndex] = useState(() =>
       stage === "button" ? { random: 0, sequence: 0 } : nextThanks(),
     ),
-    [clapBusy, setClapBusy] = useState(false);
+    [clapBusy, setClapBusy] = useState(false),
+    [reacted, setReacted] = useState<string[]>([]);
   const started = useRef(Date.now()),
     requestId = useRef(crypto.randomUUID()),
     lastBody = useRef("");
@@ -200,6 +202,21 @@ export function Widget({
   function open(reason: "clap" | "message") {
     setStage(reason);
     setThanksIndex(nextThanks());
+    setReacted([]);
+  }
+  async function react(kind: string) {
+    if (reacted.includes(kind)) return;
+    setReacted((r) => [...r, kind]);
+    setNotice("");
+    try {
+      await send(
+        "/public/projects/" + encodeURIComponent(slug) + "/reactions",
+        { kind, ...pageContext },
+      );
+    } catch (e) {
+      setReacted((r) => r.filter((k) => k !== kind));
+      setNotice((e as Error).message);
+    }
   }
   async function anotherClap() {
     if (clapBusy) return;
@@ -212,6 +229,7 @@ export function Widget({
       );
       setThanksIndex(nextThanks());
       setStage("clap");
+      setReacted([]);
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
@@ -288,6 +306,9 @@ export function Widget({
             : Math.floor(thanksIndex.random * thanks.length)
       ]
     : null;
+  const reactions = (p.reactions || [])
+    .map(reactionOf)
+    .filter((r) => r !== undefined);
   const thanksEnabled = p.thanks_enabled !== false && p.thanks_enabled !== 0;
   return (
     <div
@@ -316,12 +337,27 @@ export function Widget({
             体験版：このブラウザ内の保存です。作者への送信はありません。
           </p>
         )}
-        {!!p.clap_enabled && (
+        {(!!p.clap_enabled || reactions.length > 0) && (
           <div className="thank-actions">
-            <button className="btn" disabled={clapBusy} onClick={anotherClap}>
-              <ThumbsUp size={14} />
-              {clapBusy ? "送信中…" : "もう一度"}
-            </button>
+            {!!p.clap_enabled && (
+              <button className="btn" disabled={clapBusy} onClick={anotherClap}>
+                <ThumbsUp size={14} />
+                {clapBusy ? "送信中…" : "もう一度"}
+              </button>
+            )}
+            {reactions.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                className="btn reaction-button"
+                aria-label={r.label}
+                title={r.label}
+                aria-pressed={reacted.includes(r.key)}
+                onClick={() => react(r.key)}
+              >
+                {r.emoji}
+              </button>
+            ))}
           </div>
         )}
         {sent ? (

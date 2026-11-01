@@ -114,6 +114,51 @@ test.describe.serial("Phase 1 integrated flow", () => {
     messageId = inbox.items[0].id;
     expect((await result.headers())["cache-control"]).toBe("no-store");
   });
+  test("records reactions per page and day, but not the owner's own", async ({
+    request,
+  }) => {
+    const url = "/api/public/projects/" + slug;
+    const project = await (await request.get(url)).json();
+    expect(project.reactions).toEqual(["heart", "fire", "hundred"]);
+    const page = {
+      page_url: "https://kazukisekiguchi.com/tools/a",
+      page_title: "記事A",
+    };
+    const react = (kind: string) =>
+      request.post(url + "/reactions", { headers, data: { kind, ...page } });
+    expect((await (await react("heart")).json()).counted).toBe(true);
+    expect((await (await react("heart")).json()).counted).toBe(false);
+    expect((await (await react("fire")).json()).counted).toBe(true);
+    expect((await react("clap")).status()).toBe(403);
+    expect((await react("nope")).status()).toBe(400);
+    const stats = await (
+      await request.get("/api/owner/stats?project=" + projectId)
+    ).json();
+    expect(
+      stats.reaction_days.map((x: { kind: string; count: number }) => [
+        x.kind,
+        x.count,
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        ["heart", 1],
+        ["fire", 1],
+      ]),
+    );
+    expect(stats.reaction_pages[0]).toMatchObject({
+      page_url: page.page_url,
+      page_title: "記事A",
+    });
+    // The browser that opened the admin page is not counted.
+    await request.get("/api/owner/session");
+    expect((await (await react("hundred")).json()).counted).toBe(false);
+    const after = await (
+      await request.get("/api/owner/stats?project=" + projectId)
+    ).json();
+    expect(
+      after.reaction_days.some((x: { kind: string }) => x.kind === "hundred"),
+    ).toBe(false);
+  });
   test("delivers private replies; revokes and rotates capability URLs", async ({
     request,
   }) => {
@@ -457,9 +502,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
     expect(
       (await (await request.get("/api/owner/backup-status")).json()).latest,
     ).toBeTruthy();
-    const { backups } = await (
-      await request.get("/api/owner/backups")
-    ).json();
+    const { backups } = await (await request.get("/api/owner/backups")).json();
     expect(backups.map((b: { kind: string }) => b.kind).sort()).toEqual([
       "daily",
       "monthly",
@@ -473,15 +516,15 @@ test.describe.serial("Phase 1 integrated flow", () => {
     expect((await stored.json()).messages).toHaveLength(
       (backup.messages as unknown[]).length,
     );
-    expect(
-      (await request.get("/api/owner/backups/missing")).status(),
-    ).toBe(404);
+    expect((await request.get("/api/owner/backups/missing")).status()).toBe(
+      404,
+    );
     expect(
       (
-        await request.post(
-          "/api/owner/backups/" + listed[0].id + "/restore",
-          { headers, data: { confirmation: "違う" } },
-        )
+        await request.post("/api/owner/backups/" + listed[0].id + "/restore", {
+          headers,
+          data: { confirmation: "違う" },
+        })
       ).status(),
     ).toBe(400);
     const fromCloud = await request.post(
@@ -491,9 +534,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
     expect(fromCloud.status()).toBe(200);
     expect((await fromCloud.json()).assets).toBeGreaterThanOrEqual(2);
   });
-  test("uses the widget on mobile, receives a reply URL", async ({
-    page,
-  }) => {
+  test("uses the widget on mobile, receives a reply URL", async ({ page }) => {
     await page.setExtraHTTPHeaders({
       "CF-Connecting-IP": headers["CF-Connecting-IP"].replace("::1", "::3"),
     });

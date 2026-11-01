@@ -425,7 +425,7 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
   await expect(times.first().locator("time")).toHaveText(
     new RegExp(`^${today.replaceAll("-", "/")} \\d{2}:\\d{2}$`),
   );
-  await page.getByRole("tab", { name: "日別" }).click();
+  await page.getByRole("tab", { name: "日別" }).first().click();
   await page
     .locator(".activity-bars")
     .getByRole("button", { name: today.replaceAll("-", "/") + " " })
@@ -650,7 +650,7 @@ test("the export script walks the old clap log and the days add to the stats", a
   await page.getByRole("button", { name: "3 日分を取り込む" }).click();
   await expect(page.getByText("3 日分の拍手数を取り込みました")).toBeVisible();
   await page.goto("/admin");
-  await page.getByRole("tab", { name: "日別" }).click();
+  await page.getByRole("tab", { name: "日別" }).first().click();
   await expect(page.locator(".hour-total")).toContainText("拍手 16");
   await expect(page.locator(".hour-total")).toContainText("人数 15");
   // Imported days add up into weeks, months and years too.
@@ -689,4 +689,36 @@ test("messages with links start excluded and can be put back", async ({
   await page.getByRole("checkbox", { name: "取り込む" }).nth(1).uncheck();
   await page.getByRole("button", { name: "2 件を取り込む" }).click();
   await expect(page.getByText("2 件を取り込みました")).toBeVisible();
+});
+test("reaction buttons on the thank-you screen are counted per day and page", async ({
+  page,
+}) => {
+  await page.goto("/demo");
+  await page
+    .frameLocator('iframe[title="拍手ボタン"]')
+    .first()
+    .getByRole("button", { name: "拍手を送る", exact: true })
+    .click();
+  const heart = thanksFrame(page).getByRole("button", { name: "ハート" });
+  await heart.click();
+  await expect(heart).toHaveAttribute("aria-pressed", "true");
+  await thanksFrame(page).getByRole("button", { name: "100点" }).click();
+  await expect(
+    thanksFrame(page).getByRole("button", { name: "泣ける" }),
+  ).toHaveCount(0);
+  if (process.env.SHOTS)
+    await page.screenshot({ path: process.env.SHOTS + "/thanks.png" });
+  await page.getByRole("button", { name: "お礼画面を閉じる" }).click();
+  await page.goto("/admin");
+  const panel = page.locator(".panel", {
+    has: page.getByRole("heading", { name: "リアクション" }),
+  });
+  await expect(panel.locator(".reaction-total")).toContainText("❤️1");
+  await expect(panel.locator(".reaction-total")).toContainText("💯1");
+  if (process.env.SHOTS)
+    await panel.screenshot({ path: process.env.SHOTS + "/admin-days.png" });
+  await panel.getByRole("tab", { name: "ページ別" }).click();
+  await expect(panel.locator(".page-filter")).toHaveCount(1);
+  if (process.env.SHOTS)
+    await panel.screenshot({ path: process.env.SHOTS + "/admin-pages.png" });
 });

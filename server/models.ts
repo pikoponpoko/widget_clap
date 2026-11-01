@@ -21,6 +21,7 @@ export interface Project {
   tip_privacy_checked: number;
   ng_words: string;
   blocked_sites: string;
+  reactions: string;
   created_at: string;
 }
 export interface Message {

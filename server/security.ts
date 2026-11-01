@@ -1,5 +1,10 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
+import {
+  DEFAULT_REACTIONS,
+  MAX_REACTIONS,
+  REACTION_KEYS,
+} from "../src/reactions";
 export interface Env {
   DB: D1Database;
   IMAGES: R2Bucket;
@@ -157,6 +162,9 @@ export const clapSchema = z
     page_title: z.string().max(500).default(""),
   })
   .strict();
+export const reactionSchema = clapSchema.extend({
+  kind: z.enum(REACTION_KEYS),
+});
 // The embedding page is reported by the host script. Keep only an http(s) URL.
 // A site is often reachable both with and without "www."; either may embed the button.
 export function normalizePage(input: {
@@ -261,6 +269,11 @@ export const projectSchema = z
       .array(z.string().transform(siteHost).pipe(z.string().min(1).max(253)))
       .max(100)
       .default([]),
+    reactions: z
+      .array(z.enum(REACTION_KEYS))
+      .max(MAX_REACTIONS)
+      .refine((a) => new Set(a).size === a.length)
+      .default(DEFAULT_REACTIONS),
   })
   .strict();
 // "https://www.example.com/a", "example.com" -> "www.example.com" / "example.com"

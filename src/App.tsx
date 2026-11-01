@@ -488,9 +488,21 @@ function ClapTimes({
       {list.map((c, i) => (
         <li key={c.at + i}>
           <time dateTime={c.at}>{clapTime(c.at)}</time>
-          <span className="page-title">
-            {c.page_title || (c.page_url ? pagePath(c.page_url) : "")}
-          </span>
+          {c.page_url ? (
+            <a
+              className="page-link"
+              href={c.page_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span className="page-title">
+                {c.page_title || pagePath(c.page_url)}
+              </span>
+              <ExternalLink size={13} />
+            </a>
+          ) : (
+            <span className="page-title">{c.page_title}</span>
+          )}
         </li>
       ))}
     </ol>

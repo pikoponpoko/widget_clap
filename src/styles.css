@@ -2895,6 +2895,21 @@ html.embed-document {
 .clap-times .page-title {
   color: var(--muted);
 }
+.clap-times .page-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.clap-times .page-link:hover .page-title {
+  text-decoration: underline;
+}
+.clap-times .page-link svg {
+  flex: none;
+  color: var(--muted);
+}
 .hour-total b {
   color: var(--ink);
   font-size: 12px;

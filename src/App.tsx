@@ -239,7 +239,7 @@ function Activity({
   day: string;
   onDay: (day: string) => void;
 }) {
-  const [mode, setMode] = useState<"days" | "hours">("days");
+  const [mode, setMode] = useState<"days" | "hours">("hours");
   const [hour, setHour] = useState<number | null>(null);
   const shift = (n: number) => {
     const d = new Date(day + "T00:00:00Z");
@@ -273,7 +273,7 @@ function Activity({
     columns = hours.hours.map((h) => ({
       key: String(h.hour),
       label: `${h.hour}時`,
-      tick: h.hour % 6 ? "" : String(h.hour),
+      tick: String(h.hour),
       ...h,
     }));
   const picked =
@@ -379,7 +379,13 @@ function Activity({
                       style={{ height: `${(c.claps / max) * 100}%` }}
                     />
                   </span>
-                  <span className="chart-tick">{c.tick}</span>
+                  <span
+                    className={
+                      "chart-tick " + (mode === "hours" ? "centered" : "")
+                    }
+                  >
+                    {c.tick}
+                  </span>
                 </button>
               );
             })}
@@ -2919,15 +2925,17 @@ function StatsPrintModal({
   );
 }
 async function hasNewVersion() {
-  const current = document.querySelector<HTMLScriptElement>(
-    "script[type=module][src]",
-  )?.getAttribute("src");
+  const current = document
+    .querySelector<HTMLScriptElement>("script[type=module][src]")
+    ?.getAttribute("src");
   if (!current) return false;
   try {
     const res = await fetch(location.pathname, { cache: "no-store" });
     if (!res.ok) return false;
     const html = await res.text();
-    const latest = html.match(/<script[^>]*type="module"[^>]*src="([^"]+)"/)?.[1];
+    const latest = html.match(
+      /<script[^>]*type="module"[^>]*src="([^"]+)"/,
+    )?.[1];
     return !!latest && latest !== current;
   } catch {
     // An expired login redirects to Cloudflare Access; the data refresh handles that.

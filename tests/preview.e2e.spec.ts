@@ -406,7 +406,9 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
   await expect(total).toContainText("拍手 2");
   // Only the clean message counts; the NG one was hidden on arrival.
   await expect(total).toContainText("感想 1");
-  // Tapping a day switches the same chart to that day's hours.
+  // The chart opens on hours; tapping a day switches it to that day's hours.
+  await expect(page.locator(".activity-bars .chart-column")).toHaveCount(24);
+  await page.getByRole("tab", { name: "日別" }).click();
   const today = await page.evaluate(() =>
     new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10),
   );
@@ -632,6 +634,7 @@ test("the export script walks the old clap log and the days add to the stats", a
   await page.getByRole("button", { name: "3 日分を取り込む" }).click();
   await expect(page.getByText("3 日分の拍手数を取り込みました")).toBeVisible();
   await page.goto("/admin");
+  await page.getByRole("tab", { name: "日別" }).click();
   await expect(page.locator(".hour-total")).toContainText("拍手 16");
   await expect(page.locator(".hour-total")).toContainText("人数 15");
 });

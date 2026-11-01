@@ -644,6 +644,11 @@ small {
   left: auto;
   right: 0;
 }
+.chart-column .chart-tick.centered {
+  left: 0;
+  right: 0;
+  text-align: center;
+}
 .chart-loading {
   height: 190px;
   padding: 50px 22px;

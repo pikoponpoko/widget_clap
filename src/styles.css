@@ -2899,27 +2899,39 @@ html.embed-document {
 .page-stats li {
   align-items: center;
 }
-.page-stats li > a {
+.page-stats .page-link {
   display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-right: auto;
+}
+.page-stats .page-link:hover .page-title {
+  text-decoration: underline;
+}
+.page-stats .page-link svg {
+  flex: none;
+  color: var(--muted);
+}
+.page-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.page-path {
   color: var(--muted);
 }
 .page-filter {
-  min-width: 0;
-  padding: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left;
-  font-size: inherit;
-}
-.page-path {
-  margin-left: 8px;
+  flex: none;
+  width: 28px;
+  height: 28px;
   color: var(--muted);
 }
-.page-stats li.active .page-filter {
+.page-filter[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--white);
+}
+.page-stats li.active .page-title {
   font-weight: 600;
-  text-decoration: underline;
 }
 .widget-settings .modal-tabs {
   padding: 0 22px;

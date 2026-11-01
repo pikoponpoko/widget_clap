@@ -577,6 +577,24 @@ test.describe.serial("Phase 1 integrated flow", () => {
     await expect(
       page.getByRole("combobox", { name: "作品で絞り込む" }),
     ).toHaveCount(0);
+    // A page title opens the page itself; the filter button narrows the dashboard.
+    const pageRow = page.locator(".page-stats li").filter({
+      has: page.locator(".page-link"),
+    });
+    await expect(pageRow.first().locator(".page-link")).toHaveAttribute(
+      "href",
+      /^https?:\/\//,
+    );
+    await expect(pageRow.first().locator(".page-link")).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+    const filter = pageRow.first().locator(".page-filter");
+    await filter.click();
+    await expect(filter).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".page-stats li")).not.toHaveCount(0);
+    await filter.click();
+    await expect(filter).toHaveAttribute("aria-pressed", "false");
     await page.screenshot({
       path: "test-results/dashboard-desktop.png",
       fullPage: true,

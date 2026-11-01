@@ -114,15 +114,22 @@ app.use("/api/owner/*", async (c, next) => {
   if (!["GET", "HEAD"].includes(c.req.method)) assertSameOrigin(c.req.raw);
   await next();
 });
-app.get("/api/owner/session", (c) =>
-  c.json({
+const OWNER_COOKIE = "hakushu_owner";
+app.get("/api/owner/session", (c) => {
+  // Marks this browser so its own claps are left out of the stats.
+  c.header(
+    "Set-Cookie",
+    `${OWNER_COOKIE}=1; Path=/api/public; Max-Age=34560000; HttpOnly; ` +
+      (local(c.req.raw, c.env) ? "SameSite=Lax" : "Secure; SameSite=None"),
+  );
+  return c.json({
     role: "owner",
     plan: "owner",
     billing: "exempt",
     local: local(c.req.raw, c.env),
     tip_links_enabled: c.env.TIP_LINKS_ENABLED === "true",
-  }),
-);
+  });
+});
 app.get("/api/public/projects/:slug", async (c) => {
   const p = await projectBy(c.env, c.req.param("slug"));
   return c.json(safeProject(p, c.env, await assetList(c.env, p.id)));
@@ -135,11 +142,17 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
   await limit(c.env, `clap:${key}`, 60, 60);
+  if (
+    (c.req.header("Cookie") || "")
+      .split(";")
+      .some((x) => x.trim() === `${OWNER_COOKIE}=1`)
+  )
+    return c.json({ ok: true, counted: false });
   const dedupe = await hash(
     `${key}:${p.id}:${page.page_url}:${now().slice(0, 13)}`,
   );
-  // Daily-salted so visitors cannot be linked across days.
-  const visitor = (await hash(`${key}:visitor:${jstDay()}`)).slice(0, 32);
+  // Same connection, same visitor on every day, so totals over many days stay true.
+  const visitor = (await privateKey(c.req.raw, c.env, "visitor")).slice(0, 32);
   const result = await c.env.DB.prepare(
     "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor) SELECT ?,?,?,?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
   )
@@ -588,7 +601,7 @@ app.get("/api/owner/stats", async (c) => {
     pageSuffix = suffix + (pageUrl ? " AND page_url=?" : ""),
     pageArgs = pageUrl ? [...args, pageUrl] : args,
     day = "strftime('%Y-%m-%d',created_at,'+9 hours')";
-  const [claps, messages, totals, pages, visitors] = await c.env.DB.batch([
+  const [claps, messages, totals, pages, visitors, people] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT ${day} AS day,count(*) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
     ).bind(...pageArgs),
@@ -604,11 +617,15 @@ app.get("/api/owner/stats", async (c) => {
     c.env.DB.prepare(
       `SELECT ${day} AS day,count(DISTINCT visitor) AS count FROM claps WHERE visitor<>'' AND created_at>=? AND created_at<=?${pageSuffix} GROUP BY day ORDER BY day`,
     ).bind(...pageArgs),
+    c.env.DB.prepare(
+      `SELECT count(DISTINCT NULLIF(visitor,'')) AS count FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix}`,
+    ).bind(...pageArgs),
   ]);
   return c.json({
     claps: claps.results,
     messages: messages.results,
     visitors: visitors.results,
+    visitor_total: (people.results[0] as { count: number }).count || 0,
     totals: totals.results[0],
     pages: pages.results,
     from: start,
@@ -635,12 +652,15 @@ app.get("/api/owner/stats/hours", async (c) => {
     args.push(pageUrl);
   }
   const hour = "CAST(strftime('%H',created_at,'+9 hours') AS INTEGER)";
-  const [claps, messages] = await c.env.DB.batch([
+  const [claps, messages, people] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT ${hour} AS hour,count(*) AS claps,count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY hour`,
     ).bind(...args),
     c.env.DB.prepare(
       `SELECT ${hour} AS hour,count(*) AS messages FROM messages WHERE blocked=0 AND created_at>=? AND created_at<=?${suffix} GROUP BY hour`,
+    ).bind(...args),
+    c.env.DB.prepare(
+      `SELECT count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE created_at>=? AND created_at<=?${suffix}`,
     ).bind(...args),
   ]);
   const c2 = claps.results as {
@@ -651,6 +671,7 @@ app.get("/api/owner/stats/hours", async (c) => {
     m2 = messages.results as { hour: number; messages: number }[];
   return c.json({
     day,
+    visitors: (people.results[0] as { visitors: number }).visitors || 0,
     hours: Array.from({ length: 24 }, (_, h) => ({
       hour: h,
       claps: c2.find((x) => x.hour === h)?.claps || 0,

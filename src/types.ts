@@ -64,5 +64,4 @@ export interface HourStats {
   day: string;
   visitors?: number;
   hours: { hour: number; claps: number; visitors: number; messages: number }[];
-  visitors?: number;
 }

@@ -2862,6 +2862,27 @@ html.embed-document {
   font-size: 10px;
   padding: 1px 8px;
 }
+.clap-times {
+  list-style: none;
+  margin: 0;
+  padding: 0 22px 12px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.clap-times li {
+  display: flex;
+  gap: 16px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+.clap-times time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.clap-times .page-title {
+  color: var(--muted);
+}
 .hour-total b {
   color: var(--ink);
   font-size: 12px;

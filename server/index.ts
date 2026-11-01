@@ -879,7 +879,7 @@ app.get("/api/owner/stats/hours", async (c) => {
     args.push(pageUrl);
   }
   const hour = "CAST(strftime('%H',created_at,'+9 hours') AS INTEGER)";
-  const [claps, messages, people] = await c.env.DB.batch([
+  const [claps, messages, people, times] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT ${hour} AS hour,count(*) AS claps,count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY hour`,
     ).bind(...args),
@@ -888,6 +888,9 @@ app.get("/api/owner/stats/hours", async (c) => {
     ).bind(...args),
     c.env.DB.prepare(
       `SELECT count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE created_at>=? AND created_at<=?${suffix}`,
+    ).bind(...args),
+    c.env.DB.prepare(
+      `SELECT created_at AS at,page_url,page_title FROM claps WHERE created_at>=? AND created_at<=?${suffix} ORDER BY created_at DESC LIMIT 1000`,
     ).bind(...args),
   ]);
   const c2 = claps.results as {
@@ -905,6 +908,7 @@ app.get("/api/owner/stats/hours", async (c) => {
       visitors: c2.find((x) => x.hour === h)?.visitors || 0,
       messages: m2.find((x) => x.hour === h)?.messages || 0,
     })),
+    claps: times.results,
   });
 });
 app.get("/api/owner/export", async (c) => {

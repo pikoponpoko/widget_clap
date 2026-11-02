@@ -324,6 +324,10 @@ small {
   margin-bottom: 29px;
   gap: 12px;
 }
+.heading-actions {
+  display: flex;
+  gap: 4px;
+}
 .page-heading h1 {
   font-size: 25px;
   font-weight: 500;
@@ -2085,41 +2089,15 @@ small {
     animation: none !important;
   }
 }
-.date-range {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-.date-range input {
-  font-size: 10px;
-  padding: 7px 9px;
-  min-width: 0;
-}
-.date-range + .scope-meta {
-  margin-left: 0;
-}
 @media (max-width: 1180px) {
   .scope-bar {
     flex-wrap: wrap;
-  }
-  .date-range {
-    margin-left: 0;
   }
   .scope-meta {
     margin-left: auto;
   }
 }
 @media (max-width: 720px) {
-  .date-range {
-    order: 3;
-    width: 100%;
-  }
-  .date-range input {
-    flex: 1;
-    max-width: 160px;
-    font-size: 10px;
-  }
   .scope-bar {
     gap: 10px;
   }
@@ -2898,14 +2876,6 @@ html.embed-document {
 }
 .widget-settings .modal-body {
   padding: 22px;
-}
-.date-bar {
-  flex-wrap: nowrap;
-}
-.date-bar .date-range {
-  order: 0;
-  width: auto;
-  margin-left: 0;
 }
 .reaction-setting {
   display: flex;

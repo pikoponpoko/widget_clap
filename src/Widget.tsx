@@ -322,9 +322,7 @@ export function Widget({
     >
       <section className="support-widget">
         {!embedded && <div className="widget-logo">Hakushu</div>}
-        {(sent || stage !== "clap") && (
-          <h1>{sent ? "送信しました" : "メッセージ"}</h1>
-        )}
+        <h1>{sent || stage === "clap" ? "送信しました" : "メッセージ"}</h1>
         {thanksEnabled && (stage === "clap" || sent) && (
           <div className="thank-art">
             <img

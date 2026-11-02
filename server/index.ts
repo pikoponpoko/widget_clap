@@ -782,6 +782,9 @@ app.post("/api/owner/projects/:id/assets", async (c) => {
   const kind = c.req.query("kind");
   if (kind !== "button" && kind !== "thanks")
     throw new ApiError(400, "画像の用途を選択してください。");
+  const scale = kind === "button" ? c.req.query("scale") : undefined;
+  if (scale !== undefined && scale !== "2" && scale !== "3")
+    throw new ApiError(400, "画像の倍率が正しくありません。");
   const bytes = await readBounded(c.req.raw, 2 * 1024 * 1024);
   const v = validateImage(bytes);
   const assetId = id();
@@ -798,7 +801,7 @@ app.post("/api/owner/projects/:id/assets", async (c) => {
         key,
         v.mime,
         bytes.length,
-        "画像",
+        scale ? `画像@${scale}x` : "画像",
         now(),
         c.req.param("id"),
         bytes.length,

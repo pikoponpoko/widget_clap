@@ -94,6 +94,17 @@ async function publicProject(env: Env, slug: string) {
     return { p: project, assets, fallback: true };
   }
 }
+// Runs a D1 step; a database failure is reported as false so the caller can keep the post in R2.
+async function tryDb(step: () => Promise<unknown>) {
+  try {
+    await step();
+    return true;
+  } catch (error) {
+    if (!isDbFailure(error)) throw error;
+    console.error("d1_write_fallback", (error as Error).name);
+    return false;
+  }
+}
 function reactionList(raw: string | undefined) {
   try {
     const list = JSON.parse(raw || "[]");
@@ -181,13 +192,16 @@ app.get("/api/public/projects/:slug", async (c) => {
 });
 app.post("/api/public/projects/:slug/claps", async (c) => {
   assertSameOrigin(c.req.raw);
-  const { p, fallback } = await publicProject(c.env, c.req.param("slug"));
+  const project = await publicProject(c.env, c.req.param("slug"));
+  const p = project.p;
+  let fallback = project.fallback;
   if (!p.clap_enabled) throw new ApiError(403, "拍手は現在お休み中です。");
   const body = await jsonBody(c.req.raw, clapBodySchema, 4000);
   const page = normalizePage(body);
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
-  if (!fallback) await limit(c.env, `clap:${key}`, 60, 60);
+  if (!fallback)
+    fallback = !(await tryDb(() => limit(c.env, `clap:${key}`, 60, 60)));
   if (isOwnerBrowser(c.req.raw)) return c.json({ ok: true, counted: false });
   const dedupe = await hash(
     `${key}:${p.id}:${page.page_url}:${now().slice(0, 13)}`,
@@ -196,11 +210,15 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   const visitor = (await privateKey(c.req.raw, c.env, "visitor")).slice(0, 32);
   // Raw IPs are never stored: the place comes from Cloudflare, the person from the hashed visitor.
   const cf = (c.req.raw as { cf?: Record<string, unknown> }).cf || {};
-  const seen = fallback
-    ? null
-    : await c.env.DB.prepare("SELECT 1 FROM claps WHERE visitor=? LIMIT 1")
+  let seen: unknown = null;
+  if (!fallback)
+    fallback = !(await tryDb(async () => {
+      seen = await c.env.DB.prepare(
+        "SELECT 1 FROM claps WHERE visitor=? LIMIT 1",
+      )
         .bind(visitor)
         .first();
+    }));
   const attrs = buildAttrs({
     country: cf.country,
     region: cf.region,
@@ -214,100 +232,100 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
     pageUrl: page.page_url,
     repeat: !!seen,
   });
+  const row = {
+    id: id(),
+    project_id: p.id,
+    created_at: now(),
+    dedupe_key: dedupe,
+    page_url: page.page_url,
+    page_title: page.page_title,
+    visitor,
+    attrs: JSON.stringify(attrs),
+  };
+  let changes = 0;
+  if (!fallback)
+    fallback = !(await tryDb(async () => {
+      const result = await c.env.DB.prepare(
+        "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor,attrs) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
+      )
+        .bind(row.id, row.project_id, row.created_at, row.dedupe_key, row.page_url, row.page_title, row.visitor, row.attrs)
+        .run();
+      changes = result.meta.changes;
+      if (
+        !changes &&
+        !(await c.env.DB.prepare("SELECT id FROM claps WHERE dedupe_key=?")
+          .bind(dedupe)
+          .first())
+      )
+        throw new ApiError(
+          503,
+          "受付容量に達しています。作者の整理後にお試しください。",
+        );
+    }));
   if (fallback) {
-    // Kept in R2 and moved into D1 once it can be read again.
-    await queueRow(c.env, "claps", {
-      id: id(),
-      project_id: p.id,
-      created_at: now(),
-      dedupe_key: dedupe,
-      page_url: page.page_url,
-      page_title: page.page_title,
-      visitor,
-      attrs: JSON.stringify(attrs),
-    });
+    // Kept in R2 and moved into D1 once it can be used again.
+    await queueRow(c.env, "claps", row);
     return c.json({ ok: true, counted: true });
   }
-  const result = await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor,attrs) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
-  )
-    .bind(
-      id(),
-      p.id,
-      now(),
-      dedupe,
-      page.page_url,
-      page.page_title,
-      visitor,
-      JSON.stringify(attrs),
-    )
-    .run();
-  if (
-    !result.meta.changes &&
-    !(await c.env.DB.prepare("SELECT id FROM claps WHERE dedupe_key=?")
-      .bind(dedupe)
-      .first())
-  )
-    throw new ApiError(
-      503,
-      "受付容量に達しています。作者の整理後にお試しください。",
-    );
-  return c.json({ ok: true, counted: result.meta.changes > 0 });
+  return c.json({ ok: true, counted: changes > 0 });
 });
 app.post("/api/public/projects/:slug/reactions", async (c) => {
   assertSameOrigin(c.req.raw);
-  const { p, fallback } = await publicProject(c.env, c.req.param("slug"));
+  const project = await publicProject(c.env, c.req.param("slug"));
+  const p = project.p;
+  let fallback = project.fallback;
   const data = await jsonBody(c.req.raw, reactionSchema, 4000);
   if (!reactionList(p.reactions).includes(data.kind))
     throw new ApiError(403, "このリアクションは受け付けていません。");
   const page = normalizePage(data);
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
-  if (!fallback) await limit(c.env, `reaction:${key}`, 60, 60);
+  if (!fallback)
+    fallback = !(await tryDb(() => limit(c.env, `reaction:${key}`, 60, 60)));
   if (isOwnerBrowser(c.req.raw)) return c.json({ ok: true, counted: false });
   const dedupe = await hash(
     `${key}:${p.id}:${page.page_url}:${data.kind}:${now().slice(0, 13)}`,
   );
   const visitor = (await privateKey(c.req.raw, c.env, "visitor")).slice(0, 32);
+  const row = {
+    id: id(),
+    project_id: p.id,
+    kind: data.kind,
+    created_at: now(),
+    dedupe_key: dedupe,
+    page_url: page.page_url,
+    page_title: page.page_title,
+    visitor,
+  };
+  let changes = 0;
+  if (!fallback)
+    fallback = !(await tryDb(async () => {
+      const result = await c.env.DB.prepare(
+        "INSERT OR IGNORE INTO reactions(id,project_id,kind,created_at,dedupe_key,page_url,page_title,visitor) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM reactions)<20000",
+      )
+        .bind(row.id, row.project_id, row.kind, row.created_at, row.dedupe_key, row.page_url, row.page_title, row.visitor)
+        .run();
+      changes = result.meta.changes;
+    }));
   if (fallback) {
-    await queueRow(c.env, "reactions", {
-      id: id(),
-      project_id: p.id,
-      kind: data.kind,
-      created_at: now(),
-      dedupe_key: dedupe,
-      page_url: page.page_url,
-      page_title: page.page_title,
-      visitor,
-    });
+    await queueRow(c.env, "reactions", row);
     return c.json({ ok: true, counted: true });
   }
-  const result = await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO reactions(id,project_id,kind,created_at,dedupe_key,page_url,page_title,visitor) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM reactions)<20000",
-  )
-    .bind(
-      id(),
-      p.id,
-      data.kind,
-      now(),
-      dedupe,
-      page.page_url,
-      page.page_title,
-      visitor,
-    )
-    .run();
-  return c.json({ ok: true, counted: result.meta.changes > 0 });
+  return c.json({ ok: true, counted: changes > 0 });
 });
 app.post("/api/public/projects/:slug/messages", async (c) => {
   assertSameOrigin(c.req.raw);
-  const { p, fallback } = await publicProject(c.env, c.req.param("slug"));
+  const project = await publicProject(c.env, c.req.param("slug"));
+  const p = project.p;
+  let fallback = project.fallback;
   if (!p.message_enabled)
     throw new ApiError(403, "感想の受付は現在お休み中です。");
   const data = await jsonBody(c.req.raw, messageSchema);
   const page = normalizePage(data);
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
-  if (!fallback) await limit(c.env, `attempt:${key}`, 40, 3600);
+  if (!fallback)
+    fallback = !(await tryDb(() => limit(c.env, `attempt:${key}`, 40, 3600)));
   // The owner's own test messages are not saved, like their claps.
   if (isOwnerBrowser(c.req.raw))
     return c.json({ ok: true, reply_token: null, counted: false }, 201);
@@ -322,77 +340,78 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
   )
     ? 1
     : 0;
-  if (fallback) {
-    // Spam checks still run; the rate limit and capacity need D1 and wait for it.
-    await checkSpam(c.req.raw, c.env, data);
-    await queueRow(c.env, "messages", {
-      id: id(),
-      project_id: p.id,
-      body: data.body,
-      created_at: now(),
-      publication_consent: data.publication_consent ? 1 : 0,
-      reply_token_hash: p.reply_enabled ? await hash(replyToken) : null,
-      dedupe_key: dedupe,
-      page_url: page.page_url,
-      page_title: page.page_title,
-      sender_name: data.sender_name,
-      reply_wanted: data.reply_wanted === null ? null : Number(data.reply_wanted),
-      blocked,
-    });
-    return c.json(
-      { ok: true, reply_token: p.reply_enabled ? replyToken : null },
-      201,
-    );
-  }
-  const existing = await c.env.DB.prepare(
-    "SELECT id,reply_token_hash FROM messages WHERE dedupe_key=? AND project_id=?",
-  )
-    .bind(dedupe, p.id)
-    .first<{ id: string; reply_token_hash: string | null }>();
+  const row = {
+    id: id(),
+    project_id: p.id,
+    body: data.body,
+    created_at: now(),
+    publication_consent: data.publication_consent ? 1 : 0,
+    reply_token_hash: p.reply_enabled ? await hash(replyToken) : null,
+    dedupe_key: dedupe,
+    page_url: page.page_url,
+    page_title: page.page_title,
+    sender_name: data.sender_name,
+    reply_wanted: data.reply_wanted === null ? null : Number(data.reply_wanted),
+    blocked,
+  };
+  let existing: { id: string; reply_token_hash: string | null } | null = null;
+  if (!fallback)
+    fallback = !(await tryDb(async () => {
+      existing = await c.env.DB.prepare(
+        "SELECT id,reply_token_hash FROM messages WHERE dedupe_key=? AND project_id=?",
+      )
+        .bind(dedupe, p.id)
+        .first<{ id: string; reply_token_hash: string | null }>();
+    }));
   if (existing) {
+    const found = existing as { reply_token_hash: string | null };
     return c.json({
       ok: true,
       reply_token:
-        existing.reply_token_hash === (await hash(replyToken))
-          ? replyToken
-          : null,
+        found.reply_token_hash === (await hash(replyToken)) ? replyToken : null,
       duplicate: true,
     });
   }
+  // Spam checks always run; only the D1 steps below fall back to R2.
   await checkSpam(c.req.raw, c.env, data);
-  await limit(c.env, `message:${key}`, 5, 3600);
-  // Global capacity bounds backups and prevents unbounded D1 growth in this single-owner edition.
-  const result = await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,publication_consent,reply_token_hash,dedupe_key,page_url,page_title,sender_name,reply_wanted,blocked) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
-  )
-    .bind(
-      id(),
-      p.id,
-      data.body,
-      now(),
-      data.publication_consent ? 1 : 0,
-      p.reply_enabled ? await hash(replyToken) : null,
-      dedupe,
-      page.page_url,
-      page.page_title,
-      data.sender_name,
-      data.reply_wanted === null ? null : Number(data.reply_wanted),
-      blocked,
-      new TextEncoder().encode(data.body).length,
-    )
-    .run();
-  if (!result.meta.changes) {
-    const retry = await c.env.DB.prepare(
-      "SELECT id FROM messages WHERE dedupe_key=?",
-    )
-      .bind(dedupe)
-      .first();
-    if (!retry)
-      throw new ApiError(
-        503,
-        "受付容量に達しています。作者の整理後にお試しください。",
-      );
-  }
+  if (!fallback)
+    fallback = !(await tryDb(async () => {
+      await limit(c.env, `message:${key}`, 5, 3600);
+      // Global capacity bounds backups and prevents unbounded D1 growth in this single-owner edition.
+      const result = await c.env.DB.prepare(
+        "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,publication_consent,reply_token_hash,dedupe_key,page_url,page_title,sender_name,reply_wanted,blocked) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
+      )
+        .bind(
+          row.id,
+          row.project_id,
+          row.body,
+          row.created_at,
+          row.publication_consent,
+          row.reply_token_hash,
+          row.dedupe_key,
+          row.page_url,
+          row.page_title,
+          row.sender_name,
+          row.reply_wanted,
+          row.blocked,
+          new TextEncoder().encode(data.body).length,
+        )
+        .run();
+      if (!result.meta.changes) {
+        const retry = await c.env.DB.prepare(
+          "SELECT id FROM messages WHERE dedupe_key=?",
+        )
+          .bind(dedupe)
+          .first();
+        if (!retry)
+          throw new ApiError(
+            503,
+            "受付容量に達しています。作者の整理後にお試しください。",
+          );
+      }
+    }));
+  // Kept in R2 while D1 cannot be used; the rate limit and capacity wait for it.
+  if (fallback) await queueRow(c.env, "messages", row);
   return c.json(
     { ok: true, reply_token: p.reply_enabled ? replyToken : null },
     201,

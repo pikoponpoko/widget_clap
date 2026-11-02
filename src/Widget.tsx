@@ -322,6 +322,9 @@ export function Widget({
     >
       <section className="support-widget">
         {!embedded && <div className="widget-logo">Hakushu</div>}
+        {(sent || stage !== "clap") && (
+          <h1>{sent ? "送信しました" : "メッセージ"}</h1>
+        )}
         {thanksEnabled && (stage === "clap" || sent) && (
           <div className="thank-art">
             <img
@@ -333,9 +336,6 @@ export function Widget({
         )}
         {(stage === "clap" || sent) && p.thanks_message && (
           <p className="thank-message">{p.thanks_message}</p>
-        )}
-        {(sent || stage !== "clap") && (
-          <h1>{sent ? "送信しました" : "メッセージ"}</h1>
         )}
         {previewMode && (
           <p className="preview-widget-note">

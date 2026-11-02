@@ -2398,6 +2398,12 @@ small {
 .thank-stage .thank-art {
   margin: 0 0 12px;
 }
+.thank-stage .support-widget h1 {
+  font-family: "Zen Kaku Gothic New", "Noto Sans JP", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
 .thank-actions {
   display: flex;
   flex-wrap: wrap;

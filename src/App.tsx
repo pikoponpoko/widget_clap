@@ -241,7 +241,6 @@ function PageStats({
 // Who clapped: place, language, device, referrer, screen and first time or not.
 const ATTR_TITLES: Record<AttrKey, string> = {
   region: "地域",
-  city: "市区町村",
   lang: "言語",
   device: "端末",
   os: "OS",
@@ -272,18 +271,15 @@ function referrerName(host: string) {
 }
 // Unknown values are left out of the lists.
 function attrKnown(k: AttrKey, v: string) {
-  const [country, region, city] = v.split("|");
-  if (k === "region") return !!(country || region);
-  if (k === "city") return !!city;
+  if (k === "region") return v !== "|";
   return !!v;
 }
 function attrLabel(k: AttrKey, v: string) {
-  if (k === "region" || k === "city") {
-    const [country, region, city] = v.split("|");
+  if (k === "region") {
+    const [country, region] = v.split("|");
     const nation =
       country && country !== "JP" ? displayName("region", country) : "";
-    const parts = k === "city" ? [city, region, nation] : [nation, region];
-    return parts.filter(Boolean).join(" ");
+    return [nation, region].filter(Boolean).join(" ");
   }
   if (k === "referrer") return referrerName(v);
   if (k === "lang") return displayName("language", v);

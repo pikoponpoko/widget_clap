@@ -1306,7 +1306,7 @@ small {
   align-items: start;
 }
 .select-all {
-  padding: 12px 22px;
+  padding: 9px 22px;
   margin: 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -1317,20 +1317,20 @@ small {
 }
 .print-message {
   display: flex;
-  gap: 13px;
-  padding: 16px 22px;
+  gap: 12px;
+  padding: 9px 22px;
   cursor: pointer;
   border-bottom: 1px solid var(--line);
 }
 .print-message > input {
-  margin-top: 5px;
+  margin-top: 3px;
 }
 .print-message small {
   font-size: 9px;
   color: #767676;
 }
 .print-message p {
-  margin-top: 6px;
+  margin-top: 2px;
   font-size: 11px;
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -1356,13 +1356,11 @@ small {
   font-size: 10px;
 }
 .print-card-preview {
-  aspect-ratio: 91/55;
   border: 1px solid #e4e4e4;
   border-radius: 2px;
-  padding: 14px;
+  padding: 12px 14px;
   margin: 20px 0;
   background: white;
-  box-shadow: 0 2px 5px #00000006;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1376,14 +1374,19 @@ small {
 .print-card-preview p {
   font-size: 10px;
   line-height: 1.9;
-  margin-top: 9px;
+  margin-top: 8px;
   overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.print-card-preview p:first-child {
+  margin-top: 0;
+}
 .print-card-preview span {
-  margin-top: auto;
-  padding-top: 10px;
+  padding-top: 8px;
   font-size: 7px;
   color: #767676;
 }

@@ -2409,7 +2409,8 @@ function PrintPanel({
                   />
                   <span>
                     <small>
-                      {m.page_title || m.project_title} · {date(m.created_at)}
+                      {m.page_title ? m.page_title + " · " : ""}
+                      {date(m.created_at)}
                     </small>
                     <p>{m.body}</p>
                   </span>
@@ -2486,9 +2487,7 @@ function PrintPanel({
               裁断線を付ける
             </label>
             <div className="print-card-preview">
-              <small>
-                {preview?.page_title || preview?.project_title || "ページ名"}
-              </small>
+              {preview?.page_title && <small>{preview.page_title}</small>}
               <p>{preview?.body || "メッセージ本文"}</p>
               <span>
                 {preview ? date(preview.created_at) : "91 × 55 mm"} · 私的保存用

@@ -141,19 +141,54 @@ export function fromCells(rows: string[][]): ImportRow[] {
     const body = cells
       .filter((c, i) => !used.has(i) && c.trim())
       .sort((a, b) => b.trim().length - a.trim().length)[0];
-    if (body?.trim())
-      out.push({ created_at: created, sender_name: "", body: body.trim() });
+    let [text, name = ""] = (body || "").split(NAME);
+    // A reply mark printed after the name belongs to the message.
+    const mark = name.match(/\s*(レス(?:不要|希望|要))\s*$/);
+    if (mark) {
+      name = name.slice(0, mark.index);
+      text += " " + mark[1];
+    }
+    if (text.trim())
+      out.push({
+        created_at: created,
+        sender_name: name.trim(),
+        body: text.trim(),
+      });
   }
   return out;
 }
 
 /** Reads the message table out of a copied or saved web page. */
+const NAME = "\u001f";
 export function parseImportHtml(html: string): ImportRow[] {
   const doc = new DOMParser().parseFromString(html, "text/html");
   doc.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
   doc
     .querySelectorAll("script,style,input,select,button")
     .forEach((x) => x.remove());
+  // The old service appends the sender as a trailing bold "by name",
+  // optionally followed by a "URL" link to their site and the reply mark.
+  doc.querySelectorAll("td > b, td > font, td > span").forEach((el) => {
+    const m = (el.textContent || "").trim().match(/^by\s+(.+)$/);
+    if (!m) return;
+    let site = "";
+    const rest: Node[] = [];
+    for (let n = el.nextSibling; n; n = n.nextSibling) rest.push(n);
+    for (const n of rest) {
+      const t = (n.textContent || "").trim();
+      if (!t || /^レス(不要|希望|要)$/.test(t)) continue;
+      const link =
+        n.nodeType === 1
+          ? (n as HTMLElement).closest("a") ||
+            (n as HTMLElement).querySelector("a")
+          : null;
+      if (t !== "URL" || !link) return;
+      site = link.getAttribute("href") || "";
+      n.parentNode?.removeChild(n);
+    }
+    const name = m[1].trim() + (site ? ` (${site})` : "");
+    el.replaceWith(`\n${NAME}${name}`);
+  });
   const rows = Array.from(doc.querySelectorAll("tr"))
     .filter((tr) => !tr.querySelector("tr"))
     .map((tr) =>

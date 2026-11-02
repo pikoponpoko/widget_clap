@@ -565,7 +565,7 @@ test("the export script walks every month of the old service and the file import
     "202609": month(
       "2026年09月",
       null,
-      `<tr><td>2026/09/01</td><td><input type="checkbox"></td><td>08:00</td><td>はじめまして</td></tr>`,
+      `<tr><td>2026/09/01</td><td><input type="checkbox"></td><td>08:00</td><td>はじめまして <b style="color:#006600;">by のりこ</b> <i><a href="example.org">URL</a></i> <span style="color:#ff0000;">レス不要</span></td></tr>`,
     ),
   };
   await page.route("https://clap.test/**", (route) => {
@@ -588,12 +588,18 @@ test("the export script walks every month of the old service and the file import
   await expect(
     page.getByRole("textbox", { name: "メッセージ" }).nth(1),
   ).toHaveValue("次も\nよろしく");
+  await expect(
+    page.getByRole("textbox", { name: "メッセージ" }).nth(2),
+  ).toHaveValue("はじめまして");
+  await expect(page.getByRole("textbox", { name: "名前" }).nth(2)).toHaveValue(
+    "のりこ (example.org)",
+  );
   await page.getByRole("button", { name: "3 件を取り込む" }).click();
   await expect(page.getByText("3 件を取り込みました")).toBeVisible();
   await page.goto("/admin#inbox");
   await page.getByRole("button", { name: "取り込み", exact: true }).click();
   await expect(page.locator(".message-item")).toHaveCount(3);
-  await expect(page.getByText("返事不要")).toHaveCount(1);
+  await expect(page.getByText("返事不要")).toHaveCount(2);
 });
 test("the export script walks the old clap log and the days add to the stats", async ({
   page,

@@ -860,6 +860,14 @@ export default function App() {
   function refresh() {
     setVersion((v) => v + 1);
   }
+  useEffect(() => {
+    if (!mobileNav) return;
+    const close = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileNav(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [mobileNav]);
   function notify(s: string) {
     setToast(s);
   }
@@ -956,6 +964,13 @@ export default function App() {
           </div>
         </div>
       </aside>
+      {mobileNav && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setMobileNav(false)}
+          aria-hidden="true"
+        />
+      )}
       <div className="main-area">
         <header className="topbar">
           <div className="breadcrumbs">

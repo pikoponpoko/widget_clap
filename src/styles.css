@@ -1997,6 +1997,11 @@ small {
   .sidebar.is-open {
     transform: none;
   }
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+  }
   .main-area {
     margin-left: 0;
   }

@@ -38,7 +38,7 @@ import {
   fallbackAsset,
   fallbackProject,
   isDbFailure,
-  queueClap,
+  queueRow,
 } from "./fallback";
 import type { Project, Message, Asset } from "./models";
 import { REACTION_KEYS } from "../src/reactions";
@@ -216,7 +216,7 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   });
   if (fallback) {
     // Kept in R2 and moved into D1 once it can be read again.
-    await queueClap(c.env, {
+    await queueRow(c.env, "claps", {
       id: id(),
       project_id: p.id,
       created_at: now(),
@@ -256,19 +256,32 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
 });
 app.post("/api/public/projects/:slug/reactions", async (c) => {
   assertSameOrigin(c.req.raw);
-  const p = await projectBy(c.env, c.req.param("slug"));
+  const { p, fallback } = await publicProject(c.env, c.req.param("slug"));
   const data = await jsonBody(c.req.raw, reactionSchema, 4000);
   if (!reactionList(p.reactions).includes(data.kind))
     throw new ApiError(403, "このリアクションは受け付けていません。");
   const page = normalizePage(data);
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
-  await limit(c.env, `reaction:${key}`, 60, 60);
+  if (!fallback) await limit(c.env, `reaction:${key}`, 60, 60);
   if (isOwnerBrowser(c.req.raw)) return c.json({ ok: true, counted: false });
   const dedupe = await hash(
     `${key}:${p.id}:${page.page_url}:${data.kind}:${now().slice(0, 13)}`,
   );
   const visitor = (await privateKey(c.req.raw, c.env, "visitor")).slice(0, 32);
+  if (fallback) {
+    await queueRow(c.env, "reactions", {
+      id: id(),
+      project_id: p.id,
+      kind: data.kind,
+      created_at: now(),
+      dedupe_key: dedupe,
+      page_url: page.page_url,
+      page_title: page.page_title,
+      visitor,
+    });
+    return c.json({ ok: true, counted: true });
+  }
   const result = await c.env.DB.prepare(
     "INSERT OR IGNORE INTO reactions(id,project_id,kind,created_at,dedupe_key,page_url,page_title,visitor) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM reactions)<20000",
   )
@@ -287,14 +300,14 @@ app.post("/api/public/projects/:slug/reactions", async (c) => {
 });
 app.post("/api/public/projects/:slug/messages", async (c) => {
   assertSameOrigin(c.req.raw);
-  const p = await projectBy(c.env, c.req.param("slug"));
+  const { p, fallback } = await publicProject(c.env, c.req.param("slug"));
   if (!p.message_enabled)
     throw new ApiError(403, "感想の受付は現在お休み中です。");
   const data = await jsonBody(c.req.raw, messageSchema);
   const page = normalizePage(data);
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
-  await limit(c.env, `attempt:${key}`, 40, 3600);
+  if (!fallback) await limit(c.env, `attempt:${key}`, 40, 3600);
   // The owner's own test messages are not saved, like their claps.
   if (isOwnerBrowser(c.req.raw))
     return c.json({ ok: true, reply_token: null, counted: false }, 201);
@@ -303,6 +316,34 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
     c.env.SPAM_SECRET ||
     (local(c.req.raw, c.env) ? "local-development-spam-secret" : "");
   const replyToken = await hash(`${secret}:reply:${p.id}:${data.request_id}`);
+  const blocked = hasNgWord(
+    data.sender_name + "\n" + data.body,
+    JSON.parse(p.ng_words || "[]"),
+  )
+    ? 1
+    : 0;
+  if (fallback) {
+    // Spam checks still run; the rate limit and capacity need D1 and wait for it.
+    await checkSpam(c.req.raw, c.env, data);
+    await queueRow(c.env, "messages", {
+      id: id(),
+      project_id: p.id,
+      body: data.body,
+      created_at: now(),
+      publication_consent: data.publication_consent ? 1 : 0,
+      reply_token_hash: p.reply_enabled ? await hash(replyToken) : null,
+      dedupe_key: dedupe,
+      page_url: page.page_url,
+      page_title: page.page_title,
+      sender_name: data.sender_name,
+      reply_wanted: data.reply_wanted === null ? null : Number(data.reply_wanted),
+      blocked,
+    });
+    return c.json(
+      { ok: true, reply_token: p.reply_enabled ? replyToken : null },
+      201,
+    );
+  }
   const existing = await c.env.DB.prepare(
     "SELECT id,reply_token_hash FROM messages WHERE dedupe_key=? AND project_id=?",
   )
@@ -336,12 +377,7 @@ app.post("/api/public/projects/:slug/messages", async (c) => {
       page.page_title,
       data.sender_name,
       data.reply_wanted === null ? null : Number(data.reply_wanted),
-      hasNgWord(
-        data.sender_name + "\n" + data.body,
-        JSON.parse(p.ng_words || "[]"),
-      )
-        ? 1
-        : 0,
+      blocked,
       new TextEncoder().encode(data.body).length,
     )
     .run();

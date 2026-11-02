@@ -289,6 +289,13 @@ function attrLabel(k: AttrKey, v: string) {
   if (k === "repeat") return v === "repeat" ? "リピート" : "初回";
   return v;
 }
+const PIE_COLORS = [
+  "var(--clap-1)",
+  "var(--clap-2)",
+  "var(--clap-3)",
+  "var(--clap-4)",
+  "var(--muted)",
+];
 function AttrList({
   k,
   rows,
@@ -300,12 +307,29 @@ function AttrList({
 }) {
   const [all, setAll] = useState(false);
   const shown = all ? rows : rows.slice(0, 5);
+  // Pie: the top four get the bar colors, the rest share one grey slice.
+  const sum = rows.reduce((t, r) => t + r.n, 0) || 1;
+  let at = 0;
+  const stops = rows.map((r, i) => {
+    const from = at;
+    at += (r.n / sum) * 360;
+    return `${PIE_COLORS[Math.min(i, 4)]} ${from}deg ${at}deg`;
+  });
   return (
     <div className="attr-block">
       <h3>{ATTR_TITLES[k]}</h3>
+      <div
+        className="attr-pie"
+        role="img"
+        aria-label={rows
+          .map((r) => `${attrLabel(k, r.v)} ${r.n}`)
+          .join("、")}
+        style={{ background: `conic-gradient(${stops.join(", ")})` }}
+      />
       <ol>
-        {shown.map((r) => (
+        {shown.map((r, i) => (
           <li key={r.v}>
+            <i style={{ background: PIE_COLORS[Math.min(i, 4)] }} />
             <span className="attr-name">
               {k === "referrer" && r.v !== "self" ? (
                 <span title={r.v}>{attrLabel(k, r.v)}</span>
@@ -314,7 +338,6 @@ function AttrList({
               )}
             </span>
             <b>{r.n.toLocaleString()}</b>
-            <i style={{ width: (r.n / total) * 100 + "%" }} />
           </li>
         ))}
       </ol>

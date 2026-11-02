@@ -3161,9 +3161,30 @@ html.embed-document {
   margin: 0;
   padding: 0;
 }
+.attr-block {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  column-gap: 16px;
+  align-content: start;
+}
+.attr-block h3 {
+  grid-column: 1 / -1;
+}
+.attr-block ol {
+  grid-column: 2;
+}
+.attr-pie {
+  grid-column: 1;
+  grid-row: 2 / span 2;
+  width: 80px;
+  height: 80px;
+  margin-top: 4px;
+  border-radius: 50%;
+}
 .attr-block li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
   column-gap: 8px;
   padding: 3px 0;
 }
@@ -3174,14 +3195,14 @@ html.embed-document {
   white-space: nowrap;
 }
 .attr-block li i {
-  grid-column: 1 / -1;
   display: block;
-  height: 3px;
-  margin-top: 2px;
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
-  background: var(--clap-1);
 }
 .attr-more {
+  grid-column: 2;
+  justify-self: start;
   margin-top: 4px;
   font-size: 11px;
 }

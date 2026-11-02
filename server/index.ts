@@ -168,6 +168,11 @@ app.use("/api/owner/*", async (c, next) => {
   await next();
 });
 const OWNER_COOKIE = "hakushu_owner";
+// Claps (and reactions) accepted per UTC day across every site.
+const DAILY_CAP = 3000;
+// imported_clap_days is keyed by (project_id, day). Naming the projects lets a
+// day range use that key instead of reading every imported day (18 years of rows).
+const IMPORTED_BY_PROJECT = " AND project_id IN (SELECT id FROM projects)";
 const isOwnerBrowser = (request: Request) =>
   (request.headers.get("Cookie") || "")
     .split(";")
@@ -243,24 +248,20 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
     attrs: JSON.stringify(attrs),
   };
   let changes = 0;
+  // The daily cap is one counter row. Counting the claps table here read every
+  // stored clap on each clap.
+  if (!fallback)
+    fallback = !(await tryDb(() =>
+      limit(c.env, `claps:${now().slice(0, 10)}`, DAILY_CAP, 86400),
+    ));
   if (!fallback)
     fallback = !(await tryDb(async () => {
       const result = await c.env.DB.prepare(
-        "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor,attrs) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
+        "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor,attrs) VALUES(?,?,?,?,?,?,?,?)",
       )
         .bind(row.id, row.project_id, row.created_at, row.dedupe_key, row.page_url, row.page_title, row.visitor, row.attrs)
         .run();
       changes = result.meta.changes;
-      if (
-        !changes &&
-        !(await c.env.DB.prepare("SELECT id FROM claps WHERE dedupe_key=?")
-          .bind(dedupe)
-          .first())
-      )
-        throw new ApiError(
-          503,
-          "受付容量に達しています。作者の整理後にお試しください。",
-        );
     }));
   if (fallback) {
     // Kept in R2 and moved into D1 once it can be used again.
@@ -299,9 +300,13 @@ app.post("/api/public/projects/:slug/reactions", async (c) => {
   };
   let changes = 0;
   if (!fallback)
+    fallback = !(await tryDb(() =>
+      limit(c.env, `reactions:${now().slice(0, 10)}`, DAILY_CAP, 86400),
+    ));
+  if (!fallback)
     fallback = !(await tryDb(async () => {
       const result = await c.env.DB.prepare(
-        "INSERT OR IGNORE INTO reactions(id,project_id,kind,created_at,dedupe_key,page_url,page_title,visitor) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM reactions)<20000",
+        "INSERT OR IGNORE INTO reactions(id,project_id,kind,created_at,dedupe_key,page_url,page_title,visitor) VALUES(?,?,?,?,?,?,?,?)",
       )
         .bind(row.id, row.project_id, row.kind, row.created_at, row.dedupe_key, row.page_url, row.page_title, row.visitor)
         .run();
@@ -972,7 +977,7 @@ app.get("/api/owner/stats", async (c) => {
     ).bind(...pageArgs),
     // Counts brought in from another service have no page.
     c.env.DB.prepare(
-      `SELECT day,sum(claps) AS claps,sum(visitors) AS visitors FROM imported_clap_days WHERE day>=? AND day<=?${suffix}${pageUrl ? " AND 0" : ""} GROUP BY day ORDER BY day`,
+      `SELECT day,sum(claps) AS claps,sum(visitors) AS visitors FROM imported_clap_days WHERE day>=? AND day<=?${suffix || IMPORTED_BY_PROJECT}${pageUrl ? " AND 0" : ""} GROUP BY day ORDER BY day`,
     ).bind(start, end, ...(project ? [project] : [])),
     c.env.DB.prepare(
       `SELECT ${day} AS day,kind,count(*) AS count FROM reactions WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day,kind ORDER BY day`,
@@ -1054,7 +1059,7 @@ app.get("/api/owner/stats/periods", async (c) => {
   if (project) {
     importSuffix += " AND project_id=?";
     importArgs.push(project);
-  }
+  } else if (start) importSuffix += IMPORTED_BY_PROJECT;
   const [claps, messages, people, imported] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT ${bucket(day)} AS k,count(*) AS claps,count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE 1${pageSuffix} GROUP BY k`,

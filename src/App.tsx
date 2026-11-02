@@ -908,8 +908,13 @@ export default function App() {
   // loads the latest numbers, or the new version when one has been deployed.
   useEffect(() => {
     // The numbers start loading right away; the version check runs alongside.
+    // Switching back and forth within a minute reuses the numbers already shown,
+    // since each reload reads the whole history from D1.
+    let last = Date.now();
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
+      if (Date.now() - last < 60000) return;
+      last = Date.now();
       refresh();
       hasNewVersion().then((next) => next && location.reload());
     };

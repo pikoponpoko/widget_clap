@@ -559,11 +559,26 @@ app.post("/api/owner/imports", async (c) => {
     .first<{ id: string }>();
   if (!p) throw new ApiError(404, "作品が見つかりません。");
   const read = now();
+  // The capacity is read once per request. Checking it inside every INSERT
+  // rescanned all messages for each imported row, which made imports quadratic
+  // in D1 rows read.
+  const used = await c.env.DB.prepare(
+    "SELECT (SELECT count(*) FROM messages) AS n,(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies) AS bytes",
+  ).first<{ n: number; bytes: number }>();
+  let n = used?.n ?? 0,
+    bytes = used?.bytes ?? 0;
+  const accepted = data.items.filter((x) => {
+    const size = new TextEncoder().encode(x.body).length;
+    if (n + 1 > 10000 || bytes + size > 4194304) return false;
+    n += 1;
+    bytes += size;
+    return true;
+  });
   const statements = await Promise.all(
-    data.items.map(async (x) => {
+    accepted.map(async (x) => {
       const at = new Date(x.created_at).toISOString();
       return c.env.DB.prepare(
-        "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,read_at,dedupe_key,sender_name,reply_wanted,source) SELECT ?,?,?,?,?,?,?,?,'import' WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
+        "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,read_at,dedupe_key,sender_name,reply_wanted,source) VALUES(?,?,?,?,?,?,?,?,'import')",
       ).bind(
         id(),
         p.id,
@@ -574,11 +589,10 @@ app.post("/api/owner/imports", async (c) => {
         await hash(`import:${p.id}:${at}:${x.sender_name}:${x.body}`),
         x.sender_name,
         x.reply_wanted === null ? null : Number(x.reply_wanted),
-        new TextEncoder().encode(x.body).length,
       );
     }),
   );
-  const results = await c.env.DB.batch(statements);
+  const results = statements.length ? await c.env.DB.batch(statements) : [];
   const added = results.filter((r) => r.meta.changes > 0).length;
   await audit(c.env, "messages.import", String(added));
   return c.json({ added, skipped: data.items.length - added });
@@ -591,12 +605,34 @@ app.post("/api/owner/imports/clap-days", async (c) => {
     .bind(data.project_id, "owner")
     .first<{ id: string }>();
   if (!p) throw new ApiError(404, "作品が見つかりません。");
-  // Importing the same day again replaces its counts.
-  const statements = data.items.map((x) =>
+  // Importing the same day again replaces its counts. The row count is read
+  // once per request instead of once per imported day.
+  const used = await c.env.DB.prepare(
+    "SELECT count(*) AS n FROM imported_clap_days",
+  ).first<{ n: number }>();
+  const room = Math.max(0, 20000 - (used?.n ?? 0));
+  let items = data.items;
+  if (items.length > room) {
+    // Days already stored are replaced, so only new days need room.
+    const stored = new Set(
+      (
+        await c.env.DB.prepare(
+          "SELECT day FROM imported_clap_days WHERE project_id=?",
+        )
+          .bind(p.id)
+          .all<{ day: string }>()
+      ).results.map((r) => r.day),
+    );
+    let left = room;
+    items = items.filter((x) => stored.has(x.day) || left-- > 0);
+  }
+  const statements = items.map((x) =>
     c.env.DB.prepare(
-      "INSERT INTO imported_clap_days(project_id,day,claps,visitors) SELECT ?,?,?,? WHERE (SELECT count(*) FROM imported_clap_days)<20000 ON CONFLICT(project_id,day) DO UPDATE SET claps=excluded.claps,visitors=excluded.visitors",
+      "INSERT INTO imported_clap_days(project_id,day,claps,visitors) VALUES(?,?,?,?) ON CONFLICT(project_id,day) DO UPDATE SET claps=excluded.claps,visitors=excluded.visitors",
     ).bind(p.id, x.day, x.claps, x.visitors),
   );
+  if (!statements.length)
+    throw new ApiError(503, "取り込める日数の上限に達しています。");
   const results = await c.env.DB.batch(statements);
   const saved = results.filter((r) => r.meta.changes > 0).length;
   if (!saved) throw new ApiError(503, "取り込める日数の上限に達しています。");

@@ -310,6 +310,14 @@ test.describe.serial("Phase 1 integrated flow", () => {
     expect(
       (
         await request.post(
+          "/api/owner/projects/" + pid + "/assets?kind=button&scale=5",
+          { headers, data: gif },
+        )
+      ).status(),
+    ).toBe(400);
+    expect(
+      (
+        await request.post(
           "/api/owner/projects/" + pid + "/assets?kind=button",
           { headers, data: gif },
         )

@@ -22,12 +22,12 @@ test("only the tiny button is embedded; click saves applause before optional fee
     frame.getByRole("button", { name: "拍手を送る", exact: true }),
   ).toBeVisible();
   await expect(frame.getByRole("textbox")).toHaveCount(0);
-  // The frame follows the 180×170 GIF button plus 4px padding.
+  // The frame follows the 480×412 @3x button, shown at 160×137, plus 4px padding.
   const buttonIframe = page.locator('iframe[title="拍手ボタン"]').first();
   await expect
     .poll(async () => (await buttonIframe.boundingBox())?.width)
-    .toBe(188);
-  expect((await buttonIframe.boundingBox())?.height).toBe(178);
+    .toBe(168);
+  expect((await buttonIframe.boundingBox())?.height).toBe(145);
   expect(
     await page.evaluate(
       (k) => JSON.parse(localStorage.getItem(k) || '{"claps":[]}').claps.length,
@@ -174,7 +174,7 @@ test("cross-origin embedding works and ignores forged host messages", async ({
           (await page.locator('iframe[title="拍手ボタン"]').boundingBox())
             ?.height,
       )
-      .toBe(178);
+      .toBe(145);
     await page.evaluate((origin) => {
       const frame = document
         .querySelector("[data-creator-support]")!
@@ -279,23 +279,22 @@ test("closes the thank-you modal and shows the error if applause cannot be saved
   await expect(frame.getByRole("alert")).toContainText("保存容量");
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
-test("the embedded button shows the GIF button image at its own size and records the clicked page", async ({
+test("the embedded button shows the @3x button image at a third of its size and records the clicked page", async ({
   page,
 }) => {
   await page.goto("/demo");
   const frame = buttonFrame(page);
   const button = frame.getByRole("button", { name: "拍手を送る", exact: true });
   const image = button.locator("img");
-  await expect(image).toHaveAttribute("src", "/buttons/push-me.gif");
+  await expect(image).toHaveAttribute("src", "/buttons/push-me@3x.webp");
   await expect
     .poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth))
-    .toBe(180);
+    .toBe(480);
   expect(
     await image.evaluate((img: HTMLImageElement) => img.naturalHeight),
-  ).toBe(170);
-  const box = await image.boundingBox();
-  expect(box!.width).toBe(180);
-  expect(box!.height).toBe(170);
+  ).toBe(412);
+  await expect.poll(async () => (await image.boundingBox())?.width).toBe(160);
+  expect((await image.boundingBox())!.height).toBe(137);
   await image.click();
   await expect(
     thanksFrame(page).getByRole("img", { name: "作者からのお礼イラスト" }),

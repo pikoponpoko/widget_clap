@@ -2,7 +2,7 @@ import { embedCode } from "./embed-code";
 import { DEFAULT_REACTIONS, MAX_REACTIONS, REACTIONS } from "./reactions";
 import { cleanTipLabel, defaultTipLabel } from "./page-context";
 import { previewMode } from "./mode";
-import { assetUrl } from "./asset-url";
+import { assetUrl, densityOf } from "./asset-url";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDownToLine,
@@ -1925,7 +1925,10 @@ function ProjectModal({
         try {
           if (file.size > 2097152)
             throw new Error("画像は2MB以下にしてください。");
-          await api("/owner/projects/" + project.id + "/assets?kind=" + kind, {
+          const density = kind === "button" ? densityOf(file.name) : 1;
+          const query =
+            "?kind=" + kind + (density > 1 ? "&scale=" + density : "");
+          await api("/owner/projects/" + project.id + "/assets" + query, {
             method: "POST",
             body: file,
             headers: { "Content-Type": "application/octet-stream" },

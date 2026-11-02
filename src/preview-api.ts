@@ -88,9 +88,9 @@ function initial(): Store {
         id: "builtin-button-" + id,
         project_id: id,
         kind: "button" as const,
-        mime: "image/gif",
+        mime: "image/webp",
         size: 0,
-        name: "ボタン画像",
+        name: "ボタン画像@3x",
         created_at: new Date().toISOString(),
       },
     ]),
@@ -118,6 +118,12 @@ function read(): Store {
       blocked_sites: p.blocked_sites ?? [],
       reactions: p.reactions ?? [...DEFAULT_REACTIONS],
     }));
+    // The built-in button became a @3x WebP; older saved data still names the GIF.
+    data.assets = data.assets.map((a: Asset) =>
+      a.id.startsWith("builtin-button-")
+        ? { ...a, mime: "image/webp", name: "ボタン画像@3x" }
+        : a,
+    );
     return data;
   } catch {
     throw new Error(
@@ -144,7 +150,7 @@ async function digest(s: string) {
 }
 const urls = new Map<string, string>();
 export function previewAssetUrl(id: string) {
-  if (id.startsWith("builtin-button-")) return "/buttons/push-me.gif";
+  if (id.startsWith("builtin-button-")) return "/buttons/push-me@3x.webp";
   if (id.startsWith("builtin-")) return "/thanks.svg";
   if (urls.has(id)) return urls.get(id)!;
   try {
@@ -868,7 +874,10 @@ export async function previewRequest(
       kind: kind as "button" | "thanks",
       mime: file.type === "image/apng" ? "image/png" : file.type,
       size: file.size,
-      name: "画像",
+      name:
+        kind === "button" && /^[23]$/.test(u.searchParams.get("scale") ?? "")
+          ? `画像@${u.searchParams.get("scale")}x`
+          : "画像",
       created_at: new Date().toISOString(),
       data: btoa(binary),
     });

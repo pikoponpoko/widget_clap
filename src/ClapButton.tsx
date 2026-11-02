@@ -1,7 +1,7 @@
 import { previewMode } from "./mode";
 import { clapContext } from "./page-context";
 import { useEffect, useRef, useState } from "react";
-import { assetUrl } from "./asset-url";
+import { assetUrl, densityOf } from "./asset-url";
 import { inlineProject, send, useApi } from "./api";
 import type { Project } from "./types";
 export type EntryReason = "clap" | "message";
@@ -19,6 +19,8 @@ export function ClapControl({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const image = p.assets?.find((a) => a.kind === "button");
+  const density = image ? densityOf(image.name) : 1;
+  const [size, setSize] = useState<{ width: number; height: number }>();
   const label = p.clap_enabled
     ? "拍手を送る"
     : p.message_enabled
@@ -37,10 +39,7 @@ export function ClapControl({
           "/public/projects/" + encodeURIComponent(p.slug) + "/claps",
           clapContext,
         );
-      if (!opened)
-        onOpen(
-          p.clap_enabled ? "clap" : "message",
-        );
+      if (!opened) onOpen(p.clap_enabled ? "clap" : "message");
     } catch (e) {
       setError((e as Error).message);
       if (opened) onFail?.();
@@ -75,7 +74,17 @@ export function ClapControl({
                 : "/support-button.svg"
           }
           alt=""
-          onLoad={onReady}
+          style={density > 1 ? size : undefined}
+          onLoad={(e) => {
+            // A Retina image (name@2x / @3x) is shown at its 1x size.
+            const img = e.currentTarget;
+            if (density > 1)
+              setSize({
+                width: Math.round(img.naturalWidth / density),
+                height: Math.round(img.naturalHeight / density),
+              });
+            onReady?.();
+          }}
           onError={onReady}
         />
         {busy && (

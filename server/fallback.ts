@@ -18,7 +18,7 @@ type AssetMeta = {
 type Fallback = { projects: Project[]; assets: AssetMeta[] };
 
 const SNAPSHOT_KEY = "fallback/projects.json";
-const PENDING = "pending/claps/";
+const PENDING = "pending/";
 let memo: { at: number; data: Fallback } | null = null;
 
 // A database error, as opposed to an answer the API gives on purpose.
@@ -79,25 +79,32 @@ export async function fallbackAsset(env: Env, assetId: string) {
   return a;
 }
 
-export type PendingClap = {
-  id: string;
-  project_id: string;
-  created_at: string;
-  dedupe_key: string;
-  page_url: string;
-  page_title: string;
-  visitor: string;
-  attrs: string;
-};
+// Rows kept in R2 while D1 cannot be read, moved in by drainPending.
+const COLUMNS = {
+  claps: ["id", "project_id", "created_at", "dedupe_key", "page_url", "page_title", "visitor", "attrs"],
+  reactions: ["id", "project_id", "kind", "created_at", "dedupe_key", "page_url", "page_title", "visitor"],
+  messages: [
+    "id", "project_id", "body", "created_at", "publication_consent", "reply_token_hash",
+    "dedupe_key", "page_url", "page_title", "sender_name", "reply_wanted", "blocked",
+  ],
+} as const;
+export type PendingTable = keyof typeof COLUMNS;
+type Pending = { table: PendingTable; row: Record<string, unknown> };
 
-export async function queueClap(env: Env, clap: PendingClap) {
-  // The dedupe key names the object, so a repeat within the hour is kept once.
-  await env.BACKUPS.put(PENDING + clap.dedupe_key + ".json", JSON.stringify(clap), {
-    httpMetadata: { contentType: "application/json" },
-  });
+export async function queueRow(
+  env: Env,
+  table: PendingTable,
+  row: Record<string, unknown> & { dedupe_key: string },
+) {
+  // The dedupe key names the object, so a repeat is kept once.
+  await env.BACKUPS.put(
+    `${PENDING}${table}/${row.dedupe_key}.json`,
+    JSON.stringify({ table, row } satisfies Pending),
+    { httpMetadata: { contentType: "application/json" } },
+  );
 }
 
-// Moves kept claps into D1. Stops quietly while D1 still cannot be used.
+// Moves kept rows into D1. Stops quietly while D1 still cannot be used.
 export async function drainPending(env: Env) {
   let cursor: string | undefined;
   let moved = 0;
@@ -106,16 +113,19 @@ export async function drainPending(env: Env) {
     for (const o of page.objects) {
       const body = await env.BACKUPS.get(o.key);
       if (body) {
-        const c = await body.json<PendingClap>();
-        try {
-          await env.DB.prepare(
-            "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor,attrs) VALUES(?,?,?,?,?,?,?,?)",
-          )
-            .bind(c.id, c.project_id, c.created_at, c.dedupe_key, c.page_url, c.page_title, c.visitor, c.attrs)
-            .run();
-        } catch (error) {
-          console.error("pending_claps_wait", (error as Error).name);
-          return moved;
+        const { table, row } = await body.json<Pending>();
+        const cols = COLUMNS[table];
+        if (cols) {
+          try {
+            await env.DB.prepare(
+              `INSERT OR IGNORE INTO ${table}(${cols.join(",")}) VALUES(${cols.map(() => "?").join(",")})`,
+            )
+              .bind(...cols.map((k) => row[k] ?? null))
+              .run();
+          } catch (error) {
+            console.error("pending_rows_wait", (error as Error).name);
+            return moved;
+          }
         }
       }
       await env.BACKUPS.delete(o.key);
@@ -128,8 +138,4 @@ export async function drainPending(env: Env) {
     memo = null;
   }
   return moved;
-}
-
-export async function hasPending(env: Env) {
-  return (await env.BACKUPS.list({ prefix: PENDING, limit: 1 })).objects.length > 0;
 }

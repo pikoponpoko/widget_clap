@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { app } from "../server/index";
 import { drainPending } from "../server/fallback";
+import { REACTION_KEYS } from "../src/reactions";
 
 class MemoryBucket {
   store = new Map<string, string>();
@@ -37,7 +38,8 @@ const project = {
   thanks_enabled: 1,
   reply_enabled: 0,
   tip_enabled: 0,
-  reactions: "[]",
+  reactions: JSON.stringify([REACTION_KEYS[0]]),
+  ng_words: "[]",
   blocked_sites: "[]",
 };
 const blockedDb = {
@@ -67,6 +69,7 @@ function env(db: unknown, backups = new MemoryBucket()) {
     IMAGES: images,
     ASSETS: { fetch: async () => new Response("<html><head></head></html>") },
     SPAM_SECRET: "x".repeat(32),
+    TURNSTILE_SECRET_KEY: "test",
   } as never;
 }
 const origin = "https://hakushu.example";
@@ -108,5 +111,44 @@ describe("D1 read fallback", () => {
     expect(await drainPending(e as never)).toBe(1);
     expect(inserted[0][1]).toBe("p1");
     expect([...e.BACKUPS.store.keys()].some((k) => k.startsWith("pending/"))).toBe(false);
+  });
+  it("keeps reactions and messages in R2 and moves them in later", async () => {
+    const e = env(blockedDb) as unknown as { BACKUPS: MemoryBucket; DB: unknown };
+    const post = (path: string, body: unknown) =>
+      app.fetch(
+        new Request(origin + "/api/public/projects/kazuki/" + path, {
+          method: "POST",
+          headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": "1.2.3.4" },
+          body: JSON.stringify(body),
+        }),
+        e as never,
+      );
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      Response.json({ success: true, hostname: "hakushu.example", action: "message" })) as typeof fetch;
+    const r = await post("reactions", { kind: REACTION_KEYS[0], page_url: "https://kazukisekiguchi.com/" });
+    expect(r.status).toBe(200);
+    const m = await post("messages", {
+      body: "よかったです",
+      request_id: crypto.randomUUID(),
+      started_at: Date.now() - 5000,
+      page_url: "https://kazukisekiguchi.com/",
+    });
+    globalThis.fetch = realFetch;
+    expect(m.status).toBe(201);
+    const keys = [...e.BACKUPS.store.keys()].filter((k) => k.startsWith("pending/"));
+    expect(keys.some((k) => k.startsWith("pending/reactions/"))).toBe(true);
+    expect(keys.some((k) => k.startsWith("pending/messages/"))).toBe(true);
+    const sql: string[] = [];
+    e.DB = {
+      prepare: (q: string) => {
+        sql.push(q);
+        const stmt = { bind: () => stmt, run: async () => ({ meta: { changes: 1 } }) };
+        return stmt;
+      },
+    };
+    expect(await drainPending(e as never)).toBe(2);
+    expect(sql.some((q) => q.startsWith("INSERT OR IGNORE INTO messages("))).toBe(true);
+    expect(sql.some((q) => q.startsWith("INSERT OR IGNORE INTO reactions("))).toBe(true);
   });
 });

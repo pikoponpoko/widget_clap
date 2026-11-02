@@ -711,6 +711,16 @@ test.describe.serial("Phase 1 integrated flow", () => {
     await page.getByRole("button", { name: "閉じる", exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/admin#overview");
+    // The mobile menu closes by tapping outside it or pressing Escape.
+    const sidebar = page.locator(".sidebar");
+    await page.getByRole("button", { name: "メニュー" }).click();
+    await expect(sidebar).toHaveClass(/is-open/);
+    await page.mouse.click(360, 400);
+    await expect(sidebar).not.toHaveClass(/is-open/);
+    await page.getByRole("button", { name: "メニュー" }).click();
+    await expect(sidebar).toHaveClass(/is-open/);
+    await page.keyboard.press("Escape");
+    await expect(sidebar).not.toHaveClass(/is-open/);
     await page.screenshot({
       path: "test-results/dashboard-mobile.png",
       fullPage: true,

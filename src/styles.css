@@ -3217,3 +3217,15 @@ html.embed-document {
     padding: 0 16px 12px;
   }
 }
+.band-pie {
+  max-width: 320px;
+  margin: 0 22px;
+}
+.band-pie .attr-pie {
+  grid-row: 1 / span 2;
+}
+@media (max-width: 720px) {
+  .band-pie {
+    margin: 0 16px;
+  }
+}

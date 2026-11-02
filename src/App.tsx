@@ -354,6 +354,49 @@ function AttrList({
     </div>
   );
 }
+// Claps of the day split into four time bands.
+const BANDS: [string, number][] = [
+  ["深夜 0〜6時", 0],
+  ["朝 6〜12時", 6],
+  ["昼 12〜18時", 12],
+  ["夜 18〜24時", 18],
+];
+function BandPie({ hours }: { hours: HourStats }) {
+  const rows = BANDS.map(([label, from], i) => ({
+    label,
+    color: PIE_COLORS[i],
+    n: hours.hours
+      .filter((h) => h.hour >= from && h.hour < from + 6)
+      .reduce((t, h) => t + h.claps, 0),
+  }));
+  const sum = rows.reduce((t, r) => t + r.n, 0);
+  if (!sum) return null;
+  let at = 0;
+  const stops = rows.map((r) => {
+    const from = at;
+    at += (r.n / sum) * 360;
+    return `${r.color} ${from}deg ${at}deg`;
+  });
+  return (
+    <div className="attr-block band-pie">
+      <div
+        className="attr-pie"
+        role="img"
+        aria-label={rows.map((r) => `${r.label} ${r.n}`).join("、")}
+        style={{ background: `conic-gradient(${stops.join(", ")})` }}
+      />
+      <ol>
+        {rows.map((r) => (
+          <li key={r.label}>
+            <i style={{ background: r.color }} />
+            <span className="attr-name">{r.label}</span>
+            <b>{r.n.toLocaleString()}</b>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
 function AttrStatsPanel({ stats }: { stats: Stats | null }) {
   if (!stats) return null;
   const a = stats.attributes;
@@ -800,6 +843,7 @@ function Activity({
               感想 <b>{sum("messages")}</b>
             </span>
           </div>
+          {mode === "hours" && hours && <BandPie hours={hours} />}
           {mode === "hours" && <ClapTimes hours={hours} hour={pick} />}
         </>
       )}

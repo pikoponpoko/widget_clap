@@ -924,14 +924,6 @@ export default function App() {
         <a className="brand" href="/admin">
           <span>Hakushu</span>
         </a>
-        <div className="workspace">
-          <span className="avatar">K</span>
-          <span>
-            マイワークスペース<small>Owner · すべての機能</small>
-          </span>
-          <LockKeyhole size={14} />
-        </div>
-        <div className="nav-caption">ワークスペース</div>
         <nav>
           {navs.map(([key, Icon, label]) => (
             <button
@@ -955,13 +947,6 @@ export default function App() {
             <Database size={18} strokeWidth={1.6} />
             データ管理
           </button>
-          <div className="owner-profile">
-            <span className="avatar small">K</span>
-            <div>
-              Owner<small>永久無料</small>
-            </div>
-            <span className="tiny-dot" />
-          </div>
         </div>
       </aside>
       {mobileNav && (
@@ -973,25 +958,13 @@ export default function App() {
       )}
       <div className="main-area">
         <header className="topbar">
-          <div className="breadcrumbs">
-            <button
-              className="mobile-toggle icon-button"
-              onClick={() => setMobileNav(!mobileNav)}
-              aria-label="メニュー"
-            >
-              <MoreHorizontal />
-            </button>
-            <span>ワークスペース</span>
-            <ChevronRight size={14} />
-            <b>{titles[section]}</b>
-          </div>
-          <div className="topbar-right">
-            <span className="private-badge">
-              <LockKeyhole size={12} />
-              非公開
-            </span>
-            <span className="avatar small">K</span>
-          </div>
+          <button
+            className="mobile-toggle icon-button"
+            onClick={() => setMobileNav(!mobileNav)}
+            aria-label="メニュー"
+          >
+            <MoreHorizontal />
+          </button>
         </header>
         <main className="main-content">
           <div className="page-heading">
@@ -1199,12 +1172,9 @@ export default function App() {
           )}
           {section === "projects" && !widgetTarget && (
             <div className="project-grid">
-              {list.map((p, i) => (
+              {list.map((p) => (
                 <article className="panel project-card" key={p.id}>
                   <div className="project-card-top">
-                    <span className="project-symbol">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
                     <span className="status-dot">
                       {p.message_enabled || p.clap_enabled
                         ? "受付中"
@@ -1253,12 +1223,9 @@ export default function App() {
           {section === "data" && (
             <DataPanel notify={notify} refresh={refresh} />
           )}
-          <footer className="page-footer">
-            <span>Hakushu</span>
-            <span>
-              Owner · 非公開{session.data?.local ? " · ローカル開発環境" : ""}
-            </span>
-          </footer>
+          {session.data?.local && (
+            <footer className="page-footer">ローカル開発環境</footer>
+          )}
         </main>
       </div>
       {toast && (

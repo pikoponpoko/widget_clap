@@ -23,7 +23,7 @@
     { "binding": "IMAGES", "bucket_name": "hakushu-images" },
     { "binding": "BACKUPS", "bucket_name": "hakushu-backups" },
   ],
-  "triggers": { "crons": ["0 18 * * *"] },
+  "triggers": { "crons": ["0 18 * * *", "5 0 * * *"] },
   "vars": {
     "ENVIRONMENT": "production",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAFnTOEUlIaTGKY_h",

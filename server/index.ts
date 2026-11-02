@@ -33,6 +33,13 @@ import {
   type Env,
 } from "./security";
 import { snapshot, scheduledBackup, restore } from "./backup";
+import {
+  drainPending,
+  fallbackAsset,
+  fallbackProject,
+  isDbFailure,
+  queueClap,
+} from "./fallback";
 import type { Project, Message, Asset } from "./models";
 import { REACTION_KEYS } from "../src/reactions";
 import { buildAttrs, readAttrs, tallyAttrs } from "../src/attributes";
@@ -74,6 +81,18 @@ async function assetList(env: Env, projectId: string) {
     .bind(projectId)
     .all();
   return rows.results;
+}
+// Project and images for the public pages; from the R2 backup while D1 cannot be read.
+async function publicProject(env: Env, slug: string) {
+  try {
+    const p = await projectBy(env, slug);
+    return { p, assets: await assetList(env, p.id), fallback: false };
+  } catch (error) {
+    if (!isDbFailure(error)) throw error;
+    console.error("d1_fallback", (error as Error).name);
+    const { project, assets } = await fallbackProject(env, slug);
+    return { p: project, assets, fallback: true };
+  }
 }
 function reactionList(raw: string | undefined) {
   try {
@@ -157,18 +176,18 @@ app.get("/api/owner/session", (c) => {
   });
 });
 app.get("/api/public/projects/:slug", async (c) => {
-  const p = await projectBy(c.env, c.req.param("slug"));
-  return c.json(safeProject(p, c.env, await assetList(c.env, p.id)));
+  const { p, assets } = await publicProject(c.env, c.req.param("slug"));
+  return c.json(safeProject(p, c.env, assets));
 });
 app.post("/api/public/projects/:slug/claps", async (c) => {
   assertSameOrigin(c.req.raw);
-  const p = await projectBy(c.env, c.req.param("slug"));
+  const { p, fallback } = await publicProject(c.env, c.req.param("slug"));
   if (!p.clap_enabled) throw new ApiError(403, "拍手は現在お休み中です。");
   const body = await jsonBody(c.req.raw, clapBodySchema, 4000);
   const page = normalizePage(body);
   assertSiteAllowed(p, page.page_url);
   const key = await privateKey(c.req.raw, c.env);
-  await limit(c.env, `clap:${key}`, 60, 60);
+  if (!fallback) await limit(c.env, `clap:${key}`, 60, 60);
   if (isOwnerBrowser(c.req.raw)) return c.json({ ok: true, counted: false });
   const dedupe = await hash(
     `${key}:${p.id}:${page.page_url}:${now().slice(0, 13)}`,
@@ -177,11 +196,11 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   const visitor = (await privateKey(c.req.raw, c.env, "visitor")).slice(0, 32);
   // Raw IPs are never stored: the place comes from Cloudflare, the person from the hashed visitor.
   const cf = (c.req.raw as { cf?: Record<string, unknown> }).cf || {};
-  const seen = await c.env.DB.prepare(
-    "SELECT 1 FROM claps WHERE visitor=? LIMIT 1",
-  )
-    .bind(visitor)
-    .first();
+  const seen = fallback
+    ? null
+    : await c.env.DB.prepare("SELECT 1 FROM claps WHERE visitor=? LIMIT 1")
+        .bind(visitor)
+        .first();
   const attrs = buildAttrs({
     country: cf.country,
     region: cf.region,
@@ -195,6 +214,20 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
     pageUrl: page.page_url,
     repeat: !!seen,
   });
+  if (fallback) {
+    // Kept in R2 and moved into D1 once it can be read again.
+    await queueClap(c.env, {
+      id: id(),
+      project_id: p.id,
+      created_at: now(),
+      dedupe_key: dedupe,
+      page_url: page.page_url,
+      page_title: page.page_title,
+      visitor,
+      attrs: JSON.stringify(attrs),
+    });
+    return c.json({ ok: true, counted: true });
+  }
   const result = await c.env.DB.prepare(
     "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor,attrs) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM claps)<20000",
   )
@@ -349,11 +382,17 @@ app.post("/api/public/reply", async (c) => {
   return c.json(m);
 });
 app.get("/api/public/assets/:id", async (c) => {
-  const a = await c.env.DB.prepare(
-    "SELECT a.* FROM assets a JOIN projects p ON p.id=a.project_id WHERE a.id=? AND p.owner_id=?",
-  )
-    .bind(c.req.param("id"), "owner")
-    .first<Asset>();
+  let a: Pick<Asset, "storage_key" | "mime" | "size"> | null;
+  try {
+    a = await c.env.DB.prepare(
+      "SELECT a.* FROM assets a JOIN projects p ON p.id=a.project_id WHERE a.id=? AND p.owner_id=?",
+    )
+      .bind(c.req.param("id"), "owner")
+      .first<Asset>();
+  } catch (error) {
+    if (!isDbFailure(error)) throw error;
+    a = await fallbackAsset(c.env, c.req.param("id"));
+  }
   if (!a) throw new ApiError(404, "画像が見つかりません。");
   const object = await c.env.IMAGES.get(a.storage_key);
   if (!object) throw new ApiError(404, "画像が見つかりません。");
@@ -559,11 +598,26 @@ app.post("/api/owner/imports", async (c) => {
     .first<{ id: string }>();
   if (!p) throw new ApiError(404, "作品が見つかりません。");
   const read = now();
+  // The capacity is read once per request. Checking it inside every INSERT
+  // rescanned all messages for each imported row, which made imports quadratic
+  // in D1 rows read.
+  const used = await c.env.DB.prepare(
+    "SELECT (SELECT count(*) FROM messages) AS n,(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies) AS bytes",
+  ).first<{ n: number; bytes: number }>();
+  let n = used?.n ?? 0,
+    bytes = used?.bytes ?? 0;
+  const accepted = data.items.filter((x) => {
+    const size = new TextEncoder().encode(x.body).length;
+    if (n + 1 > 10000 || bytes + size > 4194304) return false;
+    n += 1;
+    bytes += size;
+    return true;
+  });
   const statements = await Promise.all(
-    data.items.map(async (x) => {
+    accepted.map(async (x) => {
       const at = new Date(x.created_at).toISOString();
       return c.env.DB.prepare(
-        "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,read_at,dedupe_key,sender_name,reply_wanted,source) SELECT ?,?,?,?,?,?,?,?,'import' WHERE (SELECT count(*) FROM messages)<10000 AND (SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM messages)+(SELECT COALESCE(sum(length(CAST(body AS BLOB))),0) FROM replies)+?<=4194304",
+        "INSERT OR IGNORE INTO messages(id,project_id,body,created_at,read_at,dedupe_key,sender_name,reply_wanted,source) VALUES(?,?,?,?,?,?,?,?,'import')",
       ).bind(
         id(),
         p.id,
@@ -574,11 +628,10 @@ app.post("/api/owner/imports", async (c) => {
         await hash(`import:${p.id}:${at}:${x.sender_name}:${x.body}`),
         x.sender_name,
         x.reply_wanted === null ? null : Number(x.reply_wanted),
-        new TextEncoder().encode(x.body).length,
       );
     }),
   );
-  const results = await c.env.DB.batch(statements);
+  const results = statements.length ? await c.env.DB.batch(statements) : [];
   const added = results.filter((r) => r.meta.changes > 0).length;
   await audit(c.env, "messages.import", String(added));
   return c.json({ added, skipped: data.items.length - added });
@@ -591,12 +644,34 @@ app.post("/api/owner/imports/clap-days", async (c) => {
     .bind(data.project_id, "owner")
     .first<{ id: string }>();
   if (!p) throw new ApiError(404, "作品が見つかりません。");
-  // Importing the same day again replaces its counts.
-  const statements = data.items.map((x) =>
+  // Importing the same day again replaces its counts. The row count is read
+  // once per request instead of once per imported day.
+  const used = await c.env.DB.prepare(
+    "SELECT count(*) AS n FROM imported_clap_days",
+  ).first<{ n: number }>();
+  const room = Math.max(0, 20000 - (used?.n ?? 0));
+  let items = data.items;
+  if (items.length > room) {
+    // Days already stored are replaced, so only new days need room.
+    const stored = new Set(
+      (
+        await c.env.DB.prepare(
+          "SELECT day FROM imported_clap_days WHERE project_id=?",
+        )
+          .bind(p.id)
+          .all<{ day: string }>()
+      ).results.map((r) => r.day),
+    );
+    let left = room;
+    items = items.filter((x) => stored.has(x.day) || left-- > 0);
+  }
+  const statements = items.map((x) =>
     c.env.DB.prepare(
-      "INSERT INTO imported_clap_days(project_id,day,claps,visitors) SELECT ?,?,?,? WHERE (SELECT count(*) FROM imported_clap_days)<20000 ON CONFLICT(project_id,day) DO UPDATE SET claps=excluded.claps,visitors=excluded.visitors",
+      "INSERT INTO imported_clap_days(project_id,day,claps,visitors) VALUES(?,?,?,?) ON CONFLICT(project_id,day) DO UPDATE SET claps=excluded.claps,visitors=excluded.visitors",
     ).bind(p.id, x.day, x.claps, x.visitors),
   );
+  if (!statements.length)
+    throw new ApiError(503, "取り込める日数の上限に達しています。");
   const results = await c.env.DB.batch(statements);
   const saved = results.filter((r) => r.meta.changes > 0).length;
   if (!saved) throw new ApiError(503, "取り込める日数の上限に達しています。");
@@ -1202,11 +1277,11 @@ async function embedPage(c: import("hono").Context<{ Bindings: Env }>) {
   );
   let project;
   try {
-    const p = await projectBy(c.env, c.req.param("slug") || "");
+    const { p, assets } = await publicProject(c.env, c.req.param("slug") || "");
     const parent = c.req.query("parent_origin") || "";
     if (isBlockedSite(parent, JSON.parse(p.blocked_sites || "[]")))
       return blank();
-    project = safeProject(p, c.env, await assetList(c.env, p.id));
+    project = safeProject(p, c.env, assets);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return blank();
     throw error;
@@ -1258,6 +1333,12 @@ export default {
     env: Env,
     ctx: ExecutionContext,
   ) => {
-    ctx.waitUntil(scheduledBackup(env));
+    // Claps kept in R2 while D1 could not be read go in before the backup.
+    ctx.waitUntil(
+      drainPending(env)
+        .catch((error) => console.error("pending_claps_failed", error?.name))
+        .then(() => (_event.cron === "0 18 * * *" ? scheduledBackup(env) : undefined))
+        .then(() => env.BACKUPS.delete("fallback/projects.json")),
+    );
   },
 };

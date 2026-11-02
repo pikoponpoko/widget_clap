@@ -271,15 +271,15 @@ function referrerName(host: string) {
 }
 // Unknown values are left out of the lists.
 function attrKnown(k: AttrKey, v: string) {
-  if (k === "region") return v !== "|";
+  if (k === "region") return v.replace(/\|/g, "") !== "";
   return !!v;
 }
 function attrLabel(k: AttrKey, v: string) {
   if (k === "region") {
-    const [country, region] = v.split("|");
+    const [country, region, city] = v.split("|");
     const nation =
       country && country !== "JP" ? displayName("region", country) : "";
-    return [nation, region].filter(Boolean).join(" ");
+    return [nation, region, city].filter(Boolean).join(" ");
   }
   if (k === "referrer") return referrerName(v);
   if (k === "lang") return displayName("language", v);

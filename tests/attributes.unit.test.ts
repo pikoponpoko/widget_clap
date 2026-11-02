@@ -37,6 +37,7 @@ describe("clap attributes", () => {
       country: "JP",
       region: "Tokyo",
       regionCode: "13",
+      city: "Shibuya",
       lang: "ja-JP",
       userAgent: iphone,
       referrer: "www.example.com",
@@ -44,10 +45,10 @@ describe("clap attributes", () => {
       pageUrl: "https://example.com/a",
       repeat: false,
     });
-    expect(a).not.toHaveProperty("city");
     expect(a).toMatchObject({
       country: "JP",
       region: "東京都",
+      city: "Shibuya",
       lang: "ja",
       device: "phone",
       referrer: "self",
@@ -57,6 +58,7 @@ describe("clap attributes", () => {
     const b = buildAttrs({
       country: "<x>",
       region: "California",
+      city: "california",
       referrer: "https://google.com/search?q=secret",
       screen: "huge",
       acceptLanguage: "en-US,en;q=0.9",
@@ -66,6 +68,7 @@ describe("clap attributes", () => {
     expect(b).toMatchObject({
       country: "",
       region: "California",
+      city: "",
       lang: "en",
       referrer: "",
       screen: "",
@@ -95,7 +98,7 @@ describe("clap attributes", () => {
       readAttrs(JSON.stringify(a)),
     ]);
     expect(s.total).toBe(3);
-    expect(s.lists.region).toEqual([{ v: "JP|大阪府", n: 3 }]);
+    expect(s.lists.region).toEqual([{ v: "JP|大阪府|", n: 3 }]);
     expect(s.lists.repeat).toEqual([
       { v: "first", n: 2 },
       { v: "repeat", n: 1 },

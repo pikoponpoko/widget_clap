@@ -1,8 +1,9 @@
 // Who clapped, recorded with each clap from 2026-11 on. Shared by the Worker and the browser preview.
 export interface ClapAttrs {
   country: string;
-  // Prefecture in Japan. Cloudflare's city guess is no finer than this, so it is not kept.
   region: string;
+  // Left empty when it only repeats the region.
+  city: string;
   lang: string;
   device: "phone" | "tablet" | "pc" | "";
   os: string;
@@ -142,10 +143,13 @@ const PREFECTURES = [
   "鹿児島県",
   "沖縄県",
 ];
+const sameName = (a: unknown, b: unknown) =>
+  String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
 export function buildAttrs(input: {
   country?: unknown;
   region?: unknown;
   regionCode?: unknown;
+  city?: unknown;
   lang?: unknown;
   acceptLanguage?: string | null;
   userAgent?: string | null;
@@ -161,6 +165,7 @@ export function buildAttrs(input: {
     region:
       (input.country === "JP" && PREFECTURES[Number(input.regionCode) - 1]) ||
       clip(input.region, 60),
+    city: sameName(input.city, input.region) ? "" : clip(input.city, 60),
     lang: cleanLang(input.lang) || cleanLang(input.acceptLanguage),
     ...parseAgent(String(input.userAgent || "").slice(0, 500)),
     referrer: cleanReferrer(input.referrer, input.pageUrl),
@@ -187,7 +192,7 @@ export function tallyAttrs(rows: (ClapAttrs | null)[]): AttrStats {
     total++;
     const values: Record<AttrKey, string> = {
       // The country is kept so "Tokyo" in two countries stays apart.
-      region: [a.country || "", a.region || ""].join("|"),
+      region: [a.country || "", a.region || "", a.city || ""].join("|"),
       lang: a.lang || "",
       device: a.device || "",
       os: a.os || "",

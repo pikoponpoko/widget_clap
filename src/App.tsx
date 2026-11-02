@@ -60,6 +60,10 @@ import type { PeriodBucket, PeriodStats, PeriodUnit } from "./periods";
 import { webclapScript } from "./webclap-script";
 import { parseImport, parseImportHtml, type ImportRow } from "./import-parse";
 import { clapDaysMarker, parseClapDays, type ClapDay } from "./clap-days-parse";
+const shiftDay = (d: string, n: number) =>
+  new Date(Date.parse(d + "T00:00:00Z") + n * 86400000)
+    .toISOString()
+    .slice(0, 10);
 const jstToday = (offsetDays = 0) =>
   new Date(Date.now() + 9 * 3600000 - offsetDays * 86400000)
     .toISOString()
@@ -550,12 +554,14 @@ function Activity({
   hours,
   day,
   onDay,
+  onRange,
   query,
 }: {
   stats: Stats | null;
   hours: HourStats | null;
   day: string;
   onDay: (day: string) => void;
+  onRange: (n: number) => void;
   query: string;
 }) {
   const [mode, setMode] = useState<Mode>("hours");
@@ -684,6 +690,27 @@ function Activity({
             </button>
           </div>
         )}
+        {mode === "days" && (
+          <div className="day-step">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="前の30日"
+              onClick={() => onRange(-1)}
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="次の30日"
+              disabled={!stats || stats.to >= jstToday()}
+              onClick={() => onRange(1)}
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
       </div>
       {!columns ? (
         <div className="chart-loading">集計を読み込んでいます…</div>
@@ -795,8 +822,9 @@ export default function App() {
       ? (location.hash.slice(1) as Section)
       : "overview",
   );
-  const [from, setFrom] = useState(jstToday(29)),
-    [to, setTo] = useState(jstToday()),
+  // The day chart and the page lists cover 30 days ending on `to`.
+  const [to, setTo] = useState(jstToday()),
+    from = shiftDay(to, -29),
     [day, setDay] = useState(jstToday()),
     [pageUrl, setPageUrl] = useState("");
   const [project, setProject] = useState(""),
@@ -983,6 +1011,24 @@ export default function App() {
                 <Plus size={16} />
                 サイトを追加
               </button>
+            ) : section === "overview" ? (
+              <div className="heading-actions">
+                <button
+                  className="icon-button"
+                  onClick={refresh}
+                  aria-label="集計を更新"
+                >
+                  <RefreshCw size={15} />
+                </button>
+                <button
+                  className="icon-button"
+                  onClick={() => setStatsPrint(true)}
+                  disabled={!stats.data}
+                  aria-label="統計を印刷"
+                >
+                  <Printer size={15} />
+                </button>
+              </div>
             ) : null}
           </div>
           {(section === "inbox" || section === "print") && list.length > 1 && (
@@ -1003,40 +1049,6 @@ export default function App() {
                 </select>
                 <ChevronDown size={14} />
               </div>
-            </div>
-          )}
-          {section === "overview" && (
-            <div className="scope-bar date-bar">
-              <div className="date-range">
-                <input
-                  type="date"
-                  aria-label="集計の開始日"
-                  value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                />
-                <span>–</span>
-                <input
-                  type="date"
-                  aria-label="集計の終了日"
-                  value={to}
-                  onChange={(e) => setTo(e.target.value)}
-                />
-              </div>
-              <button
-                className="icon-button"
-                onClick={refresh}
-                aria-label="集計を更新"
-              >
-                <RefreshCw size={15} />
-              </button>
-              <button
-                className="icon-button"
-                onClick={() => setStatsPrint(true)}
-                disabled={!stats.data}
-                aria-label="統計を印刷"
-              >
-                <Printer size={15} />
-              </button>
             </div>
           )}
           <ErrorText>{projects.error || stats.error}</ErrorText>
@@ -1069,6 +1081,11 @@ export default function App() {
                     hours={hours.data}
                     day={day}
                     onDay={setDay}
+                    onRange={(n) => {
+                      const next = shiftDay(to, n * 30),
+                        today = jstToday();
+                      setTo(next > today ? today : next);
+                    }}
                     query={new URLSearchParams({
                       ...(pageUrl ? { page: pageUrl } : {}),
                       v: String(version),

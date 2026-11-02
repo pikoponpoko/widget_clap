@@ -2400,14 +2400,21 @@ small {
 }
 .thank-actions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 16px;
 }
+.thank-actions .reaction-row {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+}
 .thank-actions .reaction-button {
-  min-width: 38px;
-  padding: 2px 8px;
+  flex: 0 1 38px;
+  min-width: 0;
+  padding: 2px 0;
   font-size: 15px;
   line-height: 1;
 }
@@ -3095,8 +3102,10 @@ html.embed-document {
 }
 .reaction-counts {
   display: flex;
-  flex-shrink: 0;
-  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  flex-shrink: 1;
+  gap: 4px 12px;
 }
 .reaction-counts > span {
   display: inline-flex;

@@ -1,8 +1,8 @@
 // Who clapped, recorded with each clap from 2026-11 on. Shared by the Worker and the browser preview.
 export interface ClapAttrs {
   country: string;
+  // Prefecture in Japan. Cloudflare's city guess is no finer than this, so it is not kept.
   region: string;
-  city: string;
   lang: string;
   device: "phone" | "tablet" | "pc" | "";
   os: string;
@@ -14,7 +14,6 @@ export interface ClapAttrs {
 }
 export const ATTR_KEYS = [
   "region",
-  "city",
   "lang",
   "device",
   "os",
@@ -147,7 +146,6 @@ export function buildAttrs(input: {
   country?: unknown;
   region?: unknown;
   regionCode?: unknown;
-  city?: unknown;
   lang?: unknown;
   acceptLanguage?: string | null;
   userAgent?: string | null;
@@ -163,7 +161,6 @@ export function buildAttrs(input: {
     region:
       (input.country === "JP" && PREFECTURES[Number(input.regionCode) - 1]) ||
       clip(input.region, 60),
-    city: clip(input.city, 60),
     lang: cleanLang(input.lang) || cleanLang(input.acceptLanguage),
     ...parseAgent(String(input.userAgent || "").slice(0, 500)),
     referrer: cleanReferrer(input.referrer, input.pageUrl),
@@ -180,10 +177,6 @@ export function readAttrs(raw: unknown): ClapAttrs | null {
     return null;
   }
 }
-// Places join the country so "Tokyo" in two countries stays apart; the city is added when known.
-function place(a: ClapAttrs) {
-  return [a.country, a.region, a.city].map((x) => x || "").join("|");
-}
 export function tallyAttrs(rows: (ClapAttrs | null)[]): AttrStats {
   const lists = Object.fromEntries(
     ATTR_KEYS.map((k) => [k, new Map<string, number>()]),
@@ -193,8 +186,8 @@ export function tallyAttrs(rows: (ClapAttrs | null)[]): AttrStats {
     if (!a) continue;
     total++;
     const values: Record<AttrKey, string> = {
+      // The country is kept so "Tokyo" in two countries stays apart.
       region: [a.country || "", a.region || ""].join("|"),
-      city: place(a),
       lang: a.lang || "",
       device: a.device || "",
       os: a.os || "",

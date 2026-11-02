@@ -37,7 +37,6 @@ describe("clap attributes", () => {
       country: "JP",
       region: "Tokyo",
       regionCode: "13",
-      city: "Shibuya",
       lang: "ja-JP",
       userAgent: iphone,
       referrer: "www.example.com",
@@ -45,10 +44,10 @@ describe("clap attributes", () => {
       pageUrl: "https://example.com/a",
       repeat: false,
     });
+    expect(a).not.toHaveProperty("city");
     expect(a).toMatchObject({
       country: "JP",
       region: "東京都",
-      city: "Shibuya",
       lang: "ja",
       device: "phone",
       referrer: "self",

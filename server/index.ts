@@ -186,7 +186,6 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
     country: cf.country,
     region: cf.region,
     regionCode: cf.regionCode,
-    city: cf.city,
     lang: body.lang,
     acceptLanguage: c.req.header("Accept-Language"),
     userAgent: c.req.header("User-Agent"),

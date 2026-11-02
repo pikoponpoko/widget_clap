@@ -11,6 +11,6 @@
   "icons": [
     { "src": "/icons/hakushu-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/hakushu-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/hakushu-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icons/hakushu-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

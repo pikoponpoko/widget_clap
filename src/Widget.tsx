@@ -350,19 +350,23 @@ export function Widget({
                 {clapBusy ? "送信中…" : "もう一度"}
               </button>
             )}
-            {reactions.map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                className="btn reaction-button"
-                aria-label={r.label}
-                title={r.label}
-                aria-pressed={reacted.includes(r.key)}
-                onClick={() => react(r.key)}
-              >
-                {r.emoji}
-              </button>
-            ))}
+            {reactions.length > 0 && (
+              <div className="reaction-row">
+                {reactions.map((r) => (
+                  <button
+                    key={r.key}
+                    type="button"
+                    className="btn reaction-button"
+                    aria-label={r.label}
+                    title={r.label}
+                    aria-pressed={reacted.includes(r.key)}
+                    onClick={() => react(r.key)}
+                  >
+                    {r.emoji}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {sent ? (

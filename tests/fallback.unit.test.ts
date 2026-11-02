@@ -151,4 +151,46 @@ describe("D1 read fallback", () => {
     expect(sql.some((q) => q.startsWith("INSERT OR IGNORE INTO messages("))).toBe(true);
     expect(sql.some((q) => q.startsWith("INSERT OR IGNORE INTO reactions("))).toBe(true);
   });
+  it("keeps posts in R2 when the project reads but later D1 steps fail", async () => {
+    const partialDb = {
+      prepare(q: string) {
+        const fail = async () => {
+          throw new Error("D1_ERROR: rows read limit");
+        };
+        const stmt = {
+          bind: () => stmt,
+          first: q.includes("FROM projects WHERE slug") ? async () => project : fail,
+          all: q.includes("FROM assets") ? async () => ({ results: [] }) : fail,
+          run: fail,
+        };
+        return stmt;
+      },
+    };
+    const e = env(partialDb) as unknown as { BACKUPS: MemoryBucket };
+    const post = (path: string, body: unknown) =>
+      app.fetch(
+        new Request(origin + "/api/public/projects/kazuki/" + path, {
+          method: "POST",
+          headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": "1.2.3.4" },
+          body: JSON.stringify(body),
+        }),
+        e as never,
+      );
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      Response.json({ success: true, hostname: "hakushu.example", action: "message" })) as typeof fetch;
+    expect((await clap(e)).status).toBe(200);
+    expect((await post("reactions", { kind: REACTION_KEYS[0], page_url: "https://kazukisekiguchi.com/" })).status).toBe(200);
+    const m = await post("messages", {
+      body: "よかったです",
+      request_id: crypto.randomUUID(),
+      started_at: Date.now() - 5000,
+      page_url: "https://kazukisekiguchi.com/",
+    });
+    globalThis.fetch = realFetch;
+    expect(m.status).toBe(201);
+    const keys = [...e.BACKUPS.store.keys()];
+    for (const t of ["claps", "reactions", "messages"])
+      expect(keys.some((k) => k.startsWith(`pending/${t}/`))).toBe(true);
+  });
 });

@@ -80,10 +80,31 @@ export function token() {
     .replace(/\//g, "_")
     .replace(/=/g, "");
 }
+// IPv6 home and phone connections switch the last 64 bits every day or so;
+// the first 64 bits stay with the line. IPv4 is returned as it is.
+export function ipNetwork(ip: string) {
+  if (!ip.includes(":")) return ip;
+  let s = ip.toLowerCase().split("%")[0];
+  const v4 = s.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  if (v4) {
+    const n = v4[2].split(".").map(Number);
+    s = `${v4[1]}${((n[0] << 8) | n[1]).toString(16)}:${((n[2] << 8) | n[3]).toString(16)}`;
+  }
+  const [head, tail] = s.split("::");
+  const a = head ? head.split(":") : [];
+  const b = tail === undefined ? [] : tail ? tail.split(":") : [];
+  const full = [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill("0"), ...b];
+  if (full.length !== 8 || full.some((x) => !/^[0-9a-f]{1,4}$/.test(x))) return ip;
+  return full
+    .slice(0, 4)
+    .map((x) => parseInt(x, 16).toString(16))
+    .join(":") + "::/64";
+}
 export async function privateKey(
   request: Request,
   env: Env,
   day = now().slice(0, 10),
+  network = false,
 ) {
   const secret =
     env.SPAM_SECRET ||
@@ -94,6 +115,7 @@ export async function privateKey(
     request.headers.get("CF-Connecting-IP") ||
     (local(request, env) ? "loopback" : "");
   if (!ip) throw new ApiError(403, "送信元を確認できません。");
+  const source = network ? ipNetwork(ip) : ip;
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -104,7 +126,7 @@ export async function privateKey(
   const signature = await crypto.subtle.sign(
     "HMAC",
     key,
-    new TextEncoder().encode(`${day}:${ip}`),
+    new TextEncoder().encode(`${day}:${source}`),
   );
   return Array.from(new Uint8Array(signature), (b) =>
     b.toString(16).padStart(2, "0"),

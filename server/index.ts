@@ -211,17 +211,17 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   const dedupe = await hash(
     `${key}:${p.id}:${page.page_url}:${now().slice(0, 13)}`,
   );
-  // Same connection, same visitor on every day, so totals over many days stay true.
-  const visitor = (await privateKey(c.req.raw, c.env, "visitor")).slice(0, 32);
+  // Same line, same visitor on every day, so totals over many days stay true.
+  const [visitor, legacy] = await visitorIds(c.req.raw, c.env);
   // Raw IPs are never stored: the place comes from Cloudflare, the person from the hashed visitor.
   const cf = (c.req.raw as { cf?: Record<string, unknown> }).cf || {};
   let seen: unknown = null;
   if (!fallback)
     fallback = !(await tryDb(async () => {
       seen = await c.env.DB.prepare(
-        "SELECT 1 FROM claps WHERE visitor=? LIMIT 1",
+        "SELECT 1 FROM claps WHERE visitor IN (?,?) LIMIT 1",
       )
-        .bind(visitor)
+        .bind(visitor, legacy)
         .first();
     }));
   const attrs = buildAttrs({
@@ -287,7 +287,7 @@ app.post("/api/public/projects/:slug/reactions", async (c) => {
   const dedupe = await hash(
     `${key}:${p.id}:${page.page_url}:${data.kind}:${now().slice(0, 13)}`,
   );
-  const visitor = (await privateKey(c.req.raw, c.env, "visitor")).slice(0, 32);
+  const [visitor] = await visitorIds(c.req.raw, c.env);
   const row = {
     id: id(),
     project_id: p.id,
@@ -861,12 +861,20 @@ app.delete("/api/owner/assets/:id", async (c) => {
   await audit(c.env, "asset.delete", a.id);
   return c.json({ ok: true });
 });
+// The visitor id, then the id from the full address used before the IPv6 line
+// was taken as one visitor (the same for IPv4).
+async function visitorIds(request: Request, env: Env) {
+  return [
+    (await privateKey(request, env, "visitor", true)).slice(0, 32),
+    (await privateKey(request, env, "visitor")).slice(0, 32),
+  ];
+}
 // Visitor ids this connection had on a day, in every format used so far.
 async function ownVisitors(request: Request, env: Env, day: string) {
   const prev = new Date(Date.parse(day + "T00:00:00Z") - 86400000)
     .toISOString()
     .slice(0, 10);
-  const ids = [(await privateKey(request, env, "visitor")).slice(0, 32)];
+  const ids: string[] = await visitorIds(request, env);
   for (const utc of [prev, day])
     ids.push(
       (

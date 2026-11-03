@@ -353,31 +353,23 @@ function AttrList({
     </div>
   );
 }
-function AttrStatsPanel({ stats }: { stats: Stats | null }) {
-  if (!stats) return null;
+function AttrStats({ stats }: { stats: Stats }) {
   const a = stats.attributes;
+  if (!a?.total)
+    return <p className="reaction-empty muted">記録はまだありません</p>;
   return (
-    <section className="panel activity-panel">
-      <div className="panel-heading">
-        <h2>拍手した人</h2>
-      </div>
-      {!a?.total ? (
-        <p className="reaction-empty muted">記録はまだありません</p>
-      ) : (
-        <div className="attr-grid">
-          {ATTR_KEYS.map((k) => {
-            const rows = (a.lists[k] || []).filter((r) => attrKnown(k, r.v));
-            return rows.length ? (
-              <AttrList key={k} k={k} rows={rows} total={a.total} />
-            ) : null;
-          })}
-        </div>
-      )}
-    </section>
+    <div className="attr-grid">
+      {ATTR_KEYS.map((k) => {
+        const rows = (a.lists[k] || []).filter((r) => attrKnown(k, r.v));
+        return rows.length ? (
+          <AttrList key={k} k={k} rows={rows} total={a.total} />
+        ) : null;
+      })}
+    </div>
   );
 }
-// Reactions pressed on the thank-you screen, per day or per page.
-function ReactionStats({
+// Claps per page, who clapped and reactions share one card, switched by the heading tabs.
+function PageAttrPanel({
   stats,
   selected,
   onSelect,
@@ -386,8 +378,82 @@ function ReactionStats({
   selected: string;
   onSelect: (page: string) => void;
 }) {
-  const [mode, setMode] = useState<"days" | "pages">("days");
+  const [tab, setTab] = useState<"pages" | "people" | "reactions">("pages"),
+    [mode, setMode] = useState<ReactionMode>("days");
   if (!stats) return null;
+  return (
+    <section className="panel activity-panel">
+      <div className="panel-heading activity-heading">
+        <div className="heading-tabs" role="tablist">
+          {(
+            [
+              ["pages", "ページ別の拍手"],
+              ["people", "拍手した人"],
+              ["reactions", "リアクション"],
+            ] as const
+          ).map(([t, label]) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              className={tab === t ? "active" : ""}
+              onClick={() => setTab(t)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {tab === "reactions" && (
+          <div className="mode-switch" role="tablist">
+            {(
+              [
+                ["days", "日別"],
+                ["pages", "ページ別"],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={mode === m}
+                className={mode === m ? "active" : ""}
+                onClick={() => setMode(m)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {tab === "pages" ? (
+        <PageStats stats={stats} selected={selected} onSelect={onSelect} />
+      ) : tab === "people" ? (
+        <AttrStats stats={stats} />
+      ) : (
+        <ReactionStats
+          stats={stats}
+          mode={mode}
+          selected={selected}
+          onSelect={onSelect}
+        />
+      )}
+    </section>
+  );
+}
+// Reactions pressed on the thank-you screen, per day or per page.
+type ReactionMode = "days" | "pages";
+function ReactionStats({
+  stats,
+  mode,
+  selected,
+  onSelect,
+}: {
+  stats: Stats;
+  mode: ReactionMode;
+  selected: string;
+  onSelect: (page: string) => void;
+}) {
   const days = stats.reaction_days || [],
     pages = stats.reaction_pages || [];
   const source = mode === "days" ? days : pages;
@@ -420,29 +486,7 @@ function ReactionStats({
     mode === "days" ? b.key.localeCompare(a.key) : sum(b) - sum(a),
   );
   return (
-    <section className="panel activity-panel">
-      <div className="panel-heading activity-heading">
-        <h2>リアクション</h2>
-        <div className="mode-switch" role="tablist">
-          {(
-            [
-              ["days", "日別"],
-              ["pages", "ページ別"],
-            ] as const
-          ).map(([m, label]) => (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              aria-selected={mode === m}
-              className={mode === m ? "active" : ""}
-              onClick={() => setMode(m)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+    <>
       {!list.length ? (
         <p className="reaction-empty muted">リアクションはまだありません</p>
       ) : (
@@ -489,7 +533,7 @@ function ReactionStats({
           ))}
         </ol>
       )}
-    </section>
+    </>
   );
 }
 // Year/month/day hour:minute in Japan time, e.g. 2026/11/01 16:07.
@@ -1178,22 +1222,11 @@ export default function App() {
                       v: String(version),
                     }).toString()}
                   />
-                  <section className="panel activity-panel">
-                    <div className="panel-heading">
-                      <h2>ページ別の拍手</h2>
-                    </div>
-                    <PageStats
-                      stats={stats.data}
-                      selected={pageUrl}
-                      onSelect={setPageUrl}
-                    />
-                  </section>
-                  <ReactionStats
+                  <PageAttrPanel
                     stats={stats.data}
                     selected={pageUrl}
                     onSelect={setPageUrl}
                   />
-                  <AttrStatsPanel stats={stats.data} />
                 </div>
               </div>
             </>

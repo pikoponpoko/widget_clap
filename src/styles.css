@@ -446,6 +446,27 @@ small {
   gap: 9px;
   align-items: center;
 }
+.heading-tabs {
+  display: flex;
+  gap: 18px;
+}
+.heading-tabs button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.heading-tabs button.active {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-thickness: 1px;
+}
 .panel-heading > svg {
   color: #767676;
 }

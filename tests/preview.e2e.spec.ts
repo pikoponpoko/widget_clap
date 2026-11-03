@@ -349,6 +349,31 @@ test("one code serves many pages: claps and messages are listed per page in the 
     page.locator(".project-tag", { hasText: "ブログ記事" }).first(),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Hakushu" })).toBeVisible();
+  // Pages, who clapped and reactions share one card, switched by tabs.
+  const card = page.locator(".panel", {
+    has: page.getByRole("tab", { name: "拍手した人" }),
+  });
+  if (process.env.SHOTS)
+    await card.screenshot({ path: process.env.SHOTS + "/pc.png" });
+  await page.getByRole("tab", { name: "拍手した人" }).click();
+  await expect(page.locator(".page-stats")).toHaveCount(0);
+  await expect(page.locator(".attr-block").first()).toBeVisible();
+  if (process.env.SHOTS)
+    await card.screenshot({ path: process.env.SHOTS + "/pc-people.png" });
+  await page.getByRole("tab", { name: "リアクション" }).click();
+  await expect(card.getByRole("tab", { name: "日別" })).toBeVisible();
+  if (process.env.SHOTS)
+    await card.screenshot({ path: process.env.SHOTS + "/pc-reactions.png" });
+  await page.getByRole("tab", { name: "ページ別の拍手" }).click();
+  await expect(pages.getByRole("link", { name: "ブログ記事" })).toBeVisible();
+  if (process.env.SHOTS) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await card.screenshot({ path: process.env.SHOTS + "/sp.png" });
+    await page.getByRole("tab", { name: "拍手した人" }).click();
+    await card.screenshot({ path: process.env.SHOTS + "/sp-people.png" });
+    await page.getByRole("tab", { name: "リアクション" }).click();
+    await card.screenshot({ path: process.env.SHOTS + "/sp-reactions.png" });
+  }
 });
 test("the tip-enabled demo page shows the unconnected tip placeholder only there", async ({
   page,
@@ -719,8 +744,9 @@ test("reaction buttons on the thank-you screen are counted per day and page", as
     await page.screenshot({ path: process.env.SHOTS + "/thanks.png" });
   await page.getByRole("button", { name: "お礼画面を閉じる" }).click();
   await page.goto("/admin");
+  await page.getByRole("tab", { name: "リアクション" }).click();
   const panel = page.locator(".panel", {
-    has: page.getByRole("heading", { name: "リアクション" }),
+    has: page.getByRole("tab", { name: "リアクション" }),
   });
   await expect(panel.locator(".reaction-total")).toContainText("❤️1");
   await expect(panel.locator(".reaction-total")).toContainText("💯1");
@@ -732,7 +758,7 @@ test("reaction buttons on the thank-you screen are counted per day and page", as
   await expect(page.locator(".hour-reactions")).toContainText("❤️ 1");
   if (process.env.SHOTS)
     await panel.screenshot({ path: process.env.SHOTS + "/admin-days.png" });
-  await panel.getByRole("tab", { name: "ページ別" }).click();
+  await panel.getByRole("tab", { name: "ページ別", exact: true }).click();
   await expect(panel.locator(".page-filter")).toHaveCount(1);
   if (process.env.SHOTS)
     await panel.screenshot({ path: process.env.SHOTS + "/admin-pages.png" });

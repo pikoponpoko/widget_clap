@@ -20,7 +20,6 @@ import {
   ExternalLink,
   FileImage,
   FileText,
-  Filter,
   FolderHeart,
   Heart,
   Inbox,
@@ -177,7 +176,26 @@ function pagePath(url: string) {
     return url;
   }
 }
-// The title opens the page; the filter button narrows the dashboard to it (press again for all pages).
+// Same hand as the clap button image (public/clap-button.svg), drawn like the lucide icons.
+function ClapIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="10.5 1 33 33"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m22 29-5-8c-2-3 0-5 2-2l3 4-1-12c0-3 3-3 3 0l1 9 1-12c0-3 3-2 3 0l-1 12 3-9c1-3 4-2 3 1l-3 10 3-5c2-3 4-1 3 1l-5 11c-2 5-8 5-10 0Z" />
+      <path d="m15 10-2-3m25 4 3-3M32 5l1-3" />
+    </svg>
+  );
+}
+// The title opens the page; the clap button narrows the dashboard to it (press again for all pages).
 function PageStats({
   stats,
   selected,
@@ -230,7 +248,7 @@ function PageStats({
                   onSelect(p.page_url === selected ? "" : p.page_url)
                 }
               >
-                <Filter size={14} />
+                <ClapIcon size={18} />
               </button>
             </>
           ) : (

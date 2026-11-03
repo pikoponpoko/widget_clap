@@ -851,6 +851,12 @@ small {
   -webkit-box-orient: vertical;
   overflow-wrap: anywhere;
 }
+.message-list.compact .message-summary p {
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-line;
+  -webkit-line-clamp: 8;
+}
 .reply-status {
   display: flex;
   gap: 4px;

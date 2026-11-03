@@ -1098,6 +1098,28 @@ export default function App() {
               </div>
               <div className="dashboard-single">
                 <div className="dashboard-main">
+                  <section className="panel latest-messages">
+                    <div className="panel-heading">
+                      <h2>
+                        新しく届いた感想
+                        <span className="count-label">
+                          {total?.unread || 0}
+                        </span>
+                      </h2>
+                      <button
+                        className="text-button"
+                        onClick={() => navigate("inbox")}
+                      >
+                        すべて見る <ArrowRight size={14} />
+                      </button>
+                    </div>
+                    <InboxList
+                      project=""
+                      version={version}
+                      compact
+                      onSelect={setSelected}
+                    />
+                  </section>
                   <ErrorText>{hours.error}</ErrorText>
                   <Activity
                     stats={stats.data}
@@ -1130,28 +1152,6 @@ export default function App() {
                     onSelect={setPageUrl}
                   />
                   <AttrStatsPanel stats={stats.data} />
-                  <section className="panel">
-                    <div className="panel-heading">
-                      <h2>
-                        新しく届いた感想
-                        <span className="count-label">
-                          {total?.unread || 0}
-                        </span>
-                      </h2>
-                      <button
-                        className="text-button"
-                        onClick={() => navigate("inbox")}
-                      >
-                        すべて見る <ArrowRight size={14} />
-                      </button>
-                    </div>
-                    <InboxList
-                      project=""
-                      version={version}
-                      compact
-                      onSelect={setSelected}
-                    />
-                  </section>
                 </div>
               </div>
             </>
@@ -1496,7 +1496,7 @@ function InboxList({
       {loading && !data ? (
         <p className="loading-text">読み込んでいます…</p>
       ) : items.length ? (
-        <div className="message-list">
+        <div className={"message-list" + (compact ? " compact" : "")}>
           {items.slice(0, compact ? 4 : 50).map((m) => (
             <div className="message-item" key={m.id}>
               {!compact && (

@@ -2877,9 +2877,16 @@ html.embed-document {
   height: 28px;
   color: var(--muted);
 }
+.page-stats .page-filter,
+.page-stats .page-filter:hover {
+  background: none;
+}
+.page-stats .page-filter:hover,
 .page-filter[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--white);
+  color: var(--ink);
+}
+.page-filter[aria-pressed="true"] path:first-child {
+  fill: currentColor;
 }
 .page-stats li.active .page-title {
   font-weight: 600;

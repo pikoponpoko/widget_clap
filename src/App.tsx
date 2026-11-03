@@ -368,7 +368,7 @@ function AttrStats({ stats }: { stats: Stats }) {
     </div>
   );
 }
-// Claps per page and who clapped share one card, switched by the heading tabs.
+// Claps per page, who clapped and reactions share one card, switched by the heading tabs.
 function PageAttrPanel({
   stats,
   selected,
@@ -378,16 +378,18 @@ function PageAttrPanel({
   selected: string;
   onSelect: (page: string) => void;
 }) {
-  const [tab, setTab] = useState<"pages" | "people">("pages");
+  const [tab, setTab] = useState<"pages" | "people" | "reactions">("pages"),
+    [mode, setMode] = useState<ReactionMode>("days");
   if (!stats) return null;
   return (
     <section className="panel activity-panel">
-      <div className="panel-heading">
+      <div className="panel-heading activity-heading">
         <div className="heading-tabs" role="tablist">
           {(
             [
               ["pages", "ページ別の拍手"],
               ["people", "拍手した人"],
+              ["reactions", "リアクション"],
             ] as const
           ).map(([t, label]) => (
             <button
@@ -402,27 +404,56 @@ function PageAttrPanel({
             </button>
           ))}
         </div>
+        {tab === "reactions" && (
+          <div className="mode-switch" role="tablist">
+            {(
+              [
+                ["days", "日別"],
+                ["pages", "ページ別"],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={mode === m}
+                className={mode === m ? "active" : ""}
+                onClick={() => setMode(m)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {tab === "pages" ? (
         <PageStats stats={stats} selected={selected} onSelect={onSelect} />
-      ) : (
+      ) : tab === "people" ? (
         <AttrStats stats={stats} />
+      ) : (
+        <ReactionStats
+          stats={stats}
+          mode={mode}
+          selected={selected}
+          onSelect={onSelect}
+        />
       )}
     </section>
   );
 }
 // Reactions pressed on the thank-you screen, per day or per page.
+type ReactionMode = "days" | "pages";
 function ReactionStats({
   stats,
+  mode,
   selected,
   onSelect,
 }: {
-  stats: Stats | null;
+  stats: Stats;
+  mode: ReactionMode;
   selected: string;
   onSelect: (page: string) => void;
 }) {
-  const [mode, setMode] = useState<"days" | "pages">("days");
-  if (!stats) return null;
   const days = stats.reaction_days || [],
     pages = stats.reaction_pages || [];
   const source = mode === "days" ? days : pages;
@@ -455,29 +486,7 @@ function ReactionStats({
     mode === "days" ? b.key.localeCompare(a.key) : sum(b) - sum(a),
   );
   return (
-    <section className="panel activity-panel">
-      <div className="panel-heading activity-heading">
-        <h2>リアクション</h2>
-        <div className="mode-switch" role="tablist">
-          {(
-            [
-              ["days", "日別"],
-              ["pages", "ページ別"],
-            ] as const
-          ).map(([m, label]) => (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              aria-selected={mode === m}
-              className={mode === m ? "active" : ""}
-              onClick={() => setMode(m)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+    <>
       {!list.length ? (
         <p className="reaction-empty muted">リアクションはまだありません</p>
       ) : (
@@ -524,7 +533,7 @@ function ReactionStats({
           ))}
         </ol>
       )}
-    </section>
+    </>
   );
 }
 // Year/month/day hour:minute in Japan time, e.g. 2026/11/01 16:07.
@@ -1150,11 +1159,6 @@ export default function App() {
                     }).toString()}
                   />
                   <PageAttrPanel
-                    stats={stats.data}
-                    selected={pageUrl}
-                    onSelect={setPageUrl}
-                  />
-                  <ReactionStats
                     stats={stats.data}
                     selected={pageUrl}
                     onSelect={setPageUrl}

@@ -2881,10 +2881,6 @@ html.embed-document {
 .page-stats .page-filter:hover {
   background: none;
 }
-.page-stats .page-filter:hover,
-.page-filter[aria-pressed="true"] {
-  color: var(--ink);
-}
 .page-filter[aria-pressed="true"] path:first-child {
   fill: currentColor;
 }

@@ -353,25 +353,60 @@ function AttrList({
     </div>
   );
 }
-function AttrStatsPanel({ stats }: { stats: Stats | null }) {
-  if (!stats) return null;
+function AttrStats({ stats }: { stats: Stats }) {
   const a = stats.attributes;
+  if (!a?.total)
+    return <p className="reaction-empty muted">記録はまだありません</p>;
+  return (
+    <div className="attr-grid">
+      {ATTR_KEYS.map((k) => {
+        const rows = (a.lists[k] || []).filter((r) => attrKnown(k, r.v));
+        return rows.length ? (
+          <AttrList key={k} k={k} rows={rows} total={a.total} />
+        ) : null;
+      })}
+    </div>
+  );
+}
+// Claps per page and who clapped share one card, switched by the heading tabs.
+function PageAttrPanel({
+  stats,
+  selected,
+  onSelect,
+}: {
+  stats: Stats | null;
+  selected: string;
+  onSelect: (page: string) => void;
+}) {
+  const [tab, setTab] = useState<"pages" | "people">("pages");
+  if (!stats) return null;
   return (
     <section className="panel activity-panel">
       <div className="panel-heading">
-        <h2>拍手した人</h2>
-      </div>
-      {!a?.total ? (
-        <p className="reaction-empty muted">記録はまだありません</p>
-      ) : (
-        <div className="attr-grid">
-          {ATTR_KEYS.map((k) => {
-            const rows = (a.lists[k] || []).filter((r) => attrKnown(k, r.v));
-            return rows.length ? (
-              <AttrList key={k} k={k} rows={rows} total={a.total} />
-            ) : null;
-          })}
+        <div className="heading-tabs" role="tablist">
+          {(
+            [
+              ["pages", "ページ別の拍手"],
+              ["people", "拍手した人"],
+            ] as const
+          ).map(([t, label]) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              className={tab === t ? "active" : ""}
+              onClick={() => setTab(t)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+      </div>
+      {tab === "pages" ? (
+        <PageStats stats={stats} selected={selected} onSelect={onSelect} />
+      ) : (
+        <AttrStats stats={stats} />
       )}
     </section>
   );
@@ -1114,22 +1149,16 @@ export default function App() {
                       v: String(version),
                     }).toString()}
                   />
-                  <section className="panel activity-panel">
-                    <div className="panel-heading">
-                      <h2>ページ別の拍手</h2>
-                    </div>
-                    <PageStats
-                      stats={stats.data}
-                      selected={pageUrl}
-                      onSelect={setPageUrl}
-                    />
-                  </section>
+                  <PageAttrPanel
+                    stats={stats.data}
+                    selected={pageUrl}
+                    onSelect={setPageUrl}
+                  />
                   <ReactionStats
                     stats={stats.data}
                     selected={pageUrl}
                     onSelect={setPageUrl}
                   />
-                  <AttrStatsPanel stats={stats.data} />
                   <section className="panel">
                     <div className="panel-heading">
                       <h2>

@@ -349,6 +349,34 @@ test("one code serves many pages: claps and messages are listed per page in the 
     page.locator(".project-tag", { hasText: "ブログ記事" }).first(),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Hakushu" })).toBeVisible();
+  // Pages and who clapped share one card, switched by tabs.
+  if (process.env.SHOTS)
+    await page.screenshot({
+      path: process.env.SHOTS + "/pc.png",
+      fullPage: true,
+    });
+  await page.getByRole("tab", { name: "拍手した人" }).click();
+  await expect(page.locator(".page-stats")).toHaveCount(0);
+  await expect(page.locator(".attr-block").first()).toBeVisible();
+  if (process.env.SHOTS)
+    await page.screenshot({
+      path: process.env.SHOTS + "/pc-people.png",
+      fullPage: true,
+    });
+  await page.getByRole("tab", { name: "ページ別の拍手" }).click();
+  await expect(pages.getByRole("link", { name: "ブログ記事" })).toBeVisible();
+  if (process.env.SHOTS) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: process.env.SHOTS + "/sp.png",
+      fullPage: true,
+    });
+    await page.getByRole("tab", { name: "拍手した人" }).click();
+    await page.screenshot({
+      path: process.env.SHOTS + "/sp-people.png",
+      fullPage: true,
+    });
+  }
 });
 test("the tip-enabled demo page shows the unconnected tip placeholder only there", async ({
   page,

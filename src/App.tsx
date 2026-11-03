@@ -388,8 +388,20 @@ function PageAttrPanel({
       "pages",
     ),
     [mode, setMode] = useState<ReactionMode>("days");
+  // A shorter tab would shorten the page and pull the card down on screen,
+  // so the card keeps the tallest height it has shown.
+  const card = useRef<HTMLElement>(null),
+    [minHeight, setMinHeight] = useState(0);
+  const open = (t: typeof tab) => {
+    setMinHeight(Math.max(minHeight, card.current?.offsetHeight || 0));
+    setTab(t);
+  };
   return (
-    <section className="panel activity-panel">
+    <section
+      className="panel activity-panel"
+      ref={card}
+      style={{ minHeight: minHeight || undefined }}
+    >
       <div className="panel-heading">
         <div className="heading-tabs" role="tablist">
           {(
@@ -406,7 +418,7 @@ function PageAttrPanel({
               role="tab"
               aria-selected={tab === t}
               className={tab === t ? "active" : ""}
-              onClick={() => setTab(t)}
+              onClick={() => open(t)}
             >
               <span>{label}</span>
               {t === "messages" && unread > 0 && (

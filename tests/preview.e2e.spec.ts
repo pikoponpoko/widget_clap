@@ -390,7 +390,19 @@ test("one code serves many pages: claps and messages are listed per page in the 
     ).toBeVisible();
     for (const b of [people, reactions, messages]) expect(b).toEqual(first);
   }
-  await card.getByRole("tab", { name: "ページ別の拍手" }).click();
+  // Scrolled to the bottom, a shorter tab must not pull the card down.
+  await page.reload();
+  await page.setViewportSize({ width: 390, height: 500 });
+  await card.getByRole("tab", { name: "拍手した人" }).click();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const y0 = (await card.boundingBox())!.y;
+  for (const t of ["リアクション", "感想", "ページ別の拍手"]) {
+    // Clicked in place, the way a thumb does, without scrolling to the tab.
+    await card
+      .getByRole("tab", { name: t })
+      .evaluate((b) => (b as HTMLElement).click());
+    expect((await card.boundingBox())!.y).toBe(y0);
+  }
 });
 test("the tip-enabled demo page shows the unconnected tip placeholder only there", async ({
   page,

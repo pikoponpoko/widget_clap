@@ -625,6 +625,23 @@ small {
   right: 0;
   text-align: center;
 }
+.activity-bars.with-reactions {
+  height: 120px;
+  padding-bottom: 32px;
+}
+.activity-bars.with-reactions:before {
+  bottom: 32px;
+}
+/* The most frequent reaction of each column, under its tick. */
+.chart-reaction {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 16px);
+  transform: translateX(-50%);
+  font-size: 10px;
+  line-height: 14px;
+  pointer-events: none;
+}
 .chart-loading {
   height: 190px;
   padding: 50px 22px;
@@ -2743,6 +2760,12 @@ html.embed-document {
   padding: 18px 22px 14px;
   font-size: 10px;
   color: #767676;
+}
+.hour-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 12px;
 }
 .hour-picked {
   border: 1px solid var(--ink);

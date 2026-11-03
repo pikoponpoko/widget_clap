@@ -4,6 +4,7 @@ export interface PeriodBucket {
   claps: number;
   messages: number;
   visitors: number;
+  reactions?: Record<string, number>;
 }
 export interface PeriodStats {
   unit: PeriodUnit;

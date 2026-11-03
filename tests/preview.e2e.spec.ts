@@ -750,6 +750,12 @@ test("reaction buttons on the thank-you screen are counted per day and page", as
   });
   await expect(panel.locator(".reaction-total")).toContainText("❤️1");
   await expect(panel.locator(".reaction-total")).toContainText("💯1");
+  // The activity chart marks the hour with its reaction and totals them.
+  await expect(page.locator(".chart-reaction")).toHaveText(["❤️"]);
+  await expect(page.locator(".hour-reactions")).toContainText("❤️ 1");
+  await expect(page.locator(".hour-reactions")).toContainText("💯 1");
+  await page.getByRole("tab", { name: "月別" }).click();
+  await expect(page.locator(".hour-reactions")).toContainText("❤️ 1");
   if (process.env.SHOTS)
     await panel.screenshot({ path: process.env.SHOTS + "/admin-days.png" });
   await panel.getByRole("tab", { name: "ページ別", exact: true }).click();

@@ -75,6 +75,12 @@ export interface Stats {
 export interface HourStats {
   day: string;
   visitors?: number;
-  hours: { hour: number; claps: number; visitors: number; messages: number }[];
+  hours: {
+    hour: number;
+    claps: number;
+    visitors: number;
+    messages: number;
+    reactions?: Record<string, number>;
+  }[];
   claps?: { at: string; page_url: string; page_title: string }[];
 }

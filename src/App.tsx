@@ -586,7 +586,14 @@ type Column = {
   messages: number;
   visitors: number;
   imported?: number;
+  reactions?: Record<string, number>;
 };
+// Reactions in candidate order, e.g. [{emoji:"❤️",count:3}].
+const reactionList = (counts: Record<string, number> = {}) =>
+  REACTIONS.filter((r) => counts[r.key]).map((r) => ({
+    ...r,
+    count: counts[r.key],
+  }));
 const modes = [
   ["hours", "時間別"],
   ["days", "日別"],
@@ -656,6 +663,11 @@ function Activity({
         messages: stats.messages.find((x) => x.day === key)?.count || 0,
         visitors: stats.visitors?.find((x) => x.day === key)?.count || 0,
         imported: stats.imported?.find((x) => x.day === key)?.claps || 0,
+        reactions: Object.fromEntries(
+          (stats.reaction_days || [])
+            .filter((x) => x.day === key)
+            .map((x) => [x.kind, x.count]),
+        ),
       });
       cur = new Date(cur.getTime() + 86400000);
     }
@@ -676,6 +688,19 @@ function Activity({
   const picked = mode !== "days" ? columns?.find((c) => c.key === pick) : null;
   const sum = (k: "claps" | "visitors" | "messages") =>
     picked ? picked[k] : (columns || []).reduce((a, c) => a + c[k], 0);
+  const reacted = reactionList(
+    (picked ? [picked] : columns || []).reduce<Record<string, number>>(
+      (a, c) => {
+        for (const [k, n] of Object.entries(c.reactions || {}))
+          a[k] = (a[k] || 0) + n;
+        return a;
+      },
+      {},
+    ),
+  );
+  const anyReaction = (columns || []).some(
+    (c) => reactionList(c.reactions).length,
+  );
   // Summing columns counts a returning visitor twice, so prefer the
   // distinct count from the server.
   const visitors = picked
@@ -779,7 +804,7 @@ function Activity({
       ) : (
         <>
           <div
-            className="activity-bars"
+            className={"activity-bars" + (anyReaction ? " with-reactions" : "")}
             style={
               {
                 "--block": `${blockPx}px`,
@@ -789,6 +814,8 @@ function Activity({
           >
             {columns.map((c) => {
               const active = c.key === (mode === "days" ? day : pick);
+              const rs = reactionList(c.reactions);
+              const top = [...rs].sort((a, b) => b.count - a.count)[0];
               return (
                 <button
                   type="button"
@@ -796,7 +823,8 @@ function Activity({
                   className={"chart-column " + (active ? "active" : "")}
                   title={
                     `${c.label} 人数 ${c.visitors}・拍手 ${c.claps}・感想 ${c.messages}` +
-                    (c.imported ? `（取り込み 拍手 ${c.imported}）` : "")
+                    (c.imported ? `（取り込み 拍手 ${c.imported}）` : "") +
+                    rs.map((r) => ` ${r.emoji} ${r.count}`).join("")
                   }
                   aria-label={`${c.label} 拍手 ${c.claps} 件`}
                   onClick={() => {
@@ -827,6 +855,11 @@ function Activity({
                   >
                     {c.tick}
                   </span>
+                  {top && (
+                    <span className="chart-reaction" aria-hidden="true">
+                      {top.emoji}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -865,6 +898,15 @@ function Activity({
             <span>
               感想 <b>{sum("messages")}</b>
             </span>
+            {reacted.length > 0 && (
+              <span className="hour-reactions">
+                {reacted.map((r) => (
+                  <span key={r.key} title={r.label}>
+                    {r.emoji} <b>{r.count}</b>
+                  </span>
+                ))}
+              </span>
+            )}
           </div>
           {mode === "hours" && <ClapTimes hours={hours} hour={pick} />}
         </>
@@ -1142,28 +1184,7 @@ export default function App() {
               </div>
               <div className="dashboard-single">
                 <div className="dashboard-main">
-                  <ErrorText>{hours.error}</ErrorText>
-                  <Activity
-                    stats={stats.data}
-                    hours={hours.data}
-                    day={day}
-                    onDay={setDay}
-                    onRange={(n) => {
-                      const next = shiftDay(to, n * 30),
-                        today = jstToday();
-                      setTo(next > today ? today : next);
-                    }}
-                    query={new URLSearchParams({
-                      ...(pageUrl ? { page: pageUrl } : {}),
-                      v: String(version),
-                    }).toString()}
-                  />
-                  <PageAttrPanel
-                    stats={stats.data}
-                    selected={pageUrl}
-                    onSelect={setPageUrl}
-                  />
-                  <section className="panel">
+                  <section className="panel latest-messages">
                     <div className="panel-heading">
                       <h2>
                         新しく届いた感想
@@ -1185,6 +1206,27 @@ export default function App() {
                       onSelect={setSelected}
                     />
                   </section>
+                  <ErrorText>{hours.error}</ErrorText>
+                  <Activity
+                    stats={stats.data}
+                    hours={hours.data}
+                    day={day}
+                    onDay={setDay}
+                    onRange={(n) => {
+                      const next = shiftDay(to, n * 30),
+                        today = jstToday();
+                      setTo(next > today ? today : next);
+                    }}
+                    query={new URLSearchParams({
+                      ...(pageUrl ? { page: pageUrl } : {}),
+                      v: String(version),
+                    }).toString()}
+                  />
+                  <PageAttrPanel
+                    stats={stats.data}
+                    selected={pageUrl}
+                    onSelect={setPageUrl}
+                  />
                 </div>
               </div>
             </>
@@ -1529,7 +1571,7 @@ function InboxList({
       {loading && !data ? (
         <p className="loading-text">読み込んでいます…</p>
       ) : items.length ? (
-        <div className="message-list">
+        <div className={"message-list" + (compact ? " compact" : "")}>
           {items.slice(0, compact ? 4 : 50).map((m) => (
             <div className="message-item" key={m.id}>
               {!compact && (

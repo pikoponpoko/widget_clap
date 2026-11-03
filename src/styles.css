@@ -448,7 +448,28 @@ small {
 }
 .heading-tabs {
   display: flex;
+  align-items: center;
   gap: 18px;
+  height: 18px;
+  box-sizing: content-box;
+  padding: 4px 0 8px;
+  margin: -4px 0 -8px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.heading-tabs button {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+}
+.tab-tools {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 22px 12px;
+}
+.tab-tools:last-child {
+  padding: 12px 22px 16px;
 }
 .heading-tabs button {
   border: 0;
@@ -461,8 +482,13 @@ small {
   color: var(--muted);
   cursor: pointer;
 }
+.heading-tabs .count-label {
+  margin-left: 6px;
+}
 .heading-tabs button.active {
   color: var(--ink);
+}
+.heading-tabs button.active span:first-child {
   text-decoration: underline;
   text-underline-offset: 6px;
   text-decoration-thickness: 1px;

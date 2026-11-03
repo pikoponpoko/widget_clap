@@ -368,28 +368,36 @@ function AttrStats({ stats }: { stats: Stats }) {
     </div>
   );
 }
-// Claps per page, who clapped and reactions share one card, switched by the heading tabs.
+// Messages, claps per page, who clapped and reactions share one card, switched by the heading tabs.
 function PageAttrPanel({
   stats,
   selected,
   onSelect,
+  messages,
+  unread,
+  onAllMessages,
 }: {
   stats: Stats | null;
   selected: string;
   onSelect: (page: string) => void;
+  messages: ReactNode;
+  unread: number;
+  onAllMessages: () => void;
 }) {
-  const [tab, setTab] = useState<"pages" | "people" | "reactions">("pages"),
+  const [tab, setTab] = useState<"messages" | "pages" | "people" | "reactions">(
+      "pages",
+    ),
     [mode, setMode] = useState<ReactionMode>("days");
-  if (!stats) return null;
   return (
     <section className="panel activity-panel">
-      <div className="panel-heading activity-heading">
+      <div className="panel-heading">
         <div className="heading-tabs" role="tablist">
           {(
             [
               ["pages", "ページ別の拍手"],
               ["people", "拍手した人"],
               ["reactions", "リアクション"],
+              ["messages", "感想"],
             ] as const
           ).map(([t, label]) => (
             <button
@@ -400,43 +408,57 @@ function PageAttrPanel({
               className={tab === t ? "active" : ""}
               onClick={() => setTab(t)}
             >
-              {label}
+              <span>{label}</span>
+              {t === "messages" && unread > 0 && (
+                <span className="count-label">{unread}</span>
+              )}
             </button>
           ))}
         </div>
-        {tab === "reactions" && (
-          <div className="mode-switch" role="tablist">
-            {(
-              [
-                ["days", "日別"],
-                ["pages", "ページ別"],
-              ] as const
-            ).map(([m, label]) => (
-              <button
-                key={m}
-                type="button"
-                role="tab"
-                aria-selected={mode === m}
-                className={mode === m ? "active" : ""}
-                onClick={() => setMode(m)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
-      {tab === "pages" ? (
+      {tab === "messages" ? (
+        <>
+          {messages}
+          <div className="tab-tools">
+            <button className="text-button" onClick={onAllMessages}>
+              すべて見る <ArrowRight size={14} />
+            </button>
+          </div>
+        </>
+      ) : !stats ? null : tab === "pages" ? (
         <PageStats stats={stats} selected={selected} onSelect={onSelect} />
       ) : tab === "people" ? (
         <AttrStats stats={stats} />
       ) : (
-        <ReactionStats
-          stats={stats}
-          mode={mode}
-          selected={selected}
-          onSelect={onSelect}
-        />
+        <>
+          <div className="tab-tools">
+            <div className="mode-switch" role="tablist">
+              {(
+                [
+                  ["days", "日別"],
+                  ["pages", "ページ別"],
+                ] as const
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === m}
+                  className={mode === m ? "active" : ""}
+                  onClick={() => setMode(m)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ReactionStats
+            stats={stats}
+            mode={mode}
+            selected={selected}
+            onSelect={onSelect}
+          />
+        </>
       )}
     </section>
   );
@@ -1193,28 +1215,6 @@ export default function App() {
               </div>
               <div className="dashboard-single">
                 <div className="dashboard-main">
-                  <section className="panel latest-messages">
-                    <div className="panel-heading">
-                      <h2>
-                        新しく届いた感想
-                        <span className="count-label">
-                          {total?.unread || 0}
-                        </span>
-                      </h2>
-                      <button
-                        className="text-button"
-                        onClick={() => navigate("inbox")}
-                      >
-                        すべて見る <ArrowRight size={14} />
-                      </button>
-                    </div>
-                    <InboxList
-                      project=""
-                      version={version}
-                      compact
-                      onSelect={setSelected}
-                    />
-                  </section>
                   <ErrorText>{hours.error}</ErrorText>
                   <Activity
                     stats={stats.data}
@@ -1241,6 +1241,16 @@ export default function App() {
                     stats={stats.data}
                     selected={pageUrl}
                     onSelect={setPageUrl}
+                    unread={total?.unread || 0}
+                    onAllMessages={() => navigate("inbox")}
+                    messages={
+                      <InboxList
+                        project=""
+                        version={version}
+                        compact
+                        onSelect={setSelected}
+                      />
+                    }
                   />
                 </div>
               </div>

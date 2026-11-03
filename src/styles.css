@@ -646,21 +646,26 @@ small {
   right: 0;
   text-align: center;
 }
-.activity-bars.with-reactions {
-  height: 120px;
-  padding-bottom: 32px;
+.activity-bars {
+  --reaction-row: 14px;
+  --under: calc(16px + var(--reaction-rows, 0) * var(--reaction-row));
+  height: calc(88px + var(--under));
+  padding-bottom: var(--under);
 }
-.activity-bars.with-reactions:before {
-  bottom: 32px;
+.activity-bars:before {
+  bottom: var(--under);
 }
-/* The most frequent reaction of each column, under its tick. */
-.chart-reaction {
+/* Every reaction of a column, most frequent first, under its tick. */
+.chart-reactions {
   position: absolute;
   left: 50%;
   top: calc(100% + 16px);
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   font-size: 10px;
-  line-height: 14px;
+  line-height: var(--reaction-row);
   pointer-events: none;
 }
 .chart-loading {
@@ -2788,7 +2793,10 @@ html.embed-document {
   font-size: 10px;
   color: #767676;
 }
+/* Its own line, kept even when empty, so the totals above never move. */
 .hour-reactions {
+  flex-basis: 100%;
+  min-height: 20px;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;

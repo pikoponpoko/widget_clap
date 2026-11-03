@@ -625,6 +625,7 @@ function Activity({
   onDay,
   onRange,
   query,
+  reactionRows,
 }: {
   stats: Stats | null;
   hours: HourStats | null;
@@ -632,6 +633,7 @@ function Activity({
   onDay: (day: string) => void;
   onRange: (n: number) => void;
   query: string;
+  reactionRows: number;
 }) {
   const [mode, setMode] = useState<Mode>("hours");
   const [unit, setUnit] = useState<PeriodUnit>("week");
@@ -698,8 +700,11 @@ function Activity({
       {},
     ),
   );
-  const anyReaction = (columns || []).some(
-    (c) => reactionList(c.reactions).length,
+  // Room for every reaction a site offers stays under the bars, so the
+  // layout keeps still when the day, tab or counts change.
+  const rows = Math.max(
+    reactionRows,
+    ...(columns || []).map((c) => reactionList(c.reactions).length),
   );
   // Summing columns counts a returning visitor twice, so prefer the
   // distinct count from the server.
@@ -804,9 +809,10 @@ function Activity({
       ) : (
         <>
           <div
-            className={"activity-bars" + (anyReaction ? " with-reactions" : "")}
+            className="activity-bars"
             style={
               {
+                "--reaction-rows": rows,
                 "--block": `${blockPx}px`,
                 "--tiers": tiers,
               } as React.CSSProperties
@@ -815,7 +821,6 @@ function Activity({
             {columns.map((c) => {
               const active = c.key === (mode === "days" ? day : pick);
               const rs = reactionList(c.reactions);
-              const top = [...rs].sort((a, b) => b.count - a.count)[0];
               return (
                 <button
                   type="button"
@@ -855,9 +860,13 @@ function Activity({
                   >
                     {c.tick}
                   </span>
-                  {top && (
-                    <span className="chart-reaction" aria-hidden="true">
-                      {top.emoji}
+                  {rs.length > 0 && (
+                    <span className="chart-reactions" aria-hidden="true">
+                      {[...rs]
+                        .sort((a, b) => b.count - a.count)
+                        .map((r) => (
+                          <span key={r.key}>{r.emoji}</span>
+                        ))}
                     </span>
                   )}
                 </button>
@@ -898,7 +907,7 @@ function Activity({
             <span>
               感想 <b>{sum("messages")}</b>
             </span>
-            {reacted.length > 0 && (
+            {rows > 0 && (
               <span className="hour-reactions">
                 {reacted.map((r) => (
                   <span key={r.key} title={r.label}>
@@ -1221,6 +1230,12 @@ export default function App() {
                       ...(pageUrl ? { page: pageUrl } : {}),
                       v: String(version),
                     }).toString()}
+                    reactionRows={Math.max(
+                      0,
+                      ...(projects.data || []).map(
+                        (p) => p.reactions?.length || 0,
+                      ),
+                    )}
                   />
                   <PageAttrPanel
                     stats={stats.data}

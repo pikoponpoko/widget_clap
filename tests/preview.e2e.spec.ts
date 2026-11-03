@@ -345,35 +345,52 @@ test("one code serves many pages: claps and messages are listed per page in the 
     pages.getByRole("link", { name: "サンプルツール" }),
   ).toBeVisible();
   await expect(pages.getByRole("link", { name: "ブログ記事" })).toBeVisible();
+  await page.getByRole("tab", { name: "感想" }).click();
   await expect(
     page.locator(".project-tag", { hasText: "ブログ記事" }).first(),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Hakushu" })).toBeVisible();
-  // Pages, who clapped and reactions share one card, switched by tabs.
+  // Pages, who clapped, reactions and messages share one card, switched by
+  // tabs; the tabs stay where they are whichever one is open.
   const card = page.locator(".panel", {
     has: page.getByRole("tab", { name: "拍手した人" }),
   });
-  if (process.env.SHOTS)
-    await card.screenshot({ path: process.env.SHOTS + "/pc.png" });
-  await page.getByRole("tab", { name: "拍手した人" }).click();
-  await expect(page.locator(".page-stats")).toHaveCount(0);
-  await expect(page.locator(".attr-block").first()).toBeVisible();
-  if (process.env.SHOTS)
-    await card.screenshot({ path: process.env.SHOTS + "/pc-people.png" });
-  await page.getByRole("tab", { name: "リアクション" }).click();
-  await expect(card.getByRole("tab", { name: "日別" })).toBeVisible();
-  if (process.env.SHOTS)
-    await card.screenshot({ path: process.env.SHOTS + "/pc-reactions.png" });
-  await page.getByRole("tab", { name: "ページ別の拍手" }).click();
-  await expect(pages.getByRole("link", { name: "ブログ記事" })).toBeVisible();
-  if (process.env.SHOTS) {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await card.screenshot({ path: process.env.SHOTS + "/sp.png" });
-    await page.getByRole("tab", { name: "拍手した人" }).click();
-    await card.screenshot({ path: process.env.SHOTS + "/sp-people.png" });
-    await page.getByRole("tab", { name: "リアクション" }).click();
-    await card.screenshot({ path: process.env.SHOTS + "/sp-reactions.png" });
+  const tabs = card.locator(".panel-heading");
+  const shoot = async (tab: string, file: string) => {
+    await card.getByRole("tab", { name: tab }).click();
+    if (process.env.SHOTS)
+      await card.screenshot({
+        path: process.env.SHOTS + "/" + file + ".png",
+        mask: [card.locator(".message-row")],
+        maskColor: "#ececec",
+      });
+    const [c, t] = [await card.boundingBox(), await tabs.boundingBox()];
+    return [
+      t!.y - c!.y,
+      t!.height,
+      (await card.locator('[role="tablist"]').first().boundingBox())!.y - c!.y,
+    ];
+  };
+  for (const [w, prefix] of [
+    [1440, "pc"],
+    [390, "sp"],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: 900 });
+    const first = await shoot("ページ別の拍手", prefix);
+    await expect(pages.getByRole("link", { name: "ブログ記事" })).toBeVisible();
+    const people = await shoot("拍手した人", prefix + "-people");
+    await expect(page.locator(".page-stats")).toHaveCount(0);
+    await expect(page.locator(".attr-block").first()).toBeVisible();
+    const reactions = await shoot("リアクション", prefix + "-reactions");
+    await expect(card.getByRole("tab", { name: "日別" })).toBeVisible();
+    const messages = await shoot("感想", prefix + "-messages");
+    await expect(card.locator(".message-row")).toHaveCount(1);
+    await expect(
+      card.getByRole("button", { name: "すべて見る" }),
+    ).toBeVisible();
+    for (const b of [people, reactions, messages]) expect(b).toEqual(first);
   }
+  await card.getByRole("tab", { name: "ページ別の拍手" }).click();
 });
 test("the tip-enabled demo page shows the unconnected tip placeholder only there", async ({
   page,

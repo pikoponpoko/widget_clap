@@ -183,6 +183,12 @@ function previewPage(data: { page_url?: unknown; page_title?: unknown }) {
 }
 const jst = (iso: string) =>
   new Date(Date.parse(iso) + 9 * 3600000).toISOString();
+// Reactions for one chart column, as { kind: count }.
+const kindCounts = (rows: { kind: string }[]) =>
+  rows.reduce<Record<string, number>>(
+    (a, r) => ((a[r.kind] = (a[r.kind] || 0) + 1), a),
+    {},
+  );
 const normalizeWord = (s: string) => s.normalize("NFKC").toLowerCase();
 function visitorId() {
   try {
@@ -759,6 +765,7 @@ export async function previewRequest(
       dayOf(x.created_at) >= start;
     const claps = s.claps.filter(match),
       messages = s.messages.filter((x) => !x.blocked && !x.source && match(x)),
+      reacted = (s.reactions || []).filter(match),
       extra = (s.clapDays || []).filter(
         (d) =>
           !pageUrl &&
@@ -786,6 +793,9 @@ export async function previewRequest(
           visitors:
             new Set(inKey.map((c) => c.visitor).filter(Boolean)).size +
             days.reduce((a, d) => a + d.visitors, 0),
+          reactions: kindCounts(
+            reacted.filter((r) => keyOf(dayOf(r.created_at)) === key),
+          ),
         };
       }),
       visitors:
@@ -808,7 +818,8 @@ export async function previewRequest(
       jst(x.created_at).startsWith(day);
     const hourOf = (iso: string) => Number(jst(iso).slice(11, 13));
     const claps = s.claps.filter(match),
-      messages = s.messages.filter((x) => !x.blocked && !x.source && match(x));
+      messages = s.messages.filter((x) => !x.blocked && !x.source && match(x)),
+      reacted = (s.reactions || []).filter(match);
     return {
       day,
       visitors: new Set(claps.map((c) => c.visitor).filter(Boolean)).size,
@@ -820,6 +831,9 @@ export async function previewRequest(
           visitors: new Set(inHour.map((c) => c.visitor).filter(Boolean)).size,
           messages: messages.filter((x) => hourOf(x.created_at) === hour)
             .length,
+          reactions: kindCounts(
+            reacted.filter((r) => hourOf(r.created_at) === hour),
+          ),
         };
       }),
       claps: claps

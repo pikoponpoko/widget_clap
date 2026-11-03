@@ -1023,6 +1023,9 @@ app.get("/api/owner/stats", async (c) => {
     to: end,
   });
 });
+// Reaction rows for one chart column, as { kind: count }.
+const kindCounts = (rows: { kind: string; count: number }[]) =>
+  Object.fromEntries(rows.map((r) => [r.kind, r.count]));
 app.get("/api/owner/stats/periods", async (c) => {
   const unit = c.req.query("unit") as PeriodUnit;
   if (!periodUnits.includes(unit))
@@ -1060,7 +1063,7 @@ app.get("/api/owner/stats/periods", async (c) => {
     importSuffix += " AND project_id=?";
     importArgs.push(project);
   } else if (start) importSuffix += IMPORTED_BY_PROJECT;
-  const [claps, messages, people, imported] = await c.env.DB.batch([
+  const [claps, messages, people, imported, reacted] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT ${bucket(day)} AS k,count(*) AS claps,count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE 1${pageSuffix} GROUP BY k`,
     ).bind(...pageArgs),
@@ -1074,7 +1077,15 @@ app.get("/api/owner/stats/periods", async (c) => {
     c.env.DB.prepare(
       `SELECT ${bucket("day")} AS k,sum(claps) AS claps,sum(visitors) AS visitors FROM imported_clap_days WHERE 1${importSuffix} GROUP BY k`,
     ).bind(...importArgs),
+    c.env.DB.prepare(
+      `SELECT ${bucket(day)} AS k,kind,count(*) AS count FROM reactions WHERE 1${pageSuffix} GROUP BY k,kind`,
+    ).bind(...pageArgs),
   ]);
+  const reactionRows = reacted.results as {
+    k: string;
+    kind: string;
+    count: number;
+  }[];
   type Row = {
     k: string;
     claps?: number;
@@ -1098,6 +1109,7 @@ app.get("/api/owner/stats/periods", async (c) => {
         claps: (a?.claps || 0) + (x?.claps || 0),
         messages: m?.messages || 0,
         visitors: (a?.visitors || 0) + (x?.visitors || 0),
+        reactions: kindCounts(reactionRows.filter((r) => r.k === key)),
       };
     }),
     // The other service counted people per day, so its days add up.
@@ -1126,7 +1138,7 @@ app.get("/api/owner/stats/hours", async (c) => {
     args.push(pageUrl);
   }
   const hour = "CAST(strftime('%H',created_at,'+9 hours') AS INTEGER)";
-  const [claps, messages, people, times] = await c.env.DB.batch([
+  const [claps, messages, people, times, reacted] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT ${hour} AS hour,count(*) AS claps,count(DISTINCT NULLIF(visitor,'')) AS visitors FROM claps WHERE created_at>=? AND created_at<=?${suffix} GROUP BY hour`,
     ).bind(...args),
@@ -1139,7 +1151,11 @@ app.get("/api/owner/stats/hours", async (c) => {
     c.env.DB.prepare(
       `SELECT created_at AS at,page_url,page_title FROM claps WHERE created_at>=? AND created_at<=?${suffix} ORDER BY created_at DESC LIMIT 1000`,
     ).bind(...args),
+    c.env.DB.prepare(
+      `SELECT ${hour} AS hour,kind,count(*) AS count FROM reactions WHERE created_at>=? AND created_at<=?${suffix} GROUP BY hour,kind`,
+    ).bind(...args),
   ]);
+  const r2 = reacted.results as { hour: number; kind: string; count: number }[];
   const c2 = claps.results as {
       hour: number;
       claps: number;
@@ -1154,6 +1170,7 @@ app.get("/api/owner/stats/hours", async (c) => {
       claps: c2.find((x) => x.hour === h)?.claps || 0,
       visitors: c2.find((x) => x.hour === h)?.visitors || 0,
       messages: m2.find((x) => x.hour === h)?.messages || 0,
+      reactions: kindCounts(r2.filter((x) => x.hour === h)),
     })),
     claps: times.results,
   });

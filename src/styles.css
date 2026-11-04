@@ -3209,25 +3209,43 @@ html.embed-document {
   margin: 0;
   padding: 4px 22px 18px;
 }
-.reaction-stats li > span:first-child,
+.reaction-stats .reaction-label,
 .reaction-stats .page-filter {
+  flex: 1 1 0;
   min-width: 0;
+  width: auto;
+  height: auto;
+  padding: 0;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
   overflow: hidden;
-  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+.reaction-stats .reaction-day {
+  flex: none;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.reaction-stats .reaction-total > span:first-child {
+  flex: none;
 }
 .reaction-counts {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   flex-shrink: 1;
-  gap: 4px 12px;
+  gap: 4px 10px;
 }
 .reaction-counts > span {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-width: 40px;
+  gap: 3px;
+  min-width: 34px;
 }
 .reaction-stats .reaction-total {
   border-top: 0;

@@ -795,17 +795,28 @@ function Activity({
             >
               <ChevronLeft size={14} />
             </button>
-            <input
-              type="date"
-              className="hour-date"
-              aria-label="時間別の日付"
-              value={day}
-              onChange={(e) => {
-                if (!e.target.value) return;
-                onDay(e.target.value);
-                setPick(null);
-              }}
-            />
+            <label className="hour-date">
+              {day.slice(0, 4) === jstToday().slice(0, 4)
+                ? day.slice(5).replace("-", "/")
+                : day.replaceAll("-", "/")}
+              <input
+                type="date"
+                aria-label="時間別の日付"
+                value={day}
+                onClick={(e) => {
+                  try {
+                    e.currentTarget.showPicker();
+                  } catch {
+                    /* the input still opens on its own */
+                  }
+                }}
+                onChange={(e) => {
+                  if (!e.target.value) return;
+                  onDay(e.target.value);
+                  setPick(null);
+                }}
+              />
+            </label>
             <button
               type="button"
               className="icon-button"
@@ -1218,11 +1229,6 @@ export default function App() {
                   value={total?.total || 0}
                   icon={MessageCircle}
                   note={`${total?.unread || 0} 件 未読`}
-                />
-                <StatCard
-                  label="未返信"
-                  value={total?.unreplied || 0}
-                  icon={Reply}
                 />
               </div>
               <div className="dashboard-single">

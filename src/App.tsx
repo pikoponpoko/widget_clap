@@ -498,6 +498,7 @@ function ReactionStats({
     key: string;
     label: string;
     url?: string;
+    day?: string;
     counts: Map<string, number>;
   };
   const rows = new Map<string, Row>();
@@ -507,9 +508,10 @@ function ReactionStats({
       key,
       label:
         "day" in x
-          ? x.day.replaceAll("-", "/")
+          ? x.day.slice(5).replace("-", "/")
           : x.page_title || pagePath(x.page_url),
       url: "day" in x ? undefined : x.page_url,
+      day: "day" in x ? x.day : undefined,
       counts: new Map(),
     };
     row.counts.set(x.kind, (row.counts.get(x.kind) || 0) + x.count);
@@ -545,15 +547,24 @@ function ReactionStats({
                 <button
                   type="button"
                   className="page-filter"
+                  title={row.label}
                   aria-pressed={row.url === selected}
                   onClick={() => onSelect(row.url === selected ? "" : row.url!)}
                 >
                   {row.label}
                 </button>
               ) : row.url === "" ? (
-                <span className="muted">プレビュー・直接表示</span>
+                <span className="reaction-label muted">
+                  プレビュー・直接表示
+                </span>
               ) : (
-                <span>{row.label}</span>
+                <time
+                  className="reaction-day"
+                  dateTime={row.day}
+                  title={row.day?.replaceAll("-", "/")}
+                >
+                  {row.label}
+                </time>
               )}
               <span className="reaction-counts">
                 {kinds.map((r) => (

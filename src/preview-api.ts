@@ -542,6 +542,41 @@ export async function previewRequest(
         })),
     };
   }
+  if (p === "/owner/clap-attrs" && method === "GET") {
+    const today = jst(new Date().toISOString()).slice(0, 10),
+      from =
+        u.searchParams.get("from") ||
+        jst(new Date(Date.now() - 29 * 86400000).toISOString()).slice(0, 10),
+      to = u.searchParams.get("to") || today,
+      page = u.searchParams.get("page") || "",
+      before = u.searchParams.get("before") || "",
+      beforeId = u.searchParams.get("before_id") || "";
+    const rows = s.claps
+      .filter((c) => {
+        const d = jst(c.created_at).slice(0, 10);
+        return (
+          c.attrs && d >= from && d <= to && (!page || c.page_url === page)
+        );
+      })
+      .map((c) => ({
+        id: c.created_at + "|" + c.key,
+        created_at: c.created_at,
+        page_url: c.page_url || "",
+        page_title: c.page_title || "",
+        attrs: c.attrs!,
+      }))
+      .sort(
+        (a, b) =>
+          b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id),
+      )
+      .filter(
+        (x) =>
+          !before ||
+          x.created_at < before ||
+          (x.created_at === before && x.id < beforeId),
+      );
+    return { items: rows.slice(0, 50), more: rows.length > 50 };
+  }
   if (p === "/owner/claps/delete") {
     const ids = new Set<string>(Array.isArray(data.ids) ? data.ids : []);
     if (!ids.size) fail("拍手を選んでください。");

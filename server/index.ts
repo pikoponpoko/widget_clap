@@ -912,6 +912,46 @@ app.get("/api/owner/claps", async (c) => {
     })),
   });
 });
+// Each clap with who clapped, newest first, a page at a time. Only claps recorded with attributes.
+app.get("/api/owner/clap-attrs", async (c) => {
+  const start =
+      c.req.query("from") ||
+      jstDay(new Date(Date.now() - 29 * 86400000).toISOString()),
+    end = c.req.query("to") || jstDay(),
+    pageUrl = c.req.query("page") || "",
+    before = c.req.query("before") || "",
+    beforeId = c.req.query("before_id") || "";
+  if (
+    !z.iso.date().safeParse(start).success ||
+    !z.iso.date().safeParse(end).success ||
+    start > end ||
+    (before && !z.iso.datetime().safeParse(before).success)
+  )
+    throw new ApiError(400, "日付が正しくありません。");
+  const limit = 50;
+  const rows = await c.env.DB.prepare(
+    `SELECT id,created_at,page_url,page_title,attrs FROM claps WHERE attrs<>'' AND created_at>=? AND created_at<=?${pageUrl ? " AND page_url=?" : ""}${before ? " AND (created_at<? OR (created_at=? AND id<?))" : ""} ORDER BY created_at DESC,id DESC LIMIT ${limit + 1}`,
+  )
+    .bind(
+      new Date(Date.parse(start + "T00:00:00+09:00")).toISOString(),
+      new Date(Date.parse(end + "T23:59:59.999+09:00")).toISOString(),
+      ...(pageUrl ? [pageUrl] : []),
+      ...(before ? [before, before, beforeId] : []),
+    )
+    .all<{
+      id: string;
+      created_at: string;
+      page_url: string;
+      page_title: string;
+      attrs: string;
+    }>();
+  return c.json({
+    items: rows.results
+      .slice(0, limit)
+      .map((x) => ({ ...x, attrs: readAttrs(x.attrs) })),
+    more: rows.results.length > limit,
+  });
+});
 app.post("/api/owner/claps/delete", async (c) => {
   const data = await jsonBody(
     c.req.raw,

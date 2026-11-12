@@ -54,7 +54,7 @@ import { defaultPrint, type PrintOptions } from "./print-options";
 import { collectImages } from "./image-files";
 import { planners, type PaperSize, type PlannerId } from "./planner-sizes";
 import type { Asset, HourStats, Message, Project, Stats } from "./types";
-import { ATTR_KEYS, type AttrKey } from "./attributes";
+import { ATTR_KEYS, type AttrKey, type ClapAttrs } from "./attributes";
 import type { PeriodBucket, PeriodStats, PeriodUnit } from "./periods";
 import { webclapScript } from "./webclap-script";
 import { parseImport, parseImportHtml, type ImportRow } from "./import-parse";
@@ -368,6 +368,124 @@ function AttrStats({ stats }: { stats: Stats }) {
     </div>
   );
 }
+type ClapAttrRow = {
+  id: string;
+  created_at: string;
+  page_url: string;
+  page_title: string;
+  attrs: ClapAttrs | null;
+};
+// Each clap with who clapped, newest first, 50 at a time.
+function ClapAttrList({ query }: { query: string }) {
+  const first = useApi<{ items: ClapAttrRow[]; more: boolean }>(
+    "/owner/clap-attrs?" + query,
+    null,
+    true,
+  );
+  const [extra, setExtra] = useState<{ items: ClapAttrRow[]; more: boolean }>({
+      items: [],
+      more: false,
+    }),
+    [loading, setLoading] = useState(false),
+    [error, setError] = useState("");
+  useEffect(() => setExtra({ items: [], more: false }), [first.data]);
+  const items = [...(first.data?.items || []), ...extra.items],
+    more = extra.items.length ? extra.more : !!first.data?.more;
+  if (!first.data)
+    return first.error ? <ErrorText>{first.error}</ErrorText> : null;
+  if (!items.length)
+    return <p className="reaction-empty muted">記録はまだありません</p>;
+  const loadMore = async () => {
+    const last = items[items.length - 1];
+    setLoading(true);
+    setError("");
+    try {
+      const next = await api<{ items: ClapAttrRow[]; more: boolean }>(
+        "/owner/clap-attrs?" +
+          query +
+          "&" +
+          new URLSearchParams({ before: last.created_at, before_id: last.id }),
+      );
+      setExtra({ items: [...extra.items, ...next.items], more: next.more });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <>
+      <ol className="clap-attrs">
+        <li className="clap-attrs-head" aria-hidden="true">
+          <span>日時</span>
+          <span>{ATTR_TITLES.region}</span>
+          <span>{ATTR_TITLES.repeat}</span>
+          <span>{ATTR_TITLES.device}</span>
+          <span>{ATTR_TITLES.referrer}</span>
+          <span>ページ</span>
+        </li>
+        {items.map((x) => {
+          const a = x.attrs;
+          const device = a
+            ? [a.device && attrLabel("device", a.device), a.os, a.browser]
+                .filter(Boolean)
+                .join(" ")
+            : "";
+          const detail = a
+            ? [
+                a.lang && attrLabel("lang", a.lang),
+                a.screen && attrLabel("screen", a.screen),
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : "";
+          return (
+            <li key={x.id}>
+              <time className="clap-attrs-time" dateTime={x.created_at}>
+                {clapTime(x.created_at).slice(5)}
+              </time>
+              <span className="clap-attrs-region">
+                {a
+                  ? attrLabel("region", [a.country, a.region, a.city].join("|"))
+                  : ""}
+              </span>
+              <span className="clap-attrs-repeat">
+                {a ? attrLabel("repeat", a.repeat ? "repeat" : "first") : ""}
+              </span>
+              <span className="clap-attrs-device" title={detail || undefined}>
+                {device}
+              </span>
+              <span
+                className="clap-attrs-ref"
+                title={
+                  a?.referrer && a.referrer !== "self" ? a.referrer : undefined
+                }
+              >
+                {a?.referrer ? referrerName(a.referrer) : ""}
+              </span>
+              <span className="clap-attrs-page" title={x.page_url || undefined}>
+                {x.page_title || (x.page_url ? pagePath(x.page_url) : "")}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <ErrorText>{error}</ErrorText>
+      {more && (
+        <div className="tab-tools">
+          <button
+            type="button"
+            className="text-button"
+            disabled={loading}
+            onClick={loadMore}
+          >
+            {loading ? "読み込んでいます…" : "さらに表示"}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
 // Messages, claps per page, who clapped and reactions share one card, switched by the heading tabs.
 function PageAttrPanel({
   stats,
@@ -376,6 +494,7 @@ function PageAttrPanel({
   messages,
   unread,
   onAllMessages,
+  clapQuery,
 }: {
   stats: Stats | null;
   selected: string;
@@ -383,17 +502,20 @@ function PageAttrPanel({
   messages: ReactNode;
   unread: number;
   onAllMessages: () => void;
+  // from, to, page and v for the clap-by-clap list.
+  clapQuery: string;
 }) {
   const [tab, setTab] = useState<"messages" | "pages" | "people" | "reactions">(
       "pages",
     ),
-    [mode, setMode] = useState<ReactionMode>("days");
+    [mode, setMode] = useState<ReactionMode>("days"),
+    [peopleMode, setPeopleMode] = useState<"summary" | "claps">("summary");
   // A shorter tab would shorten the page and pull the card down on screen,
   // so the card keeps the tallest height it has shown.
   const card = useRef<HTMLElement>(null),
     [minHeight, setMinHeight] = useState(0);
   const open = (t: typeof tab) => {
-    setMinHeight(Math.max(minHeight, card.current?.offsetHeight || 0));
+    setMinHeight(Math.max(minHeight, card.current?.getBoundingClientRect().height || 0));
     setTab(t);
   };
   return (
@@ -440,7 +562,34 @@ function PageAttrPanel({
       ) : !stats ? null : tab === "pages" ? (
         <PageStats stats={stats} selected={selected} onSelect={onSelect} />
       ) : tab === "people" ? (
-        <AttrStats stats={stats} />
+        <>
+          <div className="tab-tools">
+            <div className="mode-switch" role="tablist">
+              {(
+                [
+                  ["summary", "集計"],
+                  ["claps", "拍手ごと"],
+                ] as const
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  aria-selected={peopleMode === m}
+                  className={peopleMode === m ? "active" : ""}
+                  onClick={() => setPeopleMode(m)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {peopleMode === "summary" ? (
+            <AttrStats stats={stats} />
+          ) : (
+            <ClapAttrList query={clapQuery} />
+          )}
+        </>
       ) : (
         <>
           <div className="tab-tools">
@@ -1272,6 +1421,12 @@ export default function App() {
                     onSelect={setPageUrl}
                     unread={total?.unread || 0}
                     onAllMessages={() => navigate("inbox")}
+                    clapQuery={new URLSearchParams({
+                      ...(pageUrl ? { page: pageUrl } : {}),
+                      v: String(version),
+                      from,
+                      to,
+                    }).toString()}
                     messages={
                       <InboxList
                         project=""

@@ -81,7 +81,7 @@ export async function fallbackAsset(env: Env, assetId: string) {
 
 // Rows kept in R2 while D1 cannot be read, moved in by drainPending.
 const COLUMNS = {
-  claps: ["id", "project_id", "created_at", "dedupe_key", "page_url", "page_title", "visitor", "attrs"],
+  claps: ["id", "project_id", "created_at", "dedupe_key", "page_url", "page_title", "visitor", "browser", "attrs"],
   reactions: ["id", "project_id", "kind", "created_at", "dedupe_key", "page_url", "page_title", "visitor"],
   messages: [
     "id", "project_id", "body", "created_at", "publication_consent", "reply_token_hash",
@@ -120,7 +120,8 @@ export async function drainPending(env: Env) {
             await env.DB.prepare(
               `INSERT OR IGNORE INTO ${table}(${cols.join(",")}) VALUES(${cols.map(() => "?").join(",")})`,
             )
-              .bind(...cols.map((k) => row[k] ?? null))
+              // Rows kept before a column was added get its empty default.
+              .bind(...cols.map((k) => row[k] ?? (k === "browser" ? "" : null)))
               .run();
           } catch (error) {
             console.error("pending_rows_wait", (error as Error).name);

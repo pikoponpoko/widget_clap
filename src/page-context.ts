@@ -9,7 +9,22 @@ import { browserAttrs } from "./attributes";
 export const clapContext = {
   ...pageContext,
   ...browserAttrs((query.get("ref") || "").slice(0, 253)),
+  ...browserId(),
 };
+// A random id kept in this browser, so a later clap from another address is
+// still seen as a return visit. Left out where storage is blocked.
+function browserId(): { bid?: string } {
+  try {
+    let v = localStorage.getItem("hakushu-bid");
+    if (!v || !/^[0-9a-f-]{36}$/.test(v)) {
+      v = crypto.randomUUID();
+      localStorage.setItem("hakushu-bid", v);
+    }
+    return { bid: v };
+  } catch {
+    return {};
+  }
+}
 export const tipRequested = query.get("tip") === "1";
 export const defaultTipLabel = "任意の支援をする";
 // Label chosen by the site owner with data-tip-label; React renders it as plain text.

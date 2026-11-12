@@ -100,6 +100,15 @@ export function ipNetwork(ip: string) {
     .map((x) => parseInt(x, 16).toString(16))
     .join(":") + "::/64";
 }
+// The browser id is stored only as a keyed hash.
+export async function browserKey(env: Env, request: Request, bid?: string) {
+  if (!bid) return "";
+  const secret =
+    env.SPAM_SECRET ||
+    (local(request, env) ? "local-development-spam-secret" : "");
+  if (secret.length < 24) return "";
+  return (await hash(`${secret}:browser:${bid}`)).slice(0, 32);
+}
 export async function privateKey(
   request: Request,
   env: Env,
@@ -189,6 +198,7 @@ export const clapBodySchema = clapSchema.extend({
   lang: z.string().max(40).optional(),
   screen: z.string().max(20).optional(),
   ref: z.string().max(260).optional(),
+  bid: z.string().regex(/^[0-9a-f-]{36}$/).optional(),
 });
 export const reactionSchema = clapSchema.extend({
   kind: z.enum(REACTION_KEYS),

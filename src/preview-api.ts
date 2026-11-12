@@ -1,6 +1,7 @@
 import type { Asset, Message, Project } from "./types";
 import { DEFAULT_REACTIONS } from "./reactions";
 import { buildAttrs, tallyAttrs, type ClapAttrs } from "./attributes";
+import { BLOCK_ROWS, blockParts, type BlockDay } from "./clap-block";
 import {
   periodKey,
   periodKeys,
@@ -576,6 +577,61 @@ export async function previewRequest(
           (x.created_at === before && x.id < beforeId),
       );
     return { items: rows.slice(0, 50), more: rows.length > 50 };
+  }
+  if (p === "/owner/clap-block" && method === "GET") {
+    const g = (k: string) => u.searchParams.get(k) || "";
+    const from = g("from"),
+      to = g("to"),
+      page = g("page"),
+      hour = g("hour") ? Number(g("hour")) : null,
+      index = Number(g("index")),
+      size = Number(g("size"));
+    const inBlock = (c: { created_at: string; page_url?: string }) => {
+      const t = jst(c.created_at);
+      return (
+        t.slice(0, 10) >= from &&
+        t.slice(0, 10) <= to &&
+        (hour === null || Number(t.slice(11, 13)) === hour) &&
+        (!page || c.page_url === page)
+      );
+    };
+    const claps = s.claps
+      .filter(inBlock)
+      .map((c) => ({
+        id: c.created_at + "|" + c.key,
+        created_at: c.created_at,
+        page_url: c.page_url || "",
+        page_title: c.page_title || "",
+        attrs: c.attrs || null,
+      }))
+      .sort(
+        (a, b) =>
+          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
+      );
+    const days = new Map<string, BlockDay>();
+    const at = (d: string) =>
+      days.get(d) || days.set(d, { day: d, imported: 0, claps: 0 }).get(d)!;
+    for (const c of claps) at(jst(c.created_at).slice(0, 10)).claps++;
+    if (!page && hour === null)
+      for (const d of s.clapDays || [])
+        if (d.day >= from && d.day <= to) at(d.day).imported += d.claps;
+    const parts = blockParts([...days.values()], index, index + size);
+    const items = parts
+      .flatMap((x) =>
+        x.imported
+          ? []
+          : claps
+              .filter((c) => jst(c.created_at).slice(0, 10) === x.day)
+              .slice(x.offset, x.offset + x.count),
+      )
+      .slice(0, BLOCK_ROWS);
+    return {
+      count: parts.reduce((a, x) => a + x.count, 0),
+      imported: parts
+        .filter((x) => x.imported)
+        .map((x) => ({ day: x.day, count: x.count })),
+      items,
+    };
   }
   if (p === "/owner/claps/delete") {
     const ids = new Set<string>(Array.isArray(data.ids) ? data.ids : []);

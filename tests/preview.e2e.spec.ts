@@ -350,6 +350,14 @@ test("one code serves many pages: claps and messages are listed per page in the 
     page.locator(".project-tag", { hasText: "ブログ記事" }).first(),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Hakushu" })).toBeVisible();
+  // A click on a block of claps in the chart shows who made that clap.
+  await page.locator('.bar-clap:not([style*="height: 0px"])').first().click();
+  const pop = page.getByRole("dialog", { name: "拍手した人" });
+  await expect(pop).toContainText(/初回|リピート/);
+  await expect(pop).toContainText(/サンプルツール|ブログ記事/);
+  await expect(page.locator(".block-mark")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(pop).toHaveCount(0);
   // Pages, who clapped, reactions and messages share one card, switched by
   // tabs; the tabs stay where they are whichever one is open.
   const card = page.locator(".panel", {

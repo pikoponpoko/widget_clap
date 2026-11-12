@@ -381,6 +381,19 @@ test("one code serves many pages: claps and messages are listed per page in the 
     const people = await shoot("拍手した人", prefix + "-people");
     await expect(page.locator(".page-stats")).toHaveCount(0);
     await expect(page.locator(".attr-block").first()).toBeVisible();
+    // The same tab lists each clap with who clapped.
+    await card.getByRole("tab", { name: "拍手ごと" }).click();
+    await expect(
+      card.locator(".clap-attrs-page", { hasText: "ブログ記事" }).first(),
+    ).toBeVisible();
+    await expect(card.locator(".clap-attrs-repeat").first()).toHaveText(
+      /初回|リピート/,
+    );
+    if (process.env.SHOTS)
+      await card.screenshot({
+        path: process.env.SHOTS + "/" + prefix + "-people-claps.png",
+      });
+    await card.getByRole("tab", { name: "集計" }).click();
     const reactions = await shoot("リアクション", prefix + "-reactions");
     await expect(card.getByRole("tab", { name: "日別" })).toBeVisible();
     const messages = await shoot("感想", prefix + "-messages");

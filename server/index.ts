@@ -43,6 +43,7 @@ import {
 import type { Project, Message, Asset } from "./models";
 import { REACTION_KEYS } from "../src/reactions";
 import { buildAttrs, readAttrs, tallyAttrs } from "../src/attributes";
+import { BLOCK_ROWS, blockParts } from "../src/clap-block";
 import {
   periodKeys,
   periodStart,
@@ -259,7 +260,16 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
       const result = await c.env.DB.prepare(
         "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor,attrs) VALUES(?,?,?,?,?,?,?,?)",
       )
-        .bind(row.id, row.project_id, row.created_at, row.dedupe_key, row.page_url, row.page_title, row.visitor, row.attrs)
+        .bind(
+          row.id,
+          row.project_id,
+          row.created_at,
+          row.dedupe_key,
+          row.page_url,
+          row.page_title,
+          row.visitor,
+          row.attrs,
+        )
         .run();
       changes = result.meta.changes;
     }));
@@ -308,7 +318,16 @@ app.post("/api/public/projects/:slug/reactions", async (c) => {
       const result = await c.env.DB.prepare(
         "INSERT OR IGNORE INTO reactions(id,project_id,kind,created_at,dedupe_key,page_url,page_title,visitor) VALUES(?,?,?,?,?,?,?,?)",
       )
-        .bind(row.id, row.project_id, row.kind, row.created_at, row.dedupe_key, row.page_url, row.page_title, row.visitor)
+        .bind(
+          row.id,
+          row.project_id,
+          row.kind,
+          row.created_at,
+          row.dedupe_key,
+          row.page_url,
+          row.page_title,
+          row.visitor,
+        )
         .run();
       changes = result.meta.changes;
     }));
@@ -952,6 +971,88 @@ app.get("/api/owner/clap-attrs", async (c) => {
     more: rows.results.length > limit,
   });
 });
+// The claps behind one block of the activity chart: positions index..index+size-1
+// of the column, oldest first, as the chart stacks them.
+app.get("/api/owner/clap-block", async (c) => {
+  const q = z
+    .object({
+      from: z.iso.date(),
+      to: z.iso.date(),
+      hour: z.coerce.number().int().min(0).max(23).optional(),
+      page: z.string().max(2048).optional(),
+      index: z.coerce.number().int().min(0),
+      size: z.coerce.number().int().min(1).max(100000),
+    })
+    .safeParse(c.req.query());
+  if (!q.success || q.data.from > q.data.to)
+    throw new ApiError(400, "日付が正しくありません。");
+  const { from, to, hour, index, size } = q.data,
+    pageUrl = q.data.page || "";
+  const startIso = (d: string, h = 0) =>
+    new Date(
+      Date.parse(`${d}T${String(h).padStart(2, "0")}:00:00+09:00`),
+    ).toISOString();
+  const endIso = (d: string, h = 23) =>
+    new Date(
+      Date.parse(`${d}T${String(h).padStart(2, "0")}:59:59.999+09:00`),
+    ).toISOString();
+  const span = (d1: string, d2: string) => [
+      startIso(d1, hour ?? 0),
+      endIso(d2, hour ?? 23),
+    ],
+    pageSuffix = pageUrl ? " AND page_url=?" : "",
+    pageArgs = pageUrl ? [pageUrl] : [];
+  const day = "strftime('%Y-%m-%d',created_at,'+9 hours')";
+  const [recorded, imported] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `SELECT ${day} AS day,count(*) AS n FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix} GROUP BY day`,
+    ).bind(...span(from, to), ...pageArgs),
+    // Counts brought in from another service have no page or hour.
+    c.env.DB.prepare(
+      `SELECT day,sum(claps) AS n FROM imported_clap_days WHERE day>=? AND day<=?${pageUrl || hour !== undefined ? " AND 0" : ""}${IMPORTED_BY_PROJECT} GROUP BY day`,
+    ).bind(from, to),
+  ]);
+  const days = new Map<
+    string,
+    { day: string; imported: number; claps: number }
+  >();
+  const at = (d: string) =>
+    days.get(d) || days.set(d, { day: d, imported: 0, claps: 0 }).get(d)!;
+  for (const r of recorded.results as { day: string; n: number }[])
+    at(r.day).claps = r.n;
+  for (const r of imported.results as { day: string; n: number }[])
+    at(r.day).imported = r.n;
+  const parts = blockParts([...days.values()], index, index + size);
+  let budget = BLOCK_ROWS;
+  const reads = parts.flatMap((p) => {
+    if (p.imported || budget <= 0) return [];
+    const n = Math.min(p.count, budget);
+    budget -= n;
+    return [
+      c.env.DB.prepare(
+        `SELECT id,created_at,page_url,page_title,attrs FROM claps WHERE created_at>=? AND created_at<=?${pageSuffix} ORDER BY created_at,id LIMIT ${n} OFFSET ${p.offset}`,
+      ).bind(...span(p.day, p.day), ...pageArgs),
+    ];
+  });
+  const rows = reads.length ? await c.env.DB.batch(reads) : [];
+  return c.json({
+    count: parts.reduce((a, p) => a + p.count, 0),
+    imported: parts
+      .filter((p) => p.imported)
+      .map((p) => ({ day: p.day, count: p.count })),
+    items: rows.flatMap((r) =>
+      (
+        r.results as {
+          id: string;
+          created_at: string;
+          page_url: string;
+          page_title: string;
+          attrs: string;
+        }[]
+      ).map((x) => ({ ...x, attrs: x.attrs ? readAttrs(x.attrs) : null })),
+    ),
+  });
+});
 app.post("/api/owner/claps/delete", async (c) => {
   const data = await jsonBody(
     c.req.raw,
@@ -1465,7 +1566,9 @@ export default {
     ctx.waitUntil(
       drainPending(env)
         .catch((error) => console.error("pending_claps_failed", error?.name))
-        .then(() => (_event.cron === "0 18 * * *" ? scheduledBackup(env) : undefined))
+        .then(() =>
+          _event.cron === "0 18 * * *" ? scheduledBackup(env) : undefined,
+        )
         .then(() => env.BACKUPS.delete("fallback/projects.json")),
     );
   },

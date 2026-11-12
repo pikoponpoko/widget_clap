@@ -3,7 +3,13 @@ import { DEFAULT_REACTIONS, MAX_REACTIONS, REACTIONS } from "./reactions";
 import { cleanTipLabel, defaultTipLabel } from "./page-context";
 import { previewMode } from "./mode";
 import { assetUrl, densityOf } from "./asset-url";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ArrowDownToLine,
   ArrowLeft,
@@ -55,6 +61,7 @@ import { collectImages } from "./image-files";
 import { planners, type PaperSize, type PlannerId } from "./planner-sizes";
 import type { Asset, HourStats, Message, Project, Stats } from "./types";
 import { ATTR_KEYS, type AttrKey, type ClapAttrs } from "./attributes";
+import { columnRange, type BlockResult } from "./clap-block";
 import type { PeriodBucket, PeriodStats, PeriodUnit } from "./periods";
 import { webclapScript } from "./webclap-script";
 import { parseImport, parseImportHtml, type ImportRow } from "./import-parse";
@@ -515,7 +522,9 @@ function PageAttrPanel({
   const card = useRef<HTMLElement>(null),
     [minHeight, setMinHeight] = useState(0);
   const open = (t: typeof tab) => {
-    setMinHeight(Math.max(minHeight, card.current?.getBoundingClientRect().height || 0));
+    setMinHeight(
+      Math.max(minHeight, card.current?.getBoundingClientRect().height || 0),
+    );
     setTab(t);
   };
   return (
@@ -772,6 +781,129 @@ function ClapTimes({
     </ol>
   );
 }
+type BlockPick = {
+  column: string;
+  index: number;
+  query: string;
+  left: number;
+  top: number | null;
+  bottom: number | null;
+};
+// Who made the claps of one clicked block, next to the block.
+function ClapBlockPop({
+  pick,
+  onClose,
+}: {
+  pick: BlockPick;
+  onClose: () => void;
+}) {
+  const res = useApi<BlockResult>("/owner/clap-block?" + pick.query);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const away = (e: PointerEvent) => {
+      const t = e.target as Element;
+      if (!ref.current?.contains(t) && !t.closest?.(".bar-clap")) onClose();
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", esc);
+    // It sits on the window, so it would drift from its block on scroll.
+    window.addEventListener("scroll", onClose, true);
+    window.addEventListener("resize", onClose);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", esc);
+      window.removeEventListener("scroll", onClose, true);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [onClose]);
+  const d = res.data;
+  const rest = d
+    ? d.count - d.items.length - d.imported.reduce((a, x) => a + x.count, 0)
+    : 0;
+  return (
+    <div
+      ref={ref}
+      className="clap-pop"
+      role="dialog"
+      aria-label="拍手した人"
+      style={{
+        left: pick.left,
+        top: pick.top ?? undefined,
+        bottom: pick.bottom ?? undefined,
+      }}
+    >
+      <button
+        type="button"
+        className="icon-button clap-pop-close"
+        aria-label="閉じる"
+        title="閉じる"
+        onClick={onClose}
+      >
+        <X size={13} />
+      </button>
+      {!d ? (
+        res.error ? (
+          <ErrorText>{res.error}</ErrorText>
+        ) : (
+          <p className="clap-pop-loading muted">読み込んでいます…</p>
+        )
+      ) : (
+        <ol>
+          {d.imported.map((x) => (
+            <li key={"i" + x.day}>
+              <div className="clap-pop-line">
+                <time dateTime={x.day}>{x.day.slice(5).replace("-", "/")}</time>
+                <span className="muted">取り込み {x.count}</span>
+              </div>
+            </li>
+          ))}
+          {d.items.map((x) => {
+            const a = x.attrs;
+            const device = a
+              ? [a.device && attrLabel("device", a.device), a.os, a.browser]
+                  .filter(Boolean)
+                  .join(" ")
+              : "";
+            const region = a
+              ? attrLabel("region", [a.country, a.region, a.city].join("|"))
+              : "";
+            return (
+              <li key={x.id}>
+                <div className="clap-pop-line">
+                  <time dateTime={x.created_at}>
+                    {clapTime(x.created_at).slice(5)}
+                  </time>
+                  {a && (
+                    <span className="clap-pop-repeat">
+                      {attrLabel("repeat", a.repeat ? "repeat" : "first")}
+                    </span>
+                  )}
+                </div>
+                {region && <div>{region}</div>}
+                {(device || a?.referrer) && (
+                  <div className="clap-pop-line muted">
+                    <span>{device}</span>
+                    {a?.referrer && <span>{referrerName(a.referrer)}</span>}
+                  </div>
+                )}
+                {(x.page_title || x.page_url) && (
+                  <div
+                    className="clap-pop-page muted"
+                    title={x.page_url || undefined}
+                  >
+                    {x.page_title || pagePath(x.page_url)}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+          {rest > 0 && <li className="muted">ほか {rest} 件</li>}
+        </ol>
+      )}
+    </div>
+  );
+}
 type Column = {
   key: string;
   label: string;
@@ -832,6 +964,9 @@ function Activity({
   const [mode, setMode] = useState<Mode>("hours");
   const [unit, setUnit] = useState<PeriodUnit>("week");
   const [pick, setPick] = useState<string | null>(null);
+  const [block, setBlock] = useState<BlockPick | null>(null);
+  const closeBlock = useCallback(() => setBlock(null), []);
+  useEffect(() => setBlock(null), [mode, unit, day, query, stats?.from]);
   const periods = useApi<PeriodStats>(
     `/owner/stats/periods?unit=${unit}&${query}`,
     null,
@@ -1037,13 +1172,61 @@ function Activity({
                     rs.map((r) => ` ${r.emoji} ${r.count}`).join("")
                   }
                   aria-label={`${c.label} 拍手 ${c.claps} 件`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    const bar = (e.target as Element).closest(".bar-clap");
+                    // A click on the claps opens who made the clicked block.
+                    if (bar && e.detail > 0) {
+                      const r = bar.getBoundingClientRect(),
+                        n = blocks(c.claps, per),
+                        k = Math.min(
+                          n - 1,
+                          Math.max(
+                            0,
+                            Math.floor((r.bottom - e.clientY) / blockPx),
+                          ),
+                        ),
+                        top = r.bottom - (k + 1) * blockPx,
+                        width = Math.min(260, innerWidth - 16),
+                        range = columnRange(mode, c.key, day);
+                      const below = innerHeight - (top + blockPx) > 220;
+                      setBlock({
+                        column: c.key,
+                        index: k,
+                        query: new URLSearchParams({
+                          ...Object.fromEntries(new URLSearchParams(query)),
+                          from: range.from,
+                          to: range.to,
+                          ...(range.hour !== undefined
+                            ? { hour: String(range.hour) }
+                            : {}),
+                          index: String(k * per),
+                          size: String(per),
+                        }).toString(),
+                        left: Math.max(
+                          8,
+                          Math.min(
+                            innerWidth - width - 8,
+                            r.left + r.width / 2 - width / 2,
+                          ),
+                        ),
+                        top: below ? top + blockPx + 4 : null,
+                        bottom: below ? null : innerHeight - top + 4,
+                      });
+                      if (mode === "hours") setPick(c.key);
+                      return;
+                    }
                     if (mode === "days") {
                       onDay(c.key);
                       setMode("hours");
                     } else setPick(active ? null : c.key);
                   }}
                 >
+                  {block?.column === c.key && (
+                    <span
+                      className="block-mark"
+                      style={{ bottom: block.index * blockPx, height: blockPx }}
+                    />
+                  )}
                   <span className="chart-stack">
                     <span
                       className="bar-message"
@@ -1123,6 +1306,9 @@ function Activity({
             )}
           </div>
           {mode === "hours" && <ClapTimes hours={hours} hour={pick} />}
+          {block && (
+            <ClapBlockPop key={block.query} pick={block} onClose={closeBlock} />
+          )}
         </>
       )}
     </section>

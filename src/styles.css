@@ -3377,3 +3377,79 @@ html.embed-document {
     grid-column: 2 / -1;
   }
 }
+/* The clicked block of claps, and who made it. */
+.block-mark {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  outline: 1px solid var(--ink);
+  outline-offset: -1px;
+  pointer-events: none;
+  z-index: 1;
+}
+.bar-clap {
+  cursor: pointer;
+}
+.clap-pop {
+  position: fixed;
+  z-index: 60;
+  width: min(260px, calc(100vw - 16px));
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  background: var(--white);
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.clap-pop ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.clap-pop li {
+  padding: 7px 30px 7px 10px;
+  border-top: 1px solid var(--line);
+}
+.clap-pop li:first-child {
+  border-top: 0;
+}
+.clap-pop li + li {
+  padding-right: 10px;
+}
+.clap-pop-line {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.clap-pop-line > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clap-pop time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.clap-pop-repeat {
+  margin-left: auto;
+  flex: none;
+  color: var(--muted);
+}
+.clap-pop-page {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clap-pop-loading {
+  margin: 0;
+  padding: 7px 30px 7px 10px;
+}
+.clap-pop-close {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 24px;
+  height: 24px;
+}

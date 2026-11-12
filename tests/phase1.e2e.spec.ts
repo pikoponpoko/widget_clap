@@ -215,6 +215,33 @@ test.describe.serial("Phase 1 integrated flow", () => {
     const backup = await (await request.get("/api/owner/backup")).text();
     expect(backup).not.toContain(ip);
   });
+  test("sees a return visit from the same browser on another address", async ({
+    request,
+  }) => {
+    const url = "/api/public/projects/" + slug + "/claps";
+    const bid = crypto.randomUUID();
+    const tag = Math.floor(Math.random() * 65535).toString(16);
+    const clap = (ip: string, page: string) =>
+      request.post(url, {
+        headers: { ...headers, "CF-Connecting-IP": ip },
+        data: {
+          page_url: "https://kazukisekiguchi.com/return/" + tag + page,
+          page_title: "再訪" + tag + page,
+          bid,
+        },
+      });
+    expect((await (await clap(`2001:db8:aaaa:${tag}::1`, "a")).json()).counted).toBe(true);
+    expect((await (await clap(`2001:db8:bbbb:${tag}::1`, "b")).json()).counted).toBe(true);
+    const { items } = await (await request.get("/api/owner/clap-attrs")).json();
+    const repeat = (page: string) =>
+      items.find(
+        (x: { page_title: string }) => x.page_title === "再訪" + tag + page,
+      ).attrs.repeat;
+    expect(repeat("a")).toBe(false);
+    expect(repeat("b")).toBe(true);
+    const backup = await (await request.get("/api/owner/backup")).text();
+    expect(backup).not.toContain(bid);
+  });
   test("delivers private replies; revokes and rotates capability URLs", async ({
     request,
   }) => {

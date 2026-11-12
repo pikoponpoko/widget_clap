@@ -9,6 +9,7 @@ import {
   now,
   local,
   privateKey,
+  browserKey,
   limit,
   jsonBody,
   readBounded,
@@ -213,15 +214,16 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   );
   // Same line, same visitor on every day, so totals over many days stay true.
   const [visitor, legacy] = await visitorIds(c.req.raw, c.env);
+  const browser = await browserKey(c.env, c.req.raw, body.bid);
   // Raw IPs are never stored: the place comes from Cloudflare, the person from the hashed visitor.
   const cf = (c.req.raw as { cf?: Record<string, unknown> }).cf || {};
   let seen: unknown = null;
   if (!fallback)
     fallback = !(await tryDb(async () => {
       seen = await c.env.DB.prepare(
-        "SELECT 1 FROM claps WHERE visitor IN (?,?) LIMIT 1",
+        "SELECT 1 FROM claps WHERE visitor IN (?,?) OR browser=? LIMIT 1",
       )
-        .bind(visitor, legacy)
+        .bind(visitor, legacy, browser || "-")
         .first();
     }));
   const attrs = buildAttrs({
@@ -245,6 +247,7 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
     page_url: page.page_url,
     page_title: page.page_title,
     visitor,
+    browser,
     attrs: JSON.stringify(attrs),
   };
   let changes = 0;
@@ -257,9 +260,9 @@ app.post("/api/public/projects/:slug/claps", async (c) => {
   if (!fallback)
     fallback = !(await tryDb(async () => {
       const result = await c.env.DB.prepare(
-        "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor,attrs) VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT OR IGNORE INTO claps(id,project_id,created_at,dedupe_key,page_url,page_title,visitor,browser,attrs) VALUES(?,?,?,?,?,?,?,?,?)",
       )
-        .bind(row.id, row.project_id, row.created_at, row.dedupe_key, row.page_url, row.page_title, row.visitor, row.attrs)
+        .bind(row.id, row.project_id, row.created_at, row.dedupe_key, row.page_url, row.page_title, row.visitor, row.browser, row.attrs)
         .run();
       changes = result.meta.changes;
     }));

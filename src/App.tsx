@@ -155,24 +155,79 @@ function StatCard({
   value,
   icon: Icon,
   note,
+  open,
+  children,
 }: {
   label: string;
   value: number | string;
   icon: typeof Heart;
   note?: string;
+  // Tooltip and action of the jump button in the top-right corner.
+  open?: { label: string; onClick: () => void };
+  children?: ReactNode;
 }) {
   return (
     <div className="stat-card">
       <div className="stat-label">
         {label}
-        <Icon size={17} />
+        {open ? (
+          <button
+            type="button"
+            className="stat-open"
+            title={open.label}
+            aria-label={open.label}
+            onClick={open.onClick}
+          >
+            <ArrowUpRight size={16} />
+          </button>
+        ) : (
+          <Icon size={17} />
+        )}
       </div>
       <div className="stat-value">
         {typeof value === "number" ? value.toLocaleString() : value}
         <small>件</small>
       </div>
       {note && <span className="stat-note">{note}</span>}
+      {children}
     </div>
+  );
+}
+// The newest message on the dashboard card, opened in full on click.
+function LatestMessage({
+  version,
+  onSelect,
+}: {
+  version: number;
+  onSelect: (m: Message) => void;
+}) {
+  const { data } = useApi<{ items: Message[] }>(
+    "/owner/messages?" +
+      new URLSearchParams({
+        project: "",
+        status: "all",
+        page: "0",
+        v: String(version),
+      }),
+    null,
+    false,
+    true,
+  );
+  const m = data?.items[0];
+  if (!m) return null;
+  return (
+    <button
+      type="button"
+      className={"stat-message" + (!m.read_at ? " unread" : "")}
+      onClick={() => onSelect(m)}
+    >
+      <span className="stat-message-meta">
+        {!m.read_at && <span className="unread-dot" />}
+        {m.sender_name && <b>{m.sender_name}</b>}
+        <time>{dateTime(m.created_at)}</time>
+      </span>
+      <span className="stat-message-body">{m.body}</span>
+    </button>
   );
 }
 function pagePath(url: string) {
@@ -502,6 +557,7 @@ function PageAttrPanel({
   unread,
   onAllMessages,
   clapQuery,
+  jump,
 }: {
   stats: Stats | null;
   selected: string;
@@ -511,6 +567,7 @@ function PageAttrPanel({
   onAllMessages: () => void;
   // from, to, page and v for the clap-by-clap list.
   clapQuery: string;
+  jump: number;
 }) {
   const [tab, setTab] = useState<"messages" | "pages" | "people" | "reactions">(
       "pages",
@@ -527,6 +584,12 @@ function PageAttrPanel({
     );
     setTab(t);
   };
+  useEffect(() => {
+    if (!jump) return;
+    open("people");
+    setPeopleMode("claps");
+    card.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [jump]);
   return (
     <section
       className="panel activity-panel"
@@ -1379,6 +1442,8 @@ export default function App() {
     today = todayShown ? hours : todayOnly;
   const [statsPrint, setStatsPrint] = useState(false);
   const [selected, setSelected] = useState<Message | null>(null),
+    // Bumped by the clap card to show the clap-by-clap list.
+    [jump, setJump] = useState(0),
     [edit, setEdit] = useState<Project | "new" | null>(null);
   const list = projects.data || [];
   // One site is the usual case, so its widget page opens directly.
@@ -1569,13 +1634,23 @@ export default function App() {
                   value={todayClaps}
                   icon={ThumbsUp}
                   note="今日"
+                  open={{
+                    label: "拍手ごとの記録",
+                    onClick: () => setJump((n) => n + 1),
+                  }}
                 />
                 <StatCard
                   label="届いた感想"
                   value={total?.total || 0}
                   icon={MessageCircle}
                   note={`${total?.unread || 0} 件 未読`}
-                />
+                  open={{
+                    label: "感想一覧",
+                    onClick: () => navigate("inbox"),
+                  }}
+                >
+                  <LatestMessage version={version} onSelect={setSelected} />
+                </StatCard>
               </div>
               <div className="dashboard-single">
                 <div className="dashboard-main">
@@ -1607,6 +1682,7 @@ export default function App() {
                     onSelect={setPageUrl}
                     unread={total?.unread || 0}
                     onAllMessages={() => navigate("inbox")}
+                    jump={jump}
                     clapQuery={new URLSearchParams({
                       ...(pageUrl ? { page: pageUrl } : {}),
                       v: String(version),

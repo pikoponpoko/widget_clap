@@ -2075,9 +2075,6 @@ function InboxList({
                     {m.source === "import" && (
                       <span className="consent-badge">取り込み</span>
                     )}
-                    {!!m.publication_consent && (
-                      <span className="consent-badge">公開許可あり</span>
-                    )}
                     {m.reply_wanted != null && (
                       <span className="consent-badge">
                         {m.reply_wanted ? "返事希望" : "返事不要"}
@@ -2207,12 +2204,6 @@ function MessageModal({
         </div>
         {m.sender_name && <b className="sender-name">{m.sender_name}</b>}
         <div className="message-full">{m.body}</div>
-        <div className="consent-note">
-          <ShieldCheck size={14} />
-          {m.publication_consent
-            ? "第三者公開への同意あり。公開時は個人情報を除去してください。"
-            : "作者のみ閲覧・私的保存用。第三者公開への同意はありません。"}
-        </div>
         <div className="detail-actions">
           <button
             className="text-button"

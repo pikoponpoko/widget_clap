@@ -1212,16 +1212,6 @@ small {
   font-size: 14px;
   line-height: 2.1;
 }
-.consent-note {
-  font-size: 10px;
-  color: #767676;
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  background: #f7f7f7;
-  border-radius: 5px;
-  padding: 12px;
-}
 .detail-actions {
   display: flex;
   gap: 17px;

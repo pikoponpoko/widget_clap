@@ -639,7 +639,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
       page.getByRole("checkbox", {
         name: "公開を許可",
       }),
-    ).not.toBeChecked();
+    ).toHaveCount(0);
     await page
       .getByRole("textbox", { name: "メッセージ" })
       .fill("スマートフォンからの便りです。");

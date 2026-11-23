@@ -416,6 +416,85 @@ small {
   font-size: 9px;
   color: #767676;
 }
+.stat-card {
+  min-width: 0;
+}
+.stat-open {
+  width: 26px;
+  height: 26px;
+  margin: -6px -7px -6px 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #767676;
+  flex-shrink: 0;
+}
+.stat-open:hover {
+  background: var(--soft);
+}
+.stat-message {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+/* Wide screens: the newest message sits beside the count, so both cards stay the same height. */
+@media (min-width: 721px) {
+  .stat-card:has(.stat-message) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    column-gap: 24px;
+  }
+  .stat-card:has(.stat-message) .stat-label {
+    grid-column: 1 / -1;
+  }
+  .stat-card:has(.stat-message) .stat-note {
+    grid-column: 1;
+  }
+  .stat-message {
+    grid-column: 2;
+    grid-row: 2 / 4;
+    margin: 14px 0 0;
+    padding: 0 0 0 20px;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+    align-self: start;
+  }
+}
+.stat-message-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #767676;
+  font-size: 9px;
+}
+.stat-message-meta b {
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-message-meta time {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.stat-message-body {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 4px;
+}
 .dashboard-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 310px;
@@ -1132,16 +1211,6 @@ small {
   overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 2.1;
-}
-.consent-note {
-  font-size: 10px;
-  color: #767676;
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  background: #f7f7f7;
-  border-radius: 5px;
-  padding: 12px;
 }
 .detail-actions {
   display: flex;
@@ -2046,6 +2115,15 @@ small {
   .stat-value small {
     font-size: 8px;
     margin-left: 4px;
+  }
+  .stat-message {
+    margin-top: 0;
+    padding-top: 7px;
+  }
+  .stat-message-body {
+    -webkit-line-clamp: 2;
+    font-size: 11px;
+    line-height: 1.6;
   }
   .stat-note {
     font-size: 7px;

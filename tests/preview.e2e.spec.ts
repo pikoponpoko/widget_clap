@@ -47,7 +47,7 @@ test("only the tiny button is embedded; click saves applause before optional fee
     thanksFrame(page).getByRole("checkbox", {
       name: "公開を許可",
     }),
-  ).not.toBeChecked();
+  ).toHaveCount(0);
   const after = await page.locator(".demo-following-content").boundingBox();
   expect(after?.y).toBe(before?.y);
   expect(
@@ -119,7 +119,7 @@ test("optional message and reply remain browser-local, and another browser canno
     page.getByRole("checkbox", {
       name: "公開を許可",
     }),
-  ).not.toBeChecked();
+  ).toHaveCount(0);
   await page
     .getByRole("textbox", { name: "メッセージ" })
     .fill("体験用の感想です。使いやすい道具をありがとう。");
@@ -835,4 +835,35 @@ test("reaction buttons on the thank-you screen are counted per day and page", as
   await expect(panel.locator(".page-filter")).toHaveCount(1);
   if (process.env.SHOTS)
     await panel.screenshot({ path: process.env.SHOTS + "/admin-pages.png" });
+});
+test("the dashboard cards open the newest message, the message list and the clap-by-clap list", async ({
+  page,
+}) => {
+  await page.goto("/widget/sample");
+  await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "メッセージ" })
+    .fill("カード表示の確認用\n2行目\n3行目\n4行目");
+  await page.waitForTimeout(1600);
+  await page.getByRole("button", { name: "感想を保存して試す" }).click();
+  await expect(
+    page.getByRole("heading", { name: "送信しました" }),
+  ).toBeVisible();
+  await page.goto("/admin");
+  const latest = page.locator(".stat-message");
+  await expect(latest).toContainText("カード表示の確認用");
+  await latest.click();
+  await expect(page.getByRole("dialog")).toContainText("4行目");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "拍手ごとの記録" }).click();
+  await expect(page.getByRole("tab", { name: "拍手した人" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByRole("tab", { name: "拍手ごと" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await page.getByRole("button", { name: "感想一覧" }).click();
+  await expect(page).toHaveURL(/#inbox$/);
 });

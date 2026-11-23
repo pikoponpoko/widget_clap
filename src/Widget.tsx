@@ -106,7 +106,6 @@ export function Widget({
   );
   const [body, setBody] = useState(""),
     [name, setName] = useState(""),
-    [consent, setConsent] = useState(false),
     [replyWanted, setReplyWanted] = useState<boolean | null>(null),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
@@ -256,7 +255,6 @@ export function Widget({
           body,
           sender_name: name,
           reply_wanted: replyWanted,
-          publication_consent: consent,
           request_id: requestId.current,
           website,
           started_at: started.current,
@@ -409,7 +407,6 @@ export function Widget({
               onClick={() => {
                 setSent(false);
                 setReplyUrl("");
-                setConsent(false);
                 setReplyWanted(null);
                 requestId.current = crypto.randomUUID();
                 started.current = Date.now();
@@ -478,14 +475,6 @@ export function Widget({
                     <span>{label}</span>
                   </label>
                 ))}
-                <label className="check-label">
-                  <input
-                    type="checkbox"
-                    checked={consent}
-                    onChange={(e) => setConsent(e.target.checked)}
-                  />
-                  <span>公開を許可</span>
-                </label>
               </div>
               {p.turnstile_site_key && (
                 <Turnstile

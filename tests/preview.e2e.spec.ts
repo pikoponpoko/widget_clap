@@ -47,7 +47,7 @@ test("only the tiny button is embedded; click saves applause before optional fee
     thanksFrame(page).getByRole("checkbox", {
       name: "公開を許可",
     }),
-  ).not.toBeChecked();
+  ).toHaveCount(0);
   const after = await page.locator(".demo-following-content").boundingBox();
   expect(after?.y).toBe(before?.y);
   expect(
@@ -119,7 +119,7 @@ test("optional message and reply remain browser-local, and another browser canno
     page.getByRole("checkbox", {
       name: "公開を許可",
     }),
-  ).not.toBeChecked();
+  ).toHaveCount(0);
   await page
     .getByRole("textbox", { name: "メッセージ" })
     .fill("体験用の感想です。使いやすい道具をありがとう。");

@@ -356,6 +356,26 @@ test("one code serves many pages: claps and messages are listed per page in the 
   await expect(pop).toContainText(/初回|リピート/);
   await expect(pop).toContainText(/サンプルツール|ブログ記事/);
   await expect(page.locator(".block-mark")).toHaveCount(1);
+  // Opening who clapped does not narrow the chart to that hour.
+  await expect(page.locator(".hour-picked")).toHaveCount(0);
+  if (process.env.SHOTS) {
+    const chart = page.locator(".activity-bars").locator("..");
+    await chart.screenshot({ path: process.env.SHOTS + "/block-pc.png" });
+    await pop.getByRole("button", { name: "閉じる" }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    const bar = page.locator('.bar-clap:not([style*="height: 0px"])').first();
+    await bar.scrollIntoViewIfNeeded();
+    await bar.click();
+    await expect(pop).toBeVisible();
+    await expect(page.locator(".hour-picked")).toHaveCount(0);
+    const box = (await chart.boundingBox())!;
+    await page.screenshot({
+      path: process.env.SHOTS + "/block-sp.png",
+      clip: { x: 0, y: box.y - 8, width: 390, height: box.height + 16 },
+    });
+    await page.setViewportSize({ width: 1280, height: 720 });
+  }
   await page.keyboard.press("Escape");
   await expect(pop).toHaveCount(0);
   // Pages, who clapped, reactions and messages share one card, switched by

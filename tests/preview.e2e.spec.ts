@@ -816,3 +816,34 @@ test("reaction buttons on the thank-you screen are counted per day and page", as
   if (process.env.SHOTS)
     await panel.screenshot({ path: process.env.SHOTS + "/admin-pages.png" });
 });
+test("the dashboard cards open the newest message, the message list and the clap-by-clap list", async ({
+  page,
+}) => {
+  await page.goto("/widget/sample");
+  await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "メッセージ" })
+    .fill("カード表示の確認用\n2行目\n3行目\n4行目");
+  await page.waitForTimeout(1600);
+  await page.getByRole("button", { name: "感想を保存して試す" }).click();
+  await expect(
+    page.getByRole("heading", { name: "送信しました" }),
+  ).toBeVisible();
+  await page.goto("/admin");
+  const latest = page.locator(".stat-message");
+  await expect(latest).toContainText("カード表示の確認用");
+  await latest.click();
+  await expect(page.getByRole("dialog")).toContainText("4行目");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "拍手ごとの記録" }).click();
+  await expect(page.getByRole("tab", { name: "拍手した人" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByRole("tab", { name: "拍手ごと" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await page.getByRole("button", { name: "感想一覧" }).click();
+  await expect(page).toHaveURL(/#inbox$/);
+});

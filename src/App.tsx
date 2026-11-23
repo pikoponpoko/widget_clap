@@ -1275,7 +1275,6 @@ function Activity({
                         top: below ? top + blockPx + 4 : null,
                         bottom: below ? null : innerHeight - top + 4,
                       });
-                      if (mode === "hours") setPick(c.key);
                       return;
                     }
                     if (mode === "days") {

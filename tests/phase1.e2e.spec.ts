@@ -477,7 +477,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
     await thanks.locator("textarea").first().fill("記事Cの感想");
     await page.waitForTimeout(1600);
     await thanks.getByRole("button", { name: "送信" }).click();
-    await expect(thanks.getByText("送信しました")).toBeVisible();
+    await expect(thanks.getByAltText("作者からのお礼イラスト")).toBeVisible();
     const article = "https://www.blog.example/posts/c";
     const stats = await (
       await request.get("/api/owner/stats?project=" + pid, { headers })
@@ -646,7 +646,7 @@ test.describe.serial("Phase 1 integrated flow", () => {
     await page.waitForTimeout(1600);
     await page.getByRole("button", { name: "送信" }).click();
     await expect(
-      page.getByRole("heading", { name: "送信しました" }),
+      page.getByAltText("作者からのお礼イラスト"),
     ).toBeVisible();
     const url = await page.getByLabel("返信確認URL").inputValue();
     expect(url).toContain("/reply#");

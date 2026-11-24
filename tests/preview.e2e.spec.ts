@@ -126,7 +126,7 @@ test("optional message and reply remain browser-local, and another browser canno
   await page.waitForTimeout(1600);
   await page.getByRole("button", { name: "感想を保存して試す" }).click();
   await expect(
-    page.getByRole("heading", { name: "送信しました" }),
+    page.getByAltText("作者からのお礼イラスト"),
   ).toBeVisible();
   const url = await page.getByLabel("返信確認URL").inputValue();
   await page.goto("/admin#inbox");
@@ -246,9 +246,7 @@ test("per-placement switches suppress disabled features, and the tip link shows 
     .fill("返信なしの感想");
   await page.waitForTimeout(1600);
   await page.getByRole("button", { name: "感想を保存して試す" }).click();
-  await expect(
-    page.getByRole("heading", { name: "送信しました" }),
-  ).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "メッセージ" })).toHaveCount(0);
   await expect(page.getByLabel("返信確認URL")).toHaveCount(0);
   await page.goto("/widget/sample?tip=1");
   await page.getByRole("button", { name: "拍手を送る", exact: true }).click();
@@ -334,7 +332,7 @@ test("one code serves many pages: claps and messages are listed per page in the 
         .getByRole("button", { name: "感想を保存して試す" })
         .click();
       await expect(
-        thanksFrame(page).getByRole("heading", { name: "送信しました" }),
+        thanksFrame(page).getByAltText("作者からのお礼イラスト"),
       ).toBeVisible();
     }
     await page.getByRole("button", { name: "お礼画面を閉じる" }).click();
@@ -494,7 +492,7 @@ test("analytics by hour and page, NG keywords, month filter and bulk actions", a
       .getByRole("button", { name: "感想を保存して試す" })
       .click();
     await expect(
-      thanksFrame(page).getByRole("heading", { name: "送信しました" }),
+      thanksFrame(page).getByAltText("作者からのお礼イラスト"),
     ).toBeVisible();
     await page.getByRole("button", { name: "お礼画面を閉じる" }).click();
   }
@@ -847,7 +845,7 @@ test("the dashboard cards open the newest message, the message list and the clap
   await page.waitForTimeout(1600);
   await page.getByRole("button", { name: "感想を保存して試す" }).click();
   await expect(
-    page.getByRole("heading", { name: "送信しました" }),
+    page.getByAltText("作者からのお礼イラスト"),
   ).toBeVisible();
   await page.goto("/admin");
   const latest = page.locator(".stat-message");
